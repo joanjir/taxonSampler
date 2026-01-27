@@ -1,0 +1,112 @@
+{% extends "taxonomy/layout/app_shell.html" %}
+{% block title %}Scroll test · TaxBridge{% endblock %}
+
+{% block content %}
+<div class="page-header d-print-none">
+  <div class="row align-items-center">
+    <div class="col">
+      <h2 class="page-title">Scroll test</h2>
+      <div class="text-muted">Página de prueba para validar navbar sticky + comportamiento de scroll.</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Columna principal -->
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Tabla larga</div>
+      </div>
+
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="table-light sticky-top" style="top: 56px; z-index: 1020;">
+              <tr>
+                <th>#</th>
+                <th>Taxon</th>
+                <th>Rank</th>
+                <th class="text-end">Species</th>
+                <th class="text-end">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in "x"|ljust:250 %}
+              <tr>
+                <td class="text-muted">{{ forloop.counter }}</td>
+                <td class="text-truncate" style="max-width: 340px;" title="Eukaryota / Animalia / Mollusca / Bivalvia / ...">
+                  Eukaryota / Animalia / Mollusca / Bivalvia / Ostreoidea / Ostreidae / Crassostrea / <i>Crassostrea virginica</i>
+                </td>
+                <td><span class="badge bg-azure-lt">species</span></td>
+                <td class="text-end">132</td>
+                <td class="text-end">
+                  <button class="btn btn-sm btn-outline-primary">Abrir</button>
+                  <button class="btn btn-sm btn-outline-success">Seleccionar</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card-footer d-flex justify-content-between">
+        <div class="text-muted">250 filas dummy para forzar scroll</div>
+        <button class="btn btn-primary btn-sm">Acción dummy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="col-12 col-lg-4">
+    <div class="card position-sticky" style="top: 84px;">
+      <div class="card-header">
+        <div class="card-title">Panel lateral (sticky)</div>
+      </div>
+      <div class="card-body">
+        <div class="text-muted small mb-2">
+          Este panel se queda visible mientras haces scroll en la página.
+        </div>
+
+        <div class="hr-text">Checks</div>
+
+        <div class="mb-2">
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" checked>
+            <span class="form-check-label">Sticky navbar activo</span>
+          </label>
+
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" checked>
+            <span class="form-check-label">Table header sticky</span>
+          </label>
+
+          <label class="form-check">
+            <input class="form-check-input" type="checkbox" checked>
+            <span class="form-check-label">Sidebar sticky</span>
+          </label>
+        </div>
+
+        <div class="hr-text">Contenido</div>
+        <p class="text-muted">
+          Si al hacer scroll el header tapa el thead de la tabla, ajusta el <code>top: 56px</code>.
+          Ese valor debe coincidir con la altura del navbar.
+        </p>
+
+        <div class="alert alert-info mb-0">
+          Tip: en producción, usa <code>sticky-top</code> en el navbar y evita <code>fixed-top</code>
+          salvo que tengas un layout particular.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+
+
+
+
+
+

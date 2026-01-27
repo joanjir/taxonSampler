@@ -1,0 +1,40 @@
+.tree-mount{
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  height: 720px;
+  background: #fff;
+}
+
+.tree-tooltip{
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(17,24,39,.95);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  max-width: 420px;
+  white-space: pre-line;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 80ms linear, transform 80ms linear;
+}
+
+/* D3 styles */
+.link { fill: none; stroke: rgba(0,0,0,.18); stroke-width: 2px; }
+.node { cursor: pointer; }
+.node rect.node-box { stroke-width: 2px; rx: 3px; ry: 3px; }
+.node text { font-size: 12px; dominant-baseline: middle; pointer-events: none; }
+.node text.sciname { font-style: italic; }
+.node.has-children-collapsed rect.node-box { stroke-dasharray: 4 3; }
+
+.cb-box { fill: #fff; stroke: rgba(0,0,0,.35); stroke-width: 1.5px; rx: 2px; ry: 2px; }
+.cb-tick { fill: none; stroke: rgba(0,0,0,.8); stroke-width: 2.2px; stroke-linecap: round; stroke-linejoin: round; }
+.cb-hit { fill: transparent; }
+
+.jump-box { fill: rgba(13,110,253,.10); stroke: rgba(13,110,253,.45); stroke-width: 1.5px; rx: 3px; ry: 3px; }
+.jump-text { font-size: 11px; fill: rgba(13,110,253,.95); pointer-events: none; }

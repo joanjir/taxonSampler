@@ -1,0 +1,20 @@
+{% extends "taxonomy/layout/base.html" %}
+
+{% block body %}
+<div class="page">
+  {% include "taxonomy/partials/sidebar.html" %}
+
+  <div class="page-wrapper">
+    {% include "taxonomy/partials/head.html" %}
+
+    <div class="page-body">
+      <div class="container-xl">
+
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+
+    {% include "taxonomy/partials/footer.html" %}
+  </div>
+</div>
+{% endblock %}

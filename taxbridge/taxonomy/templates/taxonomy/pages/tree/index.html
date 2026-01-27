@@ -1,0 +1,728 @@
+{% extends 'taxonomy/layout/app_shell.html' %}
+{% load static %}
+
+{% block title %}
+  Árbol taxonómico
+{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/latest/css/all.min.css" />
+
+  <link rel="stylesheet" href="{% static 'taxonomy/css/tree.css' %}" />
+  <style>
+    .tree-fs-btn {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      z-index: 30;
+    
+      border: 0;
+      background: transparent;
+      padding: 6px;
+    
+      color: #111827; /* icono */
+      line-height: 1;
+      border-radius: 10px;
+    }
+    .tree-fs-btn:hover {
+      background: rgba(17, 24, 39, 0.06); /* “hover” suave */
+    }
+    .tree-fs-btn:focus {
+      outline: 0;
+      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25); /* foco Bootstrap-like */
+    }
+    .tree-fs-btn i {
+      font-size: 18px;
+    }
+    #treeMount:fullscreen {
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+    }
+    
+    #treeMount:-webkit-full-screen {
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="row g-3 align-items-start">
+    <!-- Árbol -->
+    <div class="col-12 col-lg-9">
+      <div class="card">
+        <div class="card-header">
+          <div class="d-flex align-items-center justify-content-between w-100">
+            <div>
+              <div class="card-title mb-0">Árbol taxonómico</div>
+              <div class="text-muted small">
+                Ruta activa: <span id="crumb" class="text-body">ROOT</span>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button id="fitBtn" class="btn btn-sm btn-outline-secondary">Fit</button>
+              <button id="collapseAllBtn" class="btn btn-sm btn-outline-secondary">Colapsar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body p-0">
+          <div id="treeMount" class="position-relative overflow-hidden bg-white" style="height: 820px;">
+            <div id="tt" class="position-absolute" style="
+            z-index: 20; pointer-events: none;
+            background: rgba(17,24,39,.95); color: #fff; font-size: 12px;
+            padding: 6px 8px; border-radius: 8px; max-width: 420px;
+            white-space: pre-line; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+            opacity: 0; transform: translateY(4px);
+            transition: opacity 80ms linear, transform 80ms linear;
+          "></div>
+            <!-- BOTÓN FULLSCREEN -->
+            <button id="fsBtn" type="button" class="btn position-absolute" style="right:12px; bottom:12px; z-index:30; background:transparent; border:0;"><i id="fsIcon" class="fa-solid fa-expand"></i></button>
+          </div>
+        </div>
+
+        <div class="card-footer small text-muted d-flex justify-content-between">
+          <span>Pan/Zoom: rueda y arrastre</span>
+          <span>Click: abre 1 nivel · ⇢sp: ir a species</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel derecho -->
+    <div class="col-12 col-lg-3">
+      <div class="sticky-top" style="top: 84px;">
+        <!-- Filtros -->
+        <div class="card mb-3">
+          <div class="card-header">
+            <div class="card-title mb-0">Filtros</div>
+          </div>
+          <div class="card-body">
+            <label class="form-label small mb-1">dataset_code</label>
+            <div class="input-group input-group-sm mb-3">
+              <input id="datasetCode" class="form-control" value="COL25.12" />
+              <button id="loadBtn" class="btn btn-primary">Cargar</button>
+            </div>
+
+            <label class="form-label small mb-1">Rango</label>
+            <select id="rankFilter" class="form-select form-select-sm">
+              <option value="">Todos</option>
+              <option value="phylum">phylum</option>
+              <option value="class">class</option>
+              <option value="order">order</option>
+              <option value="family">family</option>
+              <option value="genus">genus</option>
+              <option value="species">species</option>
+            </select>
+
+            <hr class="my-3" />
+
+            <button id="clearFilters" class="btn btn-sm btn-outline-secondary w-100">Limpiar filtros</button>
+          </div>
+        </div>
+
+        <!-- Selección -->
+        <div class="card">
+          <div class="card-header">
+            <div class="d-flex align-items-center justify-content-between w-100">
+              <div class="card-title mb-0">Selección</div>
+              <button id="clearSel" class="btn btn-sm btn-outline-danger">Vaciar</button>
+            </div>
+          </div>
+
+          <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 360px;">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light position-sticky" style="top: 0;">
+                  <tr>
+                    <th>Taxón</th>
+                  </tr>
+                </thead>
+                <tbody id="selList">
+                  <tr>
+                    <td class="text-muted small">Sin selección.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card-footer small text-muted">Consejo: después restringimos el checkbox a rank=species.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block extra_js %}
+  <!-- D3 primero -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@5/dist/d3.min.js"></script>
+  <script>
+    // ---------- configuración visual ----------
+    const NODE_H = 20,
+      PAD_X = 8,
+      MAX_W = 260,
+      MIN_W = 34,
+      DUR = 160
+    const CB_SIZE = 12,
+      CB_GAP = 6
+    const BTN_H = 14,
+      BTN_W = 34 // ⇢sp
+    
+    let autoFitEnabled = true
+    let userHasInteracted = false
+    let lastAutoFitAt = 0
+    
+    // límites para decidir auto-fit
+    const AUTOFIT = {
+      maxNodesForFit: 60, // si hay <= 60 nodos visibles, hacemos fit
+      areaFillThreshold: 0.75, // si el bbox ocupa < 75% del contenedor, hacemos fit
+      minIntervalMs: 250 // no hacer fit más de 1 vez cada 250ms
+    }
+    
+    // Separación REAL del layout (clave para que no se amontonen)
+    const ROW_GAP = 50 // separación vertical entre nodos (sube si quieres más aire)
+    const COL_GAP = 320 // separación horizontal por depth (sube si el texto choca)
+    
+    // Colores por rank (ajustable)
+    const RANK_STYLE = {
+      species: { fill: '#e0f2fe', stroke: '#0284c7' }, // celeste
+      default: { fill: '#ffffff', stroke: '#111827' } // todo lo demás blanco
+    }
+    function rankStyle(rank) {
+      const k = (rank || '').toLowerCase()
+      return k === 'species' ? RANK_STYLE.species : RANK_STYLE.default
+    }
+    function isSciName(name) {
+      const parts = (name || '').trim().split(/\s+/)
+      return parts.length >= 2
+    }
+    
+    // ---------- estado ----------
+    const selected = new Set()
+    const selectedSpecies = new Map()
+    
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }
+    function renderSelection() {
+      const el = document.getElementById('selList')
+      const items = Array.from(selectedSpecies.values())
+        .map((x) => x.name)
+        .sort((a, b) => a.localeCompare(b))
+      el.innerHTML = items.length ? items.map((x) => `<div>${escapeHtml(x)}</div>`).join('') : `<div class="text-muted">Sin selección.</div>`
+    }
+    
+    // Tooltip
+    const mount = document.getElementById('treeMount')
+    const tt = document.getElementById('tt')
+    function showTooltip(clientX, clientY, text) {
+      const rect = mount.getBoundingClientRect()
+      const x = clientX - rect.left
+      const y = clientY - rect.top
+      tt.textContent = text
+      tt.style.left = x + 14 + 'px'
+      tt.style.top = y + 14 + 'px'
+      tt.style.opacity = '1'
+      tt.style.transform = 'translateY(0)'
+    }
+    function hideTooltip() {
+      tt.style.opacity = '0'
+      tt.style.transform = 'translateY(4px)'
+    }
+    function resizeTreeToMount() {
+      if (!svgRoot) return
+    
+      const w = mount.clientWidth
+      const h = mount.clientHeight
+    
+      // Ajusta el viewport del SVG al tamaño REAL del contenedor (fullscreen o normal)
+      svgRoot.attr('width', w).attr('height', h)
+    
+      // Recalcula layout/canvas con el nuevo tamaño
+      if (root) update(root)
+    
+      // Encadre final
+      setTimeout(() => fitToView(), 0)
+    }
+    
+    // ---------- D3 ----------
+    let svgRoot,
+      svg,
+      gZoom,
+      treemap,
+      root,
+      i = 0,
+      zoomBehavior
+    
+    function diagonal(s, d) {
+      return `M ${s.y} ${s.x}
+                                                                                C ${(s.y + d.y) / 2} ${s.x},
+                                                                                  ${(s.y + d.y) / 2} ${d.x},
+                                                                                  ${d.y} ${d.x}`
+    }
+    
+    function collapseDeep(d) {
+      if (d.children) {
+        d.children.forEach(collapseDeep)
+        d._children = d.children
+        d.children = null
+      }
+    }
+    
+    function expandOneLevel(d) {
+      if (!d._children) return
+      d.children = d._children
+      d._children = null
+      d.children.forEach(collapseDeep)
+    }
+    
+    function nodePath(d) {
+      const arr = []
+      let cur = d
+      while (cur) {
+        if (cur.data && cur.data.name) arr.push({ rank: cur.data.rank || '?', name: cur.data.name })
+        cur = cur.parent
+      }
+      return arr.reverse()
+    }
+    function pathLabel(arr) {
+      return arr.map((x) => `${x.rank}:${x.name}`).join(' / ')
+    }
+    function setCrumb(d) {
+      document.getElementById('crumb').textContent = d ? pathLabel(nodePath(d)) : 'ROOT'
+    }
+    
+    function findFirstSpecies(d) {
+      const q = []
+      const pushKids = (x) => {
+        if (x.children) x.children.forEach((c) => q.push(c))
+        if (x._children) x._children.forEach((c) => q.push(c))
+      }
+      pushKids(d)
+      while (q.length) {
+        const n = q.shift()
+        if ((n.data.rank || '').toLowerCase() === 'species') return n
+        pushKids(n)
+      }
+      return null
+    }
+    
+    function fitTextToWidth(textSel, maxWidthPx) {
+      const node = textSel.node()
+      const full = textSel.text()
+      if (node.getComputedTextLength() <= maxWidthPx) return
+      let s = full
+      while (s.length > 1 && node.getComputedTextLength() > maxWidthPx) {
+        s = s.slice(0, -1)
+        textSel.text(s + '…')
+      }
+    }
+    
+    function computeCanvas(nodes) {
+      // extents
+      const xs = nodes.map((n) => n.x)
+      const ys = nodes.map((n) => n.y)
+      const minX = Math.min(...xs),
+        maxX = Math.max(...xs)
+      const minY = Math.min(...ys),
+        maxY = Math.max(...ys)
+    
+      // margenes para que no corte
+      const pad = 120
+    
+      // canvas mínimo igual al mount, pero crece con el árbol
+      const w = Math.max(mount.clientWidth, maxY - minY + pad * 2)
+      const h = Math.max(mount.clientHeight, maxX - minX + pad * 2)
+    
+      return { w, h, minX, minY, pad }
+    }
+    
+    function update(source) {
+      // Layout con nodeSize: separación constante, no se “aprieta”
+      const layout = treemap(root)
+      const nodes = layout.descendants()
+      const links = layout.descendants().slice(1)
+    
+      // Canvas dinámico
+      const { w, h } = computeCanvas(nodes)
+      svgRoot.attr('width', w).attr('height', h)
+    
+      // JOIN nodes
+      const node = gZoom.selectAll('g.node').data(nodes, (d) => d.id || (d.id = ++i))
+    
+      const nodeEnter = node
+        .enter()
+        .append('g')
+        .attr('class', 'node')
+        .attr('transform', `translate(${source.y0 || 0},${source.x0 || 0})`)
+        .style('opacity', 0)
+    
+      // checkbox
+      const cb = nodeEnter
+        .append('g')
+        .attr('class', 'cb')
+        .on('click', function (d) {
+          d3.event.stopPropagation()
+          if (selected.has(d.id)) {
+            selected.delete(d.id)
+            selectedSpecies.delete(d.id)
+          } else {
+            selected.add(d.id)
+            selectedSpecies.set(d.id, { name: d.data.name, rank: d.data.rank, meta: d.data })
+          }
+          update(d)
+          renderSelection()
+        })
+    
+      cb.append('rect')
+        .attr('class', 'cb-box')
+        .attr('x', PAD_X)
+        .attr('y', -CB_SIZE / 2)
+        .attr('width', CB_SIZE)
+        .attr('height', CB_SIZE)
+    
+      cb.append('path')
+        .attr('class', 'cb-tick')
+        .attr('d', `M ${PAD_X + 2} ${-1} L ${PAD_X + 5} ${CB_SIZE / 2 - 1} L ${PAD_X + CB_SIZE - 2} ${-CB_SIZE / 2 + 2}`)
+        .style('opacity', 0)
+    
+      cb.append('rect')
+        .attr('class', 'cb-hit')
+        .attr('x', PAD_X - 4)
+        .attr('y', -CB_SIZE / 2 - 6)
+        .attr('width', CB_SIZE + 8)
+        .attr('height', CB_SIZE + 12)
+    
+      // label
+      const textEnter = nodeEnter
+        .append('text')
+        .attr('class', (d) => (isSciName(d.data.name) ? 'sciname' : ''))
+        .attr('x', PAD_X + CB_SIZE + CB_GAP)
+        .attr('y', 0)
+        .text((d) => d.data.name)
+    
+      textEnter.append('title').text((d) => d.data.name)
+    
+      // box
+      nodeEnter
+        .insert('rect', ':first-child')
+        .attr('class', 'node-box')
+        .attr('x', 0)
+        .attr('y', -NODE_H / 2)
+        .attr('height', NODE_H)
+        .attr('width', MIN_W)
+    
+      // botón ⇢sp
+      const jump = nodeEnter
+        .append('g')
+        .attr('class', 'jump')
+        .style('cursor', 'pointer')
+        .on('click', function (d) {
+          d3.event.stopPropagation()
+          const sp = findFirstSpecies(d)
+          if (!sp) return
+          centerOn(sp)
+        })
+        .on('mousemove', function (d) {
+          const sp = findFirstSpecies(d)
+          if (!sp) return
+          const p = nodePath(d)
+          const skipped = Math.max(0, sp.depth - d.depth - 1)
+          const txt = `Ir directo a species\nDesde: ${pathLabel(p)}\nRangos omitidos: ${skipped}`
+          showTooltip(d3.event.clientX, d3.event.clientY, txt)
+        })
+        .on('mouseout', hideTooltip)
+    
+      jump
+        .append('rect')
+        .attr('class', 'jump-box')
+        .attr('x', 0)
+        .attr('y', -BTN_H / 2)
+        .attr('width', BTN_W)
+        .attr('height', BTN_H)
+    
+      jump.append('text').attr('class', 'jump-text').attr('x', 5).attr('y', 0).text('⇢sp')
+    
+      // medir/truncar + posicionar botón al final
+      nodeEnter.each(function (d) {
+        const g = d3.select(this)
+        const t = g.select('text')
+    
+        const reserve = BTN_W + 6
+        fitTextToWidth(t, MAX_W - (PAD_X + CB_SIZE + CB_GAP) - PAD_X - reserve)
+    
+        const bbox = t.node().getBBox()
+        const wBox = Math.max(MIN_W, Math.min(MAX_W, bbox.width + bbox.x + PAD_X + reserve))
+        g.select('rect.node-box').attr('width', wBox)
+    
+        g.select('g.jump').attr('transform', `translate(${wBox - BTN_W - PAD_X},0)`)
+      })
+    
+      const nodeUpdate = nodeEnter.merge(node)
+    
+      nodeUpdate
+        .classed('has-children-collapsed', (d) => !!d._children && !d.children)
+        .on('click', function (d) {
+          setCrumb(d)
+    
+          if (d.children) {
+            d.children.forEach(collapseDeep)
+            d._children = d.children
+            d.children = null
+          } else if (d._children) {
+            expandOneLevel(d)
+          }
+    
+          update(d)
+          smartFitIfNeeded()
+        })
+    
+      nodeUpdate.each(function (d) {
+        const st = rankStyle(d.data.rank)
+        d3.select(this).select('rect.node-box').attr('fill', st.fill).attr('stroke', st.stroke)
+    
+        const checked = selected.has(d.id)
+        d3.select(this)
+          .select('path.cb-tick')
+          .style('opacity', checked ? 1 : 0)
+    
+        const isSp = (d.data.rank || '').toLowerCase() === 'species'
+        const hasSp = !!findFirstSpecies(d)
+        d3.select(this)
+          .select('g.jump')
+          .style('display', !isSp && hasSp ? null : 'none')
+      })
+    
+      nodeUpdate
+        .transition()
+        .duration(DUR)
+        .attr('transform', (d) => `translate(${d.y},${d.x})`)
+        .style('opacity', 1)
+    
+      node
+        .exit()
+        .transition()
+        .duration(DUR)
+        .style('opacity', 0)
+        .attr('transform', (d) => `translate(${d.y},${d.x}) scale(0.96)`)
+        .remove()
+    
+      // links
+      const link = gZoom.selectAll('path.link').data(links, (d) => d.id)
+    
+      link
+        .enter()
+        .insert('path', 'g')
+        .attr('class', 'link')
+        .attr('d', (d) => {
+          const o = { x: d.x0 || 0, y: d.y0 || 0 }
+          return diagonal(o, o)
+        })
+        .style('opacity', 0)
+        .merge(link)
+        .transition()
+        .duration(DUR)
+        .style('opacity', 1)
+        .attr('d', (d) => diagonal(d, d.parent))
+    
+      link.exit().transition().duration(DUR).style('opacity', 0).remove()
+    
+      nodes.forEach((d) => {
+        d.x0 = d.x
+        d.y0 = d.y
+      })
+    }
+    function smartFitIfNeeded() {
+      if (!autoFitEnabled) return
+      if (!root || !gZoom) return
+    
+      const now = Date.now()
+      if (now - lastAutoFitAt < AUTOFIT.minIntervalMs) return
+    
+      const nodesCount = root.descendants().length
+    
+      // si el usuario ya movió/zoomeó, respetamos su vista
+      if (userHasInteracted && nodesCount > AUTOFIT.maxNodesForFit) return
+    
+      const bbox = gZoom.node().getBBox()
+      const W = mount.clientWidth
+      const H = mount.clientHeight
+    
+      // evita NaN/inf
+      if (!bbox.width || !bbox.height || !W || !H) return
+    
+      const fillX = bbox.width / W
+      const fillY = bbox.height / H
+      const fill = Math.max(fillX, fillY)
+    
+      // criterio: pocos nodos o todavía “cabe”
+      const shouldFit = nodesCount <= AUTOFIT.maxNodesForFit || fill < AUTOFIT.areaFillThreshold
+    
+      if (shouldFit) {
+        lastAutoFitAt = now
+        fitToView()
+      }
+    }
+    
+    // zoom/pan
+    function initZoom() {
+      zoomBehavior = d3
+        .zoom()
+        .scaleExtent([0.35, 2.5])
+    
+        .on('zoom', () => {
+          userHasInteracted = true
+          gZoom.attr('transform', d3.event.transform)
+          hideTooltip()
+        })
+      svgRoot.call(zoomBehavior)
+    }
+    
+    function fitToView() {
+      const width = mount.clientWidth
+      const height = mount.clientHeight
+    
+      const bbox = gZoom.node().getBBox()
+      const margin = 40
+      const scale = Math.min(1.8, Math.max(0.35, Math.min((width - margin) / bbox.width, (height - margin) / bbox.height)))
+      const tx = (width - bbox.width * scale) / 2 - bbox.x * scale
+      const ty = (height - bbox.height * scale) / 2 - bbox.y * scale
+    
+      svgRoot.transition().duration(220).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+    }
+    
+    function centerOn(d) {
+      const width = mount.clientWidth
+      const height = mount.clientHeight
+    
+      const t = d3.zoomTransform(svgRoot.node())
+      const scale = t.k
+    
+      const x = d.y
+      const y = d.x
+    
+      const tx = width / 2 - x * scale
+      const ty = height / 2 - y * scale
+    
+      svgRoot.transition().duration(220).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+    }
+    
+    async function loadTree() {
+      const dataset = document.getElementById('datasetCode').value.trim()
+      if (!dataset) return
+    
+      const url = "{% url 'taxonomy:tree_data' %}" + `?dataset_code=${encodeURIComponent(dataset)}`
+      const res = await fetch(url, { headers: { Accept: 'application/json' } })
+      if (!res.ok) {
+        mount.innerHTML = `<div class="text-danger small" style="padding:10px;">Error cargando árbol: ${escapeHtml(await res.text())}</div>`
+        return
+      }
+      const data = await res.json()
+    
+      selected.clear()
+      selectedSpecies.clear()
+      renderSelection()
+      setCrumb(null)
+      hideTooltip()
+    
+      // limpiar solo el svg previo (no tocar tt ni fsBtn)
+      const oldSvg = mount.querySelector('svg')
+      if (oldSvg) oldSvg.remove()
+    
+      // asegura que tt y fsBtn sigan arriba
+      tt.style.zIndex = 20
+      const fsBtn = document.getElementById('fsBtn')
+      if (fsBtn) fsBtn.style.zIndex = 30
+    
+      const width = mount.clientWidth
+      const height = mount.clientHeight
+    
+      svgRoot = d3.select(mount).append('svg').attr('width', width).attr('height', height)
+      // manda el svg al fondo para que no tape el botón
+      svgRoot.style('position', 'absolute').style('inset', '0').style('z-index', 1)
+      gZoom = svgRoot.append('g').attr('transform', 'translate(60,60)') // margen inicial mejor
+      svg = gZoom.append('g')
+    
+      // CLAVE: nodeSize con separación constante
+      treemap = d3
+        .tree()
+        .nodeSize([ROW_GAP, COL_GAP])
+        .separation((a, b) => (a.parent === b.parent ? 1.15 : 1.35))
+    
+      root = d3.hierarchy(data, (d) => d.children)
+    
+      // arranque: root con 1 nivel, resto colapsado profundo
+      if (root.children) {
+        root.children.forEach(collapseDeep)
+      }
+    
+      i = 0
+      root.each((d) => {
+        d.id = null
+      })
+    
+      initZoom()
+      update(root)
+      setTimeout(fitToView, 0)
+    }
+    
+    document.getElementById('loadBtn').addEventListener('click', loadTree)
+    document.getElementById('fitBtn').addEventListener('click', fitToView)
+    
+    document.getElementById('clearSel').addEventListener('click', () => {
+      selected.clear()
+      selectedSpecies.clear()
+      renderSelection()
+      if (root) update(root)
+    })
+    
+    mount.addEventListener('mouseleave', hideTooltip)
+    mount.addEventListener('scroll', hideTooltip)
+    // 5) FULLSCREEN TOGGLE + ICONOS + re-fit
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement)
+    }
+    
+    async function toggleTreeFullscreen() {
+      const el = document.getElementById('treeMount')
+      const icon = document.getElementById('fsIcon')
+    
+      try {
+        if (!isFullscreen()) {
+          if (el.requestFullscreen) await el.requestFullscreen()
+          else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen()
+        } else {
+          if (document.exitFullscreen) await document.exitFullscreen()
+          else if (document.webkitExitFullscreen) await document.webkitExitFullscreen()
+        }
+      } catch (e) {
+        console.error('Fullscreen falló:', e)
+      }
+    }
+    
+    function syncFsIconAndFit() {
+      const icon = document.getElementById('fsIcon')
+      if (!icon) return
+    
+      if (isFullscreen()) {
+        icon.classList.remove('fa-expand')
+        icon.classList.add('fa-compress')
+      } else {
+        icon.classList.remove('fa-compress')
+        icon.classList.add('fa-expand')
+      }
+    
+      // IMPORTANTe: en fullscreen hay resize real, entonces recalcula todo
+      setTimeout(resizeTreeToMount, 80)
+    }
+    
+    document.getElementById('fsBtn').addEventListener('click', toggleTreeFullscreen)
+    document.addEventListener('fullscreenchange', syncFsIconAndFit)
+    document.addEventListener('webkitfullscreenchange', syncFsIconAndFit)
+    
+    // carga inicial
+    loadTree()
+  </script>
+{% endblock %}
