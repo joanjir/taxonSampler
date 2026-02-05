@@ -391,3 +391,17 @@ class RunEvent(models.Model):
 
     def __str__(self) -> str:
         return f"RunEvent {self.id} [{self.level}/{self.event}]"
+
+
+class SamplingRun(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    scope_root_key = models.TextField(blank=True, default="")
+    params = models.JSONField(default=dict)            # parámetros de sampling (K, allocation, etc.)
+    sampling_payload = models.JSONField(default=dict)  # JSON completo del resultado
+
+    tree_newick = models.TextField(blank=True, default="")
+    tree_json = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"SamplingRun#{self.pk}"

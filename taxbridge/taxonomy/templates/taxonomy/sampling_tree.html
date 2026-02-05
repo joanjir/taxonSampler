@@ -1,0 +1,31 @@
+{% extends "taxonomy/layout/app_shell.html" %}
+{% load static %}
+
+{% block title %}Sampled Tree{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <div class="card-title mb-0">Sampled species tree</div>
+          <div class="text-muted small">Run #{{ run.id }}</div>
+        </div>
+        <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'sampling_tree_newick' run.id %}">Download Newick</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="treeMount" style="height:70vh;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.__TREE_JSON__ = {{ run.tree_json|safe }};
+</script>
+
+<script type="module" src="{% static 'taxonomy/js/tree/render_sample_tree.js' %}"></script>
+{% endblock %}
