@@ -10,10 +10,11 @@ from django.db import transaction
 
 from apps.taxonomy.models import ExternalTaxon, Taxon, TaxonCrosswalk
 from apps.taxonomy.services.checklistbank import ChecklistBankClient, canonicalize_scientific_name
+from apps.taxonomy.services.ncbi_api import fetch_and_save_genomes
 
 
 class Command(BaseCommand):
-    help = "Machea Taxon (NCBI) a ExternalTaxon (CoL/ChecklistBank) y crea TaxonCrosswalk."
+    help = "Machea Taxon (NCBI) a ExternalTaxon (CoL/ChecklistBank) y crea TaxonCrosswalk. Opcionalmente trae datos de genomas NCBI."
 
     def add_arguments(self, parser):
         parser.add_argument("--dataset", default="COL25.12", help="Dataset ChecklistBank, ej: COL25.12 o 3LR")
@@ -23,6 +24,9 @@ class Command(BaseCommand):
         parser.add_argument("--taxids", nargs="*", type=int, default=None, help="Procesa solo estos taxids")
         parser.add_argument("--kingdom", default="Animalia", help="Filtro kingdom para match/nameusage")
         parser.add_argument("--dry-run", action="store_true", help="No escribe en DB, solo muestra acciones")
+        # Nuevos argumentos para NCBI genomes
+        parser.add_argument("--fetch-genomes", action="store_true", help="Traer información de genomas de NCBI")
+        parser.add_argument("--check-proteomes", action="store_true", help="Verificar proteomas (más lento)")
 
     def handle(self, *args, **opts):
         dataset = opts["dataset"]
@@ -33,6 +37,10 @@ class Command(BaseCommand):
         kingdom = opts["kingdom"]
         dry = opts["dry_run"]
         verbosity = int(opts.get("verbosity", 1))
+        
+        # Opciones de NCBI genomes
+        fetch_genomes = opts["fetch_genomes"]
+        check_proteomes = opts["check_proteomes"]
 
         client = ChecklistBankClient()
 
@@ -49,10 +57,14 @@ class Command(BaseCommand):
 
         n_total = qs.count()
         n_high = n_review = n_nomatch = 0
+        n_genomes = 0  # Contador de genomas obtenidos
 
         self.stdout.write(f"==> Dataset: {dataset}")
         self.stdout.write(f"==> Taxa   : {n_total}")
         self.stdout.write(f"==> DryRun : {dry}")
+        self.stdout.write(f"==> Fetch NCBI Genomes: {fetch_genomes}")
+        if fetch_genomes:
+            self.stdout.write(f"==> Check Proteomes: {check_proteomes}")
 
         for t in qs.iterator(chunk_size=500):
             qname = canonicalize_scientific_name(t.scientific_name)
@@ -107,6 +119,17 @@ class Command(BaseCommand):
 
                 self._upsert_crosswalk(t, ext, qname, dataset, decision, method, score, m)
 
+            # --- NUEVO: Obtener genomas de NCBI ---
+            if fetch_genomes:
+                try:
+                    genome_count = fetch_and_save_genomes(t, check_proteomes=check_proteomes)
+                    n_genomes += genome_count
+                    if verbosity >= 2 and genome_count > 0:
+                        self.stdout.write(f"    [NCBI] {genome_count} genoma(s) guardado(s) para taxid={t.taxid}")
+                except Exception as e:
+                    if verbosity >= 1:
+                        self.stdout.write(f"    [NCBI_ERROR] taxid={t.taxid}: {e}")
+
             if decision == "high":
                 n_high += 1
             else:
@@ -121,6 +144,8 @@ class Command(BaseCommand):
         self.stdout.write(f"  high        : {n_high}")
         self.stdout.write(f"  needs_review: {n_review}")
         self.stdout.write(f"  no_match    : {n_nomatch}")
+        if fetch_genomes:
+            self.stdout.write(f"  genomas NCBI: {n_genomes}")
 
     def _decide(self, t_rank: Optional[str], m_rank: Optional[str], m_status: str):
         tr = (t_rank or "").strip().lower()

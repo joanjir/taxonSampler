@@ -405,3 +405,148 @@ class SamplingRun(models.Model):
 
     def __str__(self):
         return f"SamplingRun#{self.pk}"
+
+
+# ============================================================
+# NCBIGenome - Información de genomas NCBI (de traerNCBI)
+# ============================================================
+class NCBIGenome(models.Model):
+    """
+    Almacena información de genomas de NCBI asociados a un Taxon.
+    Datos obtenidos desde la API de NCBI Datasets.
+    """
+
+    REFSEQ_CATEGORY_CHOICES = [
+        ("reference genome", "Reference Genome"),
+        ("representative genome", "Representative Genome"),
+        ("na", "N/A"),
+    ]
+
+    GENOME_LEVEL_CHOICES = [
+        ("Complete Genome", "Complete Genome"),
+        ("Chromosome", "Chromosome"),
+        ("Scaffold", "Scaffold"),
+        ("Contig", "Contig"),
+    ]
+
+    # Relación con Taxon NCBI
+    taxon = models.ForeignKey(
+        Taxon,
+        on_delete=models.CASCADE,
+        related_name="genomes",
+        help_text="Taxón NCBI asociado",
+    )
+
+    # Identificadores
+    accession = models.CharField(
+        max_length=64,
+        db_index=True,
+        unique=True,
+        help_text="Accession del ensamblaje (ej: GCF_000001405.40)",
+    )
+
+    # Información básica
+    organism_name = models.CharField(max_length=255, blank=True, default="")
+    refseq_category = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="reference genome / representative genome / na",
+    )
+    genome_level = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Complete Genome / Chromosome / Scaffold / Contig",
+    )
+
+    # Métricas de calidad
+    genome_coverage = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Cobertura del genoma",
+    )
+    contig_n50_kb = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Contig N50 en kilobases",
+    )
+    scaffold_n50_kb = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Scaffold N50 en kilobases",
+    )
+    scaffold_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número de scaffolds",
+    )
+
+    # Score calculado
+    quality_score = models.FloatField(
+        default=0.0,
+        db_index=True,
+        help_text="Score de calidad calculado",
+    )
+
+    # Proteoma
+    has_proteome = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Indica si tiene proteoma válido (.faa)",
+    )
+    proteome_quality = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Calidad del proteoma: good / poor / unknown",
+    )
+
+    # Selección para investigación
+    is_selected = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Marcado como seleccionado para investigación",
+    )
+    is_best_for_taxon = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Es el mejor ensamblaje para este taxón",
+    )
+
+    # Metadatos
+    raw = models.JSONField(
+        default=dict,
+        help_text="Payload original de la API NCBI",
+    )
+    fetched_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Fecha de obtención de datos",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "NCBI Genome"
+        verbose_name_plural = "NCBI Genomes"
+        ordering = ["-quality_score", "-is_best_for_taxon"]
+        indexes = [
+            models.Index(fields=["taxon", "is_best_for_taxon"]),
+            models.Index(fields=["refseq_category"]),
+            models.Index(fields=["genome_level"]),
+            models.Index(fields=["quality_score"]),
+            models.Index(fields=["has_proteome"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.accession} ({self.organism_name})"
+
+    @property
+    def quality_tier(self) -> str:
+        """Clasificación por tier de calidad."""
+        if self.quality_score >= 0.8:
+            return "high"
+        elif self.quality_score >= 0.5:
+            return "medium"
+        return "low"
