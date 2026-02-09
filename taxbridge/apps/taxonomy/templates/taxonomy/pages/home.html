@@ -1,0 +1,131 @@
+{% extends "taxonomy/layout/app_shell.html" %}
+
+{% block title %}TaxaBridge - Home{% endblock %}
+
+{% block content %}
+<div class="page-header d-print-none">
+  <div class="container-xl">
+    <div class="row g-2 align-items-center">
+      <div class="col">
+        <h2 class="page-title">
+          Welcome to TaxaBridge
+        </h2>
+        <div class="text-muted mt-1">
+          Explore and navigate taxonomic data from NCBI and Catalogue of Life
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="container-xl">
+    <div class="row row-deck row-cards">
+      <!-- Taxonomy Tree Card -->
+      <div class="col-sm-6 col-lg-4">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+              <div class="avatar bg-primary-lt me-3">
+                <i class="ti ti-binary-tree fs-2"></i>
+              </div>
+              <div>
+                <h3 class="card-title mb-0">Taxonomy Tree</h3>
+              </div>
+            </div>
+            <p class="text-muted">
+              Interactive visualization of the NCBI taxonomic hierarchy. Explore relationships between taxa with an expandable D3-based tree.
+            </p>
+            <a href="{% url 'taxonomy:tree' %}" class="btn btn-primary w-100">
+              <i class="ti ti-arrow-right me-1"></i> Open Tree
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- COL Navigator Card -->
+      <div class="col-sm-6 col-lg-4">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+              <div class="avatar bg-green-lt me-3">
+                <i class="ti ti-compass fs-2"></i>
+              </div>
+              <div>
+                <h3 class="card-title mb-0">COL Navigator</h3>
+              </div>
+            </div>
+            <p class="text-muted">
+              Browse the Catalogue of Life database. Navigate through ranks and explore species distributions by taxonomic group.
+            </p>
+            <a href="{% url 'taxonomy:colnav' %}" class="btn btn-success w-100">
+              <i class="ti ti-arrow-right me-1"></i> Navigate COL
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Documentation Card -->
+      <div class="col-sm-6 col-lg-4">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-3">
+              <div class="avatar bg-azure-lt me-3">
+                <i class="ti ti-api fs-2"></i>
+              </div>
+              <div>
+                <h3 class="card-title mb-0">API Endpoints</h3>
+              </div>
+            </div>
+            <p class="text-muted">
+              Access taxonomy data programmatically through our REST API. All endpoints return JSON.
+            </p>
+            <div class="list-group list-group-flush">
+              <div class="list-group-item px-0 py-1 border-0">
+                <code class="small">/api/v1/taxonomy/tree/data/</code>
+              </div>
+              <div class="list-group-item px-0 py-1 border-0">
+                <code class="small">/api/v1/taxonomy/tree/search/</code>
+              </div>
+              <div class="list-group-item px-0 py-1 border-0">
+                <code class="small">/api/v1/taxonomy/col/nodes/</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats Section -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Project Overview</h3>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <h4>Data Sources</h4>
+                <ul>
+                  <li><strong>NCBI Taxonomy</strong> - Comprehensive taxonomic classification</li>
+                  <li><strong>Catalogue of Life</strong> - Species-level data with accepted names</li>
+                </ul>
+              </div>
+              <div class="col-md-6">
+                <h4>Features</h4>
+                <ul>
+                  <li>Interactive tree visualization with D3.js</li>
+                  <li>Search and filter by taxonomic rank</li>
+                  <li>Species sampling for phylogenetic analysis</li>
+                  <li>Export to Newick, JSON, and text formats</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

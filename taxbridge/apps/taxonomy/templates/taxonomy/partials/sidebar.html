@@ -1,0 +1,71 @@
+<aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+  <div class="container-fluid">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    
+    <h1 class="navbar-brand navbar-brand-autodark">
+      <a href="{% url 'taxonomy:home' %}">
+        <span class="text-white fw-bold">TaxaBridge</span>
+      </a>
+    </h1>
+    
+    <div class="collapse navbar-collapse" id="sidebar-menu">
+      <ul class="navbar-nav pt-lg-3">
+        <!-- Home -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:home' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-home"></i>
+            </span>
+            <span class="nav-link-title">Home</span>
+          </a>
+        </li>
+        
+        <!-- Taxonomy Tree -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:tree' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-binary-tree"></i>
+            </span>
+            <span class="nav-link-title">Taxonomy Tree</span>
+          </a>
+        </li>
+        
+        <!-- COL Navigator -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:colnav' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-compass"></i>
+            </span>
+            <span class="nav-link-title">COL Navigator</span>
+          </a>
+        </li>
+        
+        <!-- Divider -->
+        <li class="nav-item mt-3">
+          <span class="nav-link text-muted small text-uppercase">Developer</span>
+        </li>
+        
+        <!-- Debug Tools -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:search-debug' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-bug"></i>
+            </span>
+            <span class="nav-link-title">Search Debug</span>
+          </a>
+        </li>
+        
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:tree-cut-debug' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-cut"></i>
+            </span>
+            <span class="nav-link-title">Tree Cut Debug</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</aside>

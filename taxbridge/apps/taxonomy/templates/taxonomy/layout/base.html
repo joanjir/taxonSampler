@@ -1,0 +1,31 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <title>
+      {% block title %}
+        TaxBridge
+      {% endblock %}
+    </title>
+    <!-- Tabler (Bootstrap-based) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/tabler-icons.min.css" />
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="{% static 'taxonomy/css/tree.css' %}" />
+
+    {% block extra_css %}
+
+    {% endblock %}
+  </head>
+
+  <body class="d-flex flex-column">
+    {% block body %}
+
+    {% endblock %}
+
+    {% block extra_js %}
+
+    {% endblock %}
+  </body>
+</html>

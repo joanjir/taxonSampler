@@ -44,9 +44,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    'fontawesomefree',
+    # 'fontawesomefree',  # TODO: Enable Long Paths on Windows to install
     "rest_framework",
-    "taxonomy",
+    "apps.taxonomy",
 ]
 
 # ======================
