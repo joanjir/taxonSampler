@@ -37,7 +37,7 @@
   function renderSelection(){
     const el = document.getElementById("selList");
     const items = Array.from(selectedSpecies.values()).map(x => x.name).sort((a,b)=>a.localeCompare(b));
-    el.innerHTML = items.length ? items.map(x => `<div>${escapeHtml(x)}</div>`).join("") : `<div class="text-muted">Sin selección.</div>`;
+    el.innerHTML = items.length ? items.map(x => `<div>${escapeHtml(x)}</div>`).join("") : `<div class="text-muted">No taxa selected.</div>`;
   }
 
   // Tooltip

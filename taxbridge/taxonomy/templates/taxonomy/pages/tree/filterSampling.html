@@ -1,6 +1,7 @@
+<!-- Panel derecho: Sampling (wizard 2 pasos) -->
 <div class="col-12 col-lg-3">
   <div class="sticky-top" style="top: 84px;">
-    <div class="card mb-3">
+    <div class="card mb-3" id="samplingCard">
       <div class="card-header">
         <h5 class="mb-0">
           <i class="fa-solid fa-filter me-1"></i>
@@ -9,140 +10,327 @@
       </div>
 
       <div class="card-body">
-        <!-- ===== TAXON SAMPLING ===== -->
         <div class="text-muted small fw-semibold mb-2">
           <i class="fa-solid fa-seedling me-1"></i>
           Taxon sampling
         </div>
 
-        <!-- Sampling root -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Sampling root</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Root node from which quotas are propagated."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
-
-          <select id="samplingRoot" class="form-select form-select-sm">
-            <option value="" selected>Not selected (use entire tree)</option>
-            <option value="node">Selected clade</option>
-          </select>
-        </div>
-
-        <!-- Total taxa -->
-
-        <div class="mb-3">
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Total taxa (K)</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Global sampling budget distributed across clades."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
-
-          <input id="totalTaxa" type="number" min="2" step="1" value="50" class="form-control form-control-sm" />
-
-          <div class="form-text small">
-            <span id="taxaKBadge" class="badge bg-secondary-lt text-secondary" style="display:none;">K=—</span>
+        <!-- ====== Estado global (bloqueo tras generar) ====== -->
+        <div id="samLockAlert" class="alert alert-success py-2 px-2 d-none">
+          <div class="small d-flex align-items-center justify-content-between gap-2">
+            <div>
+              <i class="fa-solid fa-lock me-1"></i>
+              Sampling generado. Para cambiar scope/targets, usa <b>Reset</b>.
+            </div>
+            <button id="samReset" type="button" class="btn btn-sm btn-outline-secondary">
+              <i class="fa-solid fa-rotate-left me-1"></i>Reset
+            </button>
           </div>
         </div>
-        <!-- Allocation rank (NEW) -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Allocation rank</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Rank used to distribute K across clades (strata)."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
 
-          <select id="allocationRank" class="form-select form-select-sm">
-            <option value="phylum">Phylum</option>
-            <option value="class" selected>Class</option>
-            <option value="order">Order</option>
-            <option value="family">Family</option>
-            <option value="genus">Genus</option>
-          </select>
+        <!-- ========== STEP HEADER ========== -->
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="small">
+            <span class="badge bg-primary-lt text-primary me-1">Step</span>
+            <span id="samStepLabel" class="fw-semibold">1/2</span>
+          </div>
+
+          <div class="btn-group btn-group-sm">
+            <button id="samPrev" type="button" class="btn btn-outline-secondary" disabled>
+              <i class="fa-solid fa-chevron-left me-1"></i>Back
+            </button>
+            <button id="samNext" type="button" class="btn btn-outline-primary">
+              Next<i class="fa-solid fa-chevron-right ms-1"></i>
+            </button>
+          </div>
         </div>
 
-        <!-- Target rank -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Target rank</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Rank at which the final sampled tips are returned (usually species)."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
+        <hr class="my-2" />
 
-          <select id="targetRank" class="form-select form-select-sm">
-            <option value="species" selected>Species</option>
-            <option value="genus">Genus</option>
-            <option value="family">Family</option>
-            <option value="order">Order</option>
-          </select>
-        </div>
-
-        <!-- Allocation mode -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Allocation mode</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="How K is distributed across child clades (balanced vs proportional)."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
-
-          <select id="allocMode" class="form-select form-select-sm">
-            <option value="proportional" selected>Proportional (by richness)</option>
-            <option value="balanced">Balanced (equalize clades)</option>
-          </select>
-        </div>
-
-        <!-- Allocation policy -->
-        <div class="mb-3">
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" id="minOnePerClade" checked />
-            <label class="form-check-label small d-flex align-items-center gap-2" for="minOnePerClade">
-              <span>Enforce ≥ 1 taxon per clade</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Guarantees at least one representative per clade when available."><i class="fa-solid fa-circle-question"></i></span>
+        <!-- ========== STEP 1: SCOPE + TARGETS (desde el árbol con checkbox único) ========== -->
+        <div id="samStep1">
+          <!-- Scope -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Scope (root)</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Universe for sampling. If not selected, uses the entire tree. Root is set from the active node in the tree (checkbox selects active node).">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
             </label>
-          </div>
-        </div>
 
-        <!-- Refinement -->
-        <div class="mb-3">
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" id="expandSpecies" />
-            <label class="form-check-label small d-flex align-items-center gap-2" for="expandSpecies">
-              <span>Expand representatives to species level</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="After representative selection, expands sampling to species level."><i class="fa-solid fa-circle-question"></i></span>
+            <!-- IMPORTANTE: sampling_filters.js usa este ID -->
+            <select id="samplingRoot" class="form-select form-select-sm">
+              <option value="">Entire tree</option>
+              <option value="node">Use active node</option>
+            </select>
+
+            <!-- botones como tu versión anterior -->
+            <div class="d-flex gap-2 mt-2">
+              <button id="scopeSetActive" type="button" class="btn btn-sm btn-outline-primary w-100">
+                <i class="fa-solid fa-crosshairs me-1"></i>Set scope to active
+              </button>
+              <button id="scopeClear" type="button" class="btn btn-sm btn-outline-secondary"
+                      title="Clear scope (also clears targets)">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div class="form-text small">
+              <span class="badge bg-secondary-lt text-secondary" id="scopeBadge" style="display:none;">scope=—</span>
+            </div>
+
+            <!-- ====== NUEVO: Richness (species under scope/targets/active) ====== -->
+            <div class="mt-2 border rounded-3 p-2 bg-light">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="small fw-semibold">
+                  <i class="fa-solid fa-chart-simple me-1"></i>
+                  Richness
+                </div>
+                <span class="badge bg-secondary-lt text-secondary" id="richScopeBadge">scope=—</span>
+              </div>
+
+              <div class="small text-muted mt-1" id="richTargetsLine">targets=—</div>
+              <div class="small text-muted" id="richActiveLine">active=—</div>
+            </div>
+            <!-- ====== /NUEVO ====== -->
+          </div>
+
+          <!-- Target clades -->
+          <div class="mb-2">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Target clades (optional)</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Optional. Select one or more sub-clades under the scope. Use the active node in the tree and add it as a target. If empty, sampling uses the whole scope.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
             </label>
+
+            <div class="d-flex gap-2">
+              <button id="targetAddActive" type="button" class="btn btn-sm btn-outline-success w-100">
+                <i class="fa-solid fa-plus me-1"></i>Add active as target
+              </button>
+              <button id="targetsClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear targets">
+                <i class="fa-solid fa-broom"></i>
+              </button>
+            </div>
           </div>
 
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Max species per genus</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Upper bound on species sampled within a single genus."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
+          <!-- Chips -->
+          <div class="border rounded-3 p-2" style="min-height: 44px;">
+            <div id="targetsChips" class="d-flex flex-wrap gap-1">
+              <span class="text-muted small" id="targetsEmptyHint">No targets selected (sampling will use entire scope).</span>
+            </div>
+          </div>
 
-          <input id="maxPerGenus" type="number" min="1" step="1" value="1" class="form-control form-control-sm" />
+          <div class="alert alert-warning py-2 px-2 mt-2 d-none" id="targetsWarn">
+            <div class="small">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>
+              <span id="targetsWarnText">—</span>
+            </div>
+          </div>
+
+          <div class="alert alert-info py-2 px-2 mt-2">
+            <div class="small">
+              <i class="fa-solid fa-circle-info me-1"></i>
+              Tip: click a node to make it active. Then use “Set scope to active” and optionally “Add active as target”.
+            </div>
+          </div>
         </div>
 
-        <!-- Outgroup -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Outgroup rank distance</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Taxonomic distance used to select outgroup taxa."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
+        <!-- ========== STEP 2: PARAMETERS ========== -->
+        <div id="samStep2" class="d-none">
+          <!-- Total taxa -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Total taxa (K)</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Global sampling budget distributed across clades.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
 
-          <select id="outgroupRank" class="form-select form-select-sm mb-2">
-            <option value="">None</option>
-            <option value="order">Order</option>
-            <option value="class">Class</option>
-            <option value="phylum">Phylum</option>
-          </select>
+            <input id="totalTaxa" type="number" min="2" step="1" value="50" class="form-control form-control-sm" />
+            <div class="form-text small">
+              <span id="taxaKBadge" class="badge bg-secondary-lt text-secondary" style="display:none;">K=—</span>
+            </div>
+          </div>
 
-          <label class="form-label small mb-1 d-flex align-items-center gap-2">
-            <span>Outgroup taxa</span>
-            <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Number of outgroup taxa sampled independently."><i class="fa-solid fa-circle-question"></i></span>
-          </label>
+          <!-- Allocation rank -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Allocation rank</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Rank used to distribute K across clades (strata).">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
 
-          <input id="outgroupN" type="number" min="1" step="1" value="2" class="form-control form-control-sm" />
-        </div>
+            <select id="allocationRank" class="form-select form-select-sm">
+              <option value="phylum">Phylum</option>
+              <option value="class" selected>Class</option>
+              <option value="order">Order</option>
+              <option value="family">Family</option>
+              <option value="genus">Genus</option>
+            </select>
+          </div>
 
-        <!-- Action -->
-        <div class="d-grid">
-          <button id="runSampling" class="btn btn-sm btn-success" type="button">
-            <i class="fa-solid fa-play me-1"></i>
-            Generate sampling
-          </button>
+          <!-- Target rank -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Target rank</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Rank at which the final sampled tips are returned (usually species).">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
+
+            <select id="targetRank" class="form-select form-select-sm">
+              <option value="species" selected>Species</option>
+              <option value="genus">Genus</option>
+              <option value="family">Family</option>
+              <option value="order">Order</option>
+            </select>
+          </div>
+
+          <!-- Allocation mode -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Allocation mode</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="How K is distributed across child clades (balanced vs proportional).">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
+
+            <select id="allocMode" class="form-select form-select-sm">
+              <option value="proportional" selected>Proportional (by richness)</option>
+              <option value="balanced">Balanced (equalize clades)</option>
+            </select>
+          </div>
+
+          <!-- Allocation policy -->
+          <div class="mb-3">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="minOnePerClade" checked />
+              <label class="form-check-label small d-flex align-items-center gap-2" for="minOnePerClade">
+                <span>Enforce ≥ 1 taxon per clade</span>
+                <span class="help-icon text-muted"
+                      data-bs-toggle="popover"
+                      data-bs-trigger="hover"
+                      data-bs-placement="top"
+                      data-bs-custom-class="popover-help"
+                      data-bs-content="Guarantees at least one representative per clade when available.">
+                  <i class="fa-solid fa-circle-question"></i>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Refinement -->
+          <div class="mb-3">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="expandSpecies" />
+              <label class="form-check-label small d-flex align-items-center gap-2" for="expandSpecies">
+                <span>Expand representatives to species level</span>
+                <span class="help-icon text-muted"
+                      data-bs-toggle="popover"
+                      data-bs-trigger="hover"
+                      data-bs-placement="top"
+                      data-bs-custom-class="popover-help"
+                      data-bs-content="After representative selection, expands sampling to species level.">
+                  <i class="fa-solid fa-circle-question"></i>
+                </span>
+              </label>
+            </div>
+
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Max species per genus</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Upper bound on species sampled within a single genus.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
+
+            <input id="maxPerGenus" type="number" min="1" step="1" value="1" class="form-control form-control-sm" />
+          </div>
+
+          <!-- Outgroup -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Outgroup rank distance</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Taxonomic distance used to select outgroup taxa.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
+
+            <select id="outgroupRank" class="form-select form-select-sm mb-2">
+              <option value="">None</option>
+              <option value="order">Order</option>
+              <option value="class">Class</option>
+              <option value="phylum">Phylum</option>
+            </select>
+
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Outgroup taxa</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Number of outgroup taxa sampled independently.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
+
+            <input id="outgroupN" type="number" min="1" step="1" value="2" class="form-control form-control-sm" />
+          </div>
+
+          <!-- Action -->
+          <div class="d-grid">
+            <button id="runSampling" class="btn btn-sm btn-success" type="button">
+              <i class="fa-solid fa-play me-1"></i>
+              Generate sampling
+            </button>
+          </div>
+
+          <div class="form-text small mt-2">
+            <i class="fa-solid fa-shield-halved me-1"></i>
+            Scope/targets are validated before execution.
+          </div>
         </div>
       </div>
     </div>

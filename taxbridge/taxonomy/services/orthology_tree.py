@@ -1,7 +1,12 @@
 import re
 from ete3 import Tree
 
+
 def _parse_key_path(key: str):
+    """
+    key esperado: "rank:name|rank:name|...".
+    Devuelve lista [(rank_lower, name_str), ...] en orden.
+    """
     if not key:
         return []
     out = []
@@ -13,40 +18,101 @@ def _parse_key_path(key: str):
         out.append((r.strip().lower(), name.strip()))
     return out
 
-def _safe_leaf(label: str) -> str:
+
+def _safe_token(label: str) -> str:
+    """
+    Sanitiza a identificador compatible (ETE3 + Newick + pipelines ortología):
+    - sin espacios
+    - caracteres seguros: A-Za-z0-9_.-
+    """
     s = (label or "").strip().replace(" ", "_")
     s = re.sub(r"[^A-Za-z0-9_.-]", "_", s)
     s = re.sub(r"_+", "_", s).strip("_")
     return s or "Unknown"
 
-def sampling_to_tree_artifacts(sampling: dict, include_outgroup: bool = False):
-    ing = sampling.get("ingroup", {}).get("picked", [])
-    out = sampling.get("outgroupPicked", []) if include_outgroup else []
-    picked = list(ing) + list(out)
+
+def _safe_internal(rank: str, tax: str) -> str:
+    """
+    Nombre de nodo interno: rank__Taxon (rank opcional, pero útil para debug/visualización).
+    """
+    r = _safe_token(rank.lower() if rank else "node")
+    t = _safe_token(tax)
+    return f"{r}__{t}" if t else r
+
+
+def _dedupe_name(name: str, used: dict) -> str:
+    """
+    Evita colisiones de labels en hojas (y si quieres, también en internos).
+    """
+    base = name or "Unknown"
+    if base in used:
+        used[base] += 1
+        return f"{base}__{used[base]}"
+    used[base] = 1
+    return base
+
+
+def sampling_to_tree_artifacts(
+    sampling: dict,
+    include_outgroup: bool=True,
+    branch_len: float=1.0,
+    with_branch_lengths: bool=False,
+    internal_name_style: str="rank__taxon",  # o "taxon"
+):
+    """
+    Produce un árbol "ETE3-safe" y "ortho-safe":
+
+    - Hojas: SOLO especie (identificador limpio) => ideal para OrthoFinder/OMA/FastOMA.
+    - Nodos internos: taxones superiores, opcionalmente con rank (útil en depuración).
+    - Sin espacios ni caracteres raros.
+    - Longitudes: constantes (cladograma) si with_branch_lengths=True.
+
+    Retorna: (newick_str, tree_json)
+    """
+
+    ing = sampling.get("ingroup", {}).get("picked", []) or []
+    out = sampling.get("outgroupPicked", []) or []
+    picked = list(ing) + (list(out) if include_outgroup else [])
     if not picked:
         raise ValueError("Sampling vacío: no hay taxa seleccionados.")
 
-    # Root artificial
     root = Tree()
     root.name = "Root"
+    root.dist = 0.0
 
-    # índice por path acumulado para evitar duplicados
+    # índice para reusar nodos internos por path acumulado (excluyendo species)
     node_index = {"": root}
+
+    # para deduplicar hojas y evitar colisiones (muy común si llegan alias/errores)
+    used_leaf_names = {}
 
     for it in picked:
         key = it.get("key") or ""
         name = it.get("name") or ""
+        rank_hint = (it.get("rank") or "").strip().lower()
 
         path = _parse_key_path(key)
+
+        # fallback duro: si no hay path, tratamos como especie
         if not path:
-            # fallback mínimo
-            leaf = root.add_child(name=_safe_leaf(name))
+            leaf_name = _dedupe_name(_safe_token(name), used_leaf_names)
+            leaf = root.add_child(name=leaf_name)
             leaf.add_feature("rank", "species")
+            leaf.dist = branch_len if with_branch_lengths else 0.0
             continue
 
+        # Si el path trae species al final, la usamos; si no, intentamos con name/rank_hint
+        # Construimos nodos internos hasta el padre de species.
         acc = []
         parent = root
-        for rank, tax in path:
+        species_tax = None
+
+        for (rank, tax) in path:
+            if rank == "species":
+                species_tax = tax
+                break
+
+            # acumulador de clave interna (solo ranks != species)
             acc.append(f"{rank}:{tax}")
             acc_key = "|".join(acc)
 
@@ -54,32 +120,36 @@ def sampling_to_tree_artifacts(sampling: dict, include_outgroup: bool = False):
                 parent = node_index[acc_key]
                 continue
 
-            n = parent.add_child(name=f"{rank}:{tax}")
+            if internal_name_style == "taxon":
+                internal_name = _safe_token(tax)
+            else:
+                internal_name = _safe_internal(rank, tax)
+
+            n = parent.add_child(name=internal_name)
             n.add_feature("rank", rank)
+            n.dist = branch_len if with_branch_lengths else 0.0
+
             node_index[acc_key] = n
             parent = n
 
-    # Normaliza hojas a IDs ortho-safe (sin espacios ni símbolos)
-    used = {}
-    for leaf in root.iter_leaves():
-        if leaf.name.startswith("species:"):
-            sp = leaf.name.split(":", 1)[1].strip()
-            safe = _safe_leaf(sp)
-        else:
-            safe = _safe_leaf(leaf.name)
+        # Determinar especie (prioridad: species del path)
+        if not species_tax:
+            if rank_hint == "species":
+                species_tax = name
+            else:
+                # último recurso: usar name
+                species_tax = name
 
-        if safe in used:
-            used[safe] += 1
-            safe = f"{safe}__{used[safe]}"
-        else:
-            used[safe] = 1
+        leaf_name = _dedupe_name(_safe_token(species_tax), used_leaf_names)
+        leaf = parent.add_child(name=leaf_name)
+        leaf.add_feature("rank", "species")
+        leaf.dist = branch_len if with_branch_lengths else 0.0
 
-        leaf.name = safe
+    # Export Newick:
+    # - format=1: incluye nombres internos + longitudes.
+    # - si no quieres longitudes, cambia a format=9 y with_branch_lengths=False.
+    newick = root.write(format=9 if not with_branch_lengths else 1).strip()
 
-    # Newick exportable
-    newick = root.write(format=1)
-
-    # JSON para D3
     def to_json(n: Tree):
         obj = {"name": n.name, "rank": getattr(n, "rank", None)}
         if n.children:

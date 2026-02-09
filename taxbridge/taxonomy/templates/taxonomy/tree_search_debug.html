@@ -1,0 +1,132 @@
+{# taxonomy/templates/taxonomy/tree_search_debug.html #}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tree Search Debug</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; }
+    .row { display: flex; gap: 12px; align-items: center; }
+    input { width: 420px; padding: 8px; }
+    button { padding: 8px 10px; }
+    .muted { color: #666; font-size: 12px; margin-top: 8px; }
+    pre { background: #f6f6f6; padding: 12px; overflow: auto; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+    tr:hover { background: #fafafa; cursor: pointer; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <h2>Tree Search Debug (Backend-driven)</h2>
+
+  <div class="row">
+    <input id="q" placeholder="Ej: homo, sapiens, arthropoda..." />
+    <button id="go">Buscar</button>
+    <button id="clr">Limpiar</button>
+  </div>
+
+  <div class="muted" id="meta"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>label</th>
+        <th>rank/name</th>
+        <th>key</th>
+        <th>ids</th>
+      </tr>
+    </thead>
+    <tbody id="rows">
+      <tr><td colspan="4" class="muted">Sin resultados.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Raw JSON</h3>
+  <pre id="raw">{}</pre>
+
+<script>
+  const SEARCH_URL = "{% url 'taxonomy:tree-search' %}";
+
+  const $q = document.getElementById("q");
+  const $go = document.getElementById("go");
+  const $clr = document.getElementById("clr");
+  const $rows = document.getElementById("rows");
+  const $raw = document.getElementById("raw");
+  const $meta = document.getElementById("meta");
+
+  function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c])); }
+
+  async function run() {
+    const q = $q.value.trim();
+    if (q.length < 2) return;
+
+    const url = new URL(SEARCH_URL, window.location.origin);
+    url.searchParams.set("q", q);
+    url.searchParams.set("limit", "50");
+
+    const res = await fetch(url.toString(), {
+      headers: { "Accept": "application/json" },
+      cache: "no-store"
+    });
+
+    const txt = await res.text();
+    $raw.textContent = txt;
+
+    if (!res.ok) {
+      $meta.textContent = `ERROR ${res.status}`;
+      $rows.innerHTML = `<tr><td colspan="4"><code>${esc(txt)}</code></td></tr>`;
+      return;
+    }
+
+    const data = JSON.parse(txt);
+    $meta.textContent = `query="${data.query}" | total=${data.total} | scanned_paths=${data.scanned_paths}`;
+
+    const hits = Array.isArray(data.hits) ? data.hits : [];
+    if (!hits.length) {
+      $rows.innerHTML = `<tr><td colspan="4" class="muted">Sin resultados.</td></tr>`;
+      return;
+    }
+
+    $rows.innerHTML = hits.map(h => `
+      <tr data-key="${esc(h.key)}" title="Click para copiar key">
+        <td>${esc(h.label)}</td>
+        <td><code>${esc(h.rank)}:${esc(h.name)}</code></td>
+        <td><code>${esc(h.key)}</code></td>
+        <td class="muted">id=${esc(h.id)} | external_id=${esc(h.external_id)}</td>
+      </tr>
+    `).join("");
+  }
+
+  $go.addEventListener("click", run);
+  $q.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); run(); }
+  });
+
+  $clr.addEventListener("click", () => {
+    $q.value = "";
+    $rows.innerHTML = `<tr><td colspan="4" class="muted">Sin resultados.</td></tr>`;
+    $raw.textContent = "{}";
+    $meta.textContent = "";
+    $q.focus();
+  });
+
+  $rows.addEventListener("click", async (e) => {
+    const tr = e.target.closest("tr[data-key]");
+    if (!tr) return;
+    const key = tr.getAttribute("data-key") || "";
+    if (!key) return;
+
+    try {
+      await navigator.clipboard.writeText(key);
+      $meta.textContent = `Copiado key: ${key}`;
+    } catch {
+      $meta.textContent = `No se pudo copiar. key: ${key}`;
+    }
+  });
+</script>
+</body>
+</html>

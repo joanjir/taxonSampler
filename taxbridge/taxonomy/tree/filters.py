@@ -1,9 +1,5 @@
-# taxonomy/tree/filters.py
-from __future__ import annotations
-
-from typing import Any, Dict, List, Optional
-
-TreeNode = Dict[str, Any]
+# taxonomy/views/filters.py
+from typing import Dict, Any, List, Optional
 
 RANK_ORDER = [
     "dataset",
@@ -20,38 +16,34 @@ RANK_ORDER = [
 LAST_RANK_INDEX = len(RANK_ORDER) - 1
 
 
-def norm_rank(rank: Any) -> str:
-    return str(rank or "").strip().lower()
+def norm_rank(rank: Optional[str]) -> str:
+    return (rank or "").strip().lower()
 
 
-def rank_index(rank: Any) -> int:
-    r = norm_rank(rank)
+def rank_index(rank: Optional[str]) -> int:
     try:
-        return RANK_ORDER.index(r)
+        return RANK_ORDER.index(norm_rank(rank))
     except ValueError:
         return -1
 
 
-def is_leaf(node: Optional[TreeNode]) -> bool:
-    if not node:
-        return True
-    ch = node.get("children")
-    return not isinstance(ch, list) or len(ch) == 0
+def is_leaf(node: Dict[str, Any]) -> bool:
+    return not node or not node.get("children")
 
 
-def shallow_clone(node: Optional[TreeNode]) -> TreeNode:
-    node = node or {}
-    out = dict(node)
-    out.pop("children", None)
-    out.pop("_children", None)
-    return out
+def shallow_clone(node: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Clona el nodo sin children ni _children.
+    Mantiene metadata (id, external_id, etc.)
+    """
+    return {k: v for k, v in node.items() if k not in ("children", "_children")}
 
 
-def collapse_all(node: TreeNode) -> TreeNode:
+def collapse_all(node: Dict[str, Any]) -> Dict[str, Any]:
     n = shallow_clone(node)
 
-    children = node.get("children")
-    if not isinstance(children, list) or len(children) == 0:
+    children = node.get("children") or []
+    if not children:
         n["children"] = None
         n["_children"] = None
         return n
@@ -61,35 +53,30 @@ def collapse_all(node: TreeNode) -> TreeNode:
     return n
 
 
-def cut_tree_by_rank(full_data: Optional[TreeNode], rank_cut: Any) -> Optional[TreeNode]:
+def cut_tree_by_rank(full_data: Dict[str, Any], rank_cut: Optional[str]) -> Dict[str, Any]:
     if not full_data:
-        return None
+        return full_data
 
     cut = norm_rank(rank_cut)
 
-    # "" => solo root visible (todo en _children)
+    # Caso 1: "" → solo ROOT visible
     if not cut:
-        root_only = shallow_clone(full_data)
-        children = full_data.get("children")
-        if isinstance(children, list) and children:
-            root_only["children"] = None
-            root_only["_children"] = [collapse_all(c) for c in children]
-        else:
-            root_only["children"] = None
-            root_only["_children"] = None
-        return root_only
+        root = shallow_clone(full_data)
+        children = full_data.get("children") or []
+        root["children"] = None
+        root["_children"] = [collapse_all(c) for c in children] if children else None
+        return root
 
     cut_idx = rank_index(cut)
 
-    # rank desconocido => conservador
+    # Rank desconocido → política conservadora (no romper UI)
     if cut_idx < 0:
         safe = shallow_clone(full_data)
-        children = full_data.get("children")
-        safe["children"] = [collapse_all(c) for c in children] if isinstance(children, list) else None
+        safe["children"] = [collapse_all(c) for c in (full_data.get("children") or [])]
         safe["_children"] = None
         return safe
 
-    def build(node: TreeNode) -> TreeNode:
+    def build(node: Dict[str, Any], parent_idx: int) -> Dict[str, Any]:
         n = shallow_clone(node)
 
         if is_leaf(node):
@@ -98,37 +85,31 @@ def cut_tree_by_rank(full_data: Optional[TreeNode], rank_cut: Any) -> Optional[T
             return n
 
         idx = rank_index(node.get("rank"))
-        safe_idx = -999 if idx < 0 else idx
 
-        # species => abre todo
+        # CLAVE: si rank es desconocido, hereda el índice del padre
+        cur_idx = idx if idx >= 0 else parent_idx
+
+        # species → abrir todo (si tu política es esa)
         if cut_idx == LAST_RANK_INDEX:
-            n["children"] = [build(c) for c in node["children"]]
+            n["children"] = [build(c, cur_idx) for c in node.get("children", [])]
             n["_children"] = None
             return n
 
-        # por encima del corte => hijos visibles
-        if safe_idx < cut_idx:
-            n["children"] = [build(c) for c in node["children"]]
+        # Por encima del corte → abierto
+        if cur_idx < cut_idx:
+            n["children"] = [build(c, cur_idx) for c in node.get("children", [])]
             n["_children"] = None
             return n
 
-        # en el corte o por debajo => colapsa
+        # En el corte o por debajo → colapsar
         n["children"] = None
-        n["_children"] = [collapse_all(c) for c in node["children"]]
+        n["_children"] = [collapse_all(c) for c in node.get("children", [])]
         return n
 
-    return build(full_data)
+    # ROOT "dataset" está en tu RANK_ORDER => idx válido; si no, arranca en -999
+    root_idx = rank_index(full_data.get("rank"))
+    root_idx = root_idx if root_idx >= 0 else -999
+
+    return build(full_data, root_idx)
 
 
-def count_visible_nodes(tree: Optional[TreeNode]) -> int:
-    if not tree:
-        return 0
-    c = 0
-    stack: List[TreeNode] = [tree]
-    while stack:
-        n = stack.pop()
-        c += 1
-        ch = n.get("children")
-        if isinstance(ch, list) and ch:
-            stack.extend(ch)
-    return c

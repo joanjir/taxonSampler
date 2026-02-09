@@ -147,7 +147,7 @@
       .sort((a,b)=>a.localeCompare(b));
 
     if (!items.length) {
-      el.innerHTML = `<div style="color:rgba(0,0,0,.6);">Sin selección.</div>`;
+      el.innerHTML = `<div style="color:rgba(0,0,0,.6);">No taxa selected.</div>`;
       return;
     }
     el.innerHTML = items.map(n => `<div>${escapeHtml(n)}</div>`).join("");

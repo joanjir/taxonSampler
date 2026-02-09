@@ -1,6 +1,18 @@
 // taxonomy/static/taxonomy/js/tree/d3_tree.js
-import { VIS, AUTOFIT, rankStyle, isSciName } from "./config.js";
-import { normRank, rankIndex } from "./filtertax.js";
+import { VIS, AUTOFIT, rankStyle, isSciName } from "../tree/config.js";
+ import { normRank, rankIndex } from "../tree/filtertax.js";
+
+// Helpers (delegados a /trees/)
+import {
+  findInTreeByKey,
+  countSpeciesUnderKey as countSpeciesUnderKeySvc,
+  makeScopeContext,
+  listImmediateChildClades as listImmediateChildCladesSvc,
+  listCladesAtRank as listCladesAtRankSvc,
+} from "./tree_services.js";
+import { computeNodeUIState } from "./tree_ui_state.js";
+import { buildVisibleTree as buildVisibleTreeHelper } from "./tree_visibility.js";
+import { initZoom as initZoomHelper, fitToView as fitToViewHelper, centerOn as centerOnHelper, smartFitIfNeeded as smartFitHelper } from "./tree_zoom.js";
 
 export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbChange }) {
   // ---------------- estado D3 ----------------
@@ -23,6 +35,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
   // samplingMode: "" (tree) | "node" (selected clade)
   let samplingMode = ""; // default: entire tree
   let samplingRootKey = null; // key del clado activo (cuando samplingMode === "node")
+
   function expandPathByKeyPath(keyPath) {
     if (!keyPath) return;
 
@@ -36,8 +49,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       expandedKeys.add(prefix);
     }
   }
-  // ---------------- Reveal helpers (para "Ver en árbol") ----------------
 
+  // ---------------- Reveal helpers (para "Ver en árbol") ----------------
   function revealKeys(keys, opts = {}) {
     if (!Array.isArray(keys) || !keys.length) return;
     if (!fullData) return;
@@ -70,7 +83,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       setTimeout(fitToView, 0);
     }
   }
-
 
   function notifySamplingRootChanged() {
     // Consumers (e.g., sampling_filters.js) listen to this to recompute quotas/clamps.
@@ -227,242 +239,55 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
   // --------- localizar un key en fullData y devolver su ruta (parts) ----------
   function findInFullDataByKey(targetKey) {
-    if (!fullData || !targetKey) return null;
-
-    let found = null;
-
-    function walk(node, parts) {
-      if (found) return;
-
-      const nextParts = [...parts, { rank: node.rank || "?", name: node.name || "" }];
-      const k = pathKeyFromParts(nextParts);
-
-      if (k === targetKey) {
-        found = { node, parts: nextParts };
-        return;
-      }
-
-      const kids = Array.isArray(node.children) ? node.children : [];
-      for (const c of kids) walk(c, nextParts);
-    }
-
-    walk(fullData, []);
-    return found;
+    return findInTreeByKey(fullData, targetKey);
   }
 
-  // ---------------- construir árbol visible ----------------
+  // ---------------- construir árbol visible (delegado) ----------------
   function buildVisibleTree() {
-    if (!fullData) return null;
-
-    // Caso A: sin samplingRootKey -> árbol normal (con expandKeys/rankCut)
-    if (!(samplingMode === "node" && samplingRootKey)) {
-      function walk(node, parts) {
-        const nextParts = [...parts, { rank: node.rank || "?", name: node.name || "" }];
-        const key = pathKeyFromParts(nextParts);
-
-        const kids = Array.isArray(node.children) ? node.children : [];
-        const out = { ...node, __key: key };
-
-        if (isLeafByCut(node)) {
-          delete out.children;
-          out.__hasChildren = kids.length > 0;
-          return out;
-        }
-
-        if (!kids.length) {
-          delete out.children;
-          out.__hasChildren = false;
-          return out;
-        }
-
-        const expand = shouldExpandNode(node, key);
-        if (!expand) {
-          delete out.children;
-          out.__hasChildren = true;
-          return out;
-        }
-
-        out.children = kids.map((c) => walk(c, nextParts));
-        out.__hasChildren = true;
-        return out;
-      }
-
-      return walk(fullData, []);
-    }
-
-    // Caso B: hay samplingRootKey -> mostrar SOLO ruta + subárbol del clado
-    const hit = findInFullDataByKey(samplingRootKey);
-    if (!hit) {
-      // si por cualquier razón no existe, caemos a árbol completo
-      samplingRootKey = null;
-      return buildVisibleTree();
-    }
-
-    const parts = hit.parts; // ROOT..clado
-    const rootNode = fullData; // el root real
-
-    // construir ruta "lineal" ROOT -> ... -> clado
-    function buildRouteChain(fullNode, partsSoFar, idx) {
-      const nextParts = [...partsSoFar, { rank: fullNode.rank || "?", name: fullNode.name || "" }];
-      const key = pathKeyFromParts(nextParts);
-
-      const out = { ...fullNode, __key: key };
-
-      const isOnPath = idx < parts.length && parts[idx]?.name === (fullNode.name || "") &&
-        (parts[idx]?.rank || "?") === (fullNode.rank || "?");
-
-      // marcadores visuales
-      out.__path = true;
-      out.__muted = idx < parts.length - 1; // ancestros muted
-      out.__activeRoot = idx === parts.length - 1; // clado activo
-
-      // si es el nodo clado activo, aquí colgamos su subárbol "real"
-      if (out.__activeRoot) {
-        // construir subárbol aplicando expand policy desde este nodo
-        function walkSub(node, subParts) {
-          const nextSubParts = [...subParts, { rank: node.rank || "?", name: node.name || "" }];
-          const subKey = pathKeyFromParts(nextSubParts);
-
-          const kids = Array.isArray(node.children) ? node.children : [];
-          const subOut = { ...node, __key: subKey, __subtree: true, __activeRoot: subKey === samplingRootKey };
-
-          if (isLeafByCut(node)) {
-            delete subOut.children;
-            subOut.__hasChildren = kids.length > 0;
-            return subOut;
-          }
-
-          if (!kids.length) {
-            delete subOut.children;
-            subOut.__hasChildren = false;
-            return subOut;
-          }
-
-          const expand = shouldExpandNode(node, subKey);
-          if (!expand) {
-            delete subOut.children;
-            subOut.__hasChildren = true;
-            return subOut;
-          }
-
-          subOut.children = kids.map((c) => walkSub(c, nextSubParts));
-          subOut.__hasChildren = true;
-          return subOut;
-        }
-
-        // para que el clado active use la misma lógica de expand
-        const subTree = walkSub(fullNode, partsSoFar);
-        // pero necesitamos que este nodo tenga children (subtree) según walkSub
-        // y además conservar flags de ruta/activeRoot
-        out.children = subTree.children;
-        out.__hasChildren = subTree.__hasChildren;
-        return out;
-      }
-
-      // ancestros: solo 1 hijo (el siguiente en ruta)
-      const kids = Array.isArray(fullNode.children) ? fullNode.children : [];
-      out.__hasChildren = kids.length > 0;
-
-      const wantNext = parts[idx + 1];
-      if (!wantNext) {
-        delete out.children;
-        return out;
-      }
-
-      const nextChild = kids.find((c) => (c.name || "") === wantNext.name && (c.rank || "?") === (wantNext.rank || "?"));
-      if (!nextChild) {
-        delete out.children;
-        return out;
-      }
-
-      out.children = [buildRouteChain(nextChild, nextParts, idx + 1)];
-      return out;
-    }
-
-    // La ruta siempre parte desde fullData (ROOT real)
-    return buildRouteChain(rootNode, [], 0);
+    return buildVisibleTreeHelper({
+      fullData,
+      samplingMode,
+      samplingRootKey,
+      shouldExpandKey: shouldExpandNode,
+      leafByCut: isLeafByCut,
+      findByKey: (fd, k) => findInTreeByKey(fd, k),
+    });
   }
 
-  // ---------------- zoom/fit ----------------
+  // ---------------- zoom/fit (delegado) ----------------
   function initZoom() {
-    zoomBehavior = d3
-      .zoom()
-      .scaleExtent([0.35, 2.5])
-      .on("zoom", () => {
+    zoomBehavior = initZoomHelper({
+      svgRoot,
+      gZoom,
+      tooltip,
+      onUserInteracted: () => {
         userHasInteracted = true;
-        gZoom.attr("transform", d3.event.transform);
-        if (tooltip && tooltip.hide) tooltip.hide();
-      });
-
-    svgRoot.call(zoomBehavior);
+      },
+    });
   }
 
   function fitToView() {
-    if (!svgRoot || !gZoom) return;
-    const width = mount.clientWidth;
-    const height = mount.clientHeight;
-    const bbox = gZoom.node().getBBox();
-    const margin = 40;
-    if (!bbox.width || !bbox.height || !width || !height) return;
-
-    const scale = Math.min(
-      1.8,
-      Math.max(0.35, Math.min((width - margin) / bbox.width, (height - margin) / bbox.height))
-    );
-
-    const tx = (width - bbox.width * scale) / 2 - bbox.x * scale;
-    const ty = (height - bbox.height * scale) / 2 - bbox.y * scale;
-
-    svgRoot
-      .transition()
-      .duration(220)
-      .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    fitToViewHelper({ svgRoot, gZoom, zoomBehavior, mount, margin: 40 });
   }
 
   function centerOn(d) {
-    if (!svgRoot || !d) return;
-    const width = mount.clientWidth;
-    const height = mount.clientHeight;
-
-    const t = d3.zoomTransform(svgRoot.node());
-    const scale = t.k;
-
-    const x = d.y;
-    const y = d.x;
-
-    const tx = width / 2 - x * scale;
-    const ty = height / 2 - y * scale;
-
-    svgRoot
-      .transition()
-      .duration(220)
-      .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    centerOnHelper({ svgRoot, zoomBehavior, mount, d });
   }
 
   function smartFitIfNeeded() {
-    if (!autoFitEnabled) return;
-    if (!root || !gZoom) return;
-
-    const now = Date.now();
-    if (now - lastAutoFitAt < AUTOFIT.minIntervalMs) return;
-
-    const nodesCount = root.descendants().length;
-    if (userHasInteracted && nodesCount > AUTOFIT.maxNodesForFit) return;
-
-    const bbox = gZoom.node().getBBox();
-    const W = mount.clientWidth;
-    const H = mount.clientHeight;
-    if (!bbox.width || !bbox.height || !W || !H) return;
-
-    const fillX = bbox.width / W;
-    const fillY = bbox.height / H;
-    const fill = Math.max(fillX, fillY);
-
-    const shouldFit = nodesCount <= AUTOFIT.maxNodesForFit || fill < AUTOFIT.areaFillThreshold;
-    if (shouldFit) {
-      lastAutoFitAt = now;
-      fitToView();
-    }
+    smartFitHelper({
+      autoFitEnabled,
+      root,
+      gZoom,
+      mount,
+      userHasInteracted,
+      lastAutoFitAt,
+      setLastAutoFitAt: (v) => {
+        lastAutoFitAt = v;
+      },
+      AUTOFIT,
+      fit: fitToView,
+    });
   }
 
   function findVisibleNodeByKey(k) {
@@ -483,44 +308,38 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     root = d3.hierarchy(visible, (d) => d.children);
     update(sourceForAnim || root);
   }
-  function listCladesAtRank(targetRank) {
-    const tr = (targetRank || "").toLowerCase();
-    if (!tr) return [];
 
-    const scope = getScopeNode(); // ya lo tienes
-    if (!scope) return [];
+  // ---------------- helpers scope (para listados/expand rank) ----------------
+  function getScopeNode() {
+    if (!fullData) return null;
 
-    // baseParts para construir keys estables
-    let baseParts = [];
     if (samplingMode === "node" && samplingRootKey) {
       const hit = findInFullDataByKey(samplingRootKey);
-      if (hit?.parts) baseParts = hit.parts;
-    } else {
-      baseParts = [{ rank: scope.rank || "?", name: scope.name || "" }];
+      if (hit?.node) return hit.node;
     }
+    return fullData;
+  }
 
-    const out = [];
-    (function walk(node, parts) {
-      if (!node) return;
-      const nextParts = [...parts, { rank: node.rank || "?", name: node.name || "" }];
-      const r = ((node.rank || "") + "").toLowerCase();
+  function listImmediateChildClades() {
+    const scopeNode = getScopeNode();
+    const ctx = makeScopeContext({
+      fullData,
+      scopeNode,
+      samplingRootKey: samplingMode === "node" ? samplingRootKey : null,
+      findByKey: (fd, k) => findInTreeByKey(fd, k),
+    });
+    return listImmediateChildCladesSvc(ctx);
+  }
 
-      if (r === tr) {
-        out.push({
-          key: pathKeyFromParts(nextParts),
-          name: node.name || "",
-          rank: r,
-          species: countSpeciesUnderNode(node),
-          hasChildren: Array.isArray(node.children) && node.children.length > 0,
-        });
-        return; // cortamos aquí: ya estamos en el rank objetivo
-      }
-
-      const kids = Array.isArray(node.children) ? node.children : [];
-      for (const c of kids) walk(c, nextParts);
-    })(scope, baseParts.slice(0, baseParts.length - 1)); // para no duplicar scope
-
-    return out;
+  function listCladesAtRank(targetRank) {
+    const scopeNode = getScopeNode();
+    const ctx = makeScopeContext({
+      fullData,
+      scopeNode,
+      samplingRootKey: samplingMode === "node" ? samplingRootKey : null,
+      findByKey: (fd, k) => findInTreeByKey(fd, k),
+    });
+    return listCladesAtRankSvc({ scope: ctx.scope, parentParts: ctx.parentParts, targetRank });
   }
 
   function update(source) {
@@ -567,7 +386,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
           // - si clicas otro => cambia root a ese clado
           if (samplingRootKey && key === samplingRootKey) {
             // al quitar root, conviene mantener expansión manual previa
-            // (si quieres resetear expansión: expandedKeys.clear();)
             setSamplingRootKey(null, { source: d, center: false, fitOnClear: true });
             smartFitIfNeeded();
 
@@ -603,9 +421,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
         update(d);
         if (typeof onSelectionChange === "function") onSelectionChange(selectedSpecies);
-
       });
-
 
     cb.append("rect")
       .attr("class", "cb-box")
@@ -705,26 +521,21 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
     nodeUpdate.each(function (d) {
       const st = rankStyle(d.data.rank);
-
       const g = d3.select(this);
 
       // estilos base
       g.select("rect.node-box").attr("fill", st.fill).attr("stroke", st.stroke);
 
+      const ui = computeNodeUIState({ d, samplingMode, samplingRootKey, keyFromD3Node });
+
       // checkbox visibility: solo cuando samplingMode === "node"
-      g.select("g.cb").style("display", samplingMode === "node" ? null : "none");
+      g.select("g.cb").style("display", ui.showCheckbox ? null : "none");
 
-      // checkbox state: marcado si es raíz activa o ruta (opcional: marcamos toda la ruta)
-      const k = d.data.__key || keyFromD3Node(d);
-      const isRoute = !!d.data.__path;
-      const isActive = samplingMode === "node" && samplingRootKey && k === samplingRootKey;
-
-      // el tick se enciende solo en ruta/raíz cuando estamos en modo clade
-      const showTick = samplingMode === "node" && (isActive || isRoute);
-      g.select("path.cb-tick").style("opacity", showTick ? 1 : 0);
+      // tick
+      g.select("path.cb-tick").style("opacity", ui.showTick ? 1 : 0);
 
       // ruta muted: baja opacidad + deshabilita checkbox
-      if (samplingMode === "node" && isRoute && d.data.__muted) {
+      if (ui.disable) {
         g.style("opacity", 0.55);
         g.select("g.cb").style("pointer-events", "none");
       } else {
@@ -733,7 +544,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       }
 
       // raíz activa: borde verde fuerte
-      if (samplingMode === "node" && isActive) {
+      if (ui.isActive) {
         g.select("rect.node-box")
           .attr("stroke", "#198754") // bootstrap success
           .attr("stroke-width", 2);
@@ -788,126 +599,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     });
   }
 
-  // ---------------- BUSCADOR: multiple hits + prev/next ----------------
-  function normQuery(q) {
-    return (q || "").trim().toLowerCase();
-  }
-
-  function scoreName(name, q) {
-    const n = (name || "").toLowerCase();
-    if (!q || !n) return -1;
-    if (n === q) return 300;
-    if (n.startsWith(q)) return 200 + Math.min(50, q.length);
-    if (n.includes(q)) return 100 + Math.min(50, q.length);
-    return -1;
-  }
-
-  function findAllMatchesInFullData(q, limit = 500) {
-    if (!fullData) return [];
-    const query = normQuery(q);
-    if (!query) return [];
-
-    const hits = [];
-    function walk(node, parts) {
-      const nextParts = [...parts, { rank: node.rank || "?", name: node.name || "" }];
-      const s = scoreName(node.name, query);
-      if (s >= 0) hits.push({ score: s, parts: nextParts });
-
-      const kids = Array.isArray(node.children) ? node.children : [];
-      for (const c of kids) walk(c, nextParts);
-    }
-
-    walk(fullData, []);
-    hits.sort((a, b) => b.score - a.score);
-    return hits.slice(0, limit);
-  }
-
-  let lastSearchQ = "";
-  let lastSearchIdx = -1;
-  let lastSearchHits = [];
-
-  function searchInfo() {
-    return { q: lastSearchQ, count: lastSearchHits.length, idx: lastSearchIdx };
-  }
-
-  function searchClear() {
-    lastSearchQ = "";
-    lastSearchIdx = -1;
-    lastSearchHits = [];
-    return searchInfo();
-  }
-
-  function applyHit(hit) {
-    if (!hit || !hit.parts) return false;
-    if (!fullData || !root) return false;
-
-    // buscar ignora sampling clade (no lo rompe, pero centra dentro de lo visible actual)
-    // Si estás en clade mode con root activo, el search se limita visualmente a lo visible.
-    // (si quieres, luego hacemos "search dentro del clade".)
-    if (samplingMode === "node" && samplingRootKey) {
-      // no hacemos re-root durante búsqueda en clade mode
-      const targetKey = pathKeyFromParts(hit.parts);
-      const d = findVisibleNodeByKey(targetKey);
-      if (d) {
-        setCrumbFromNode(d);
-        centerOn(d);
-      }
-      return true;
-    }
-
-    rankCut = null;
-    expandedKeys.clear();
-
-    const parts = hit.parts;
-
-    for (let k = 0; k < parts.length - 1; k++) {
-      expandedKeys.add(pathKeyFromParts(parts.slice(0, k + 1)));
-    }
-
-    rebuildHierarchyAndUpdate(root);
-
-    requestAnimationFrame(() => {
-      const targetKey = pathKeyFromParts(parts);
-      const d = findVisibleNodeByKey(targetKey);
-      if (d) {
-        setCrumbFromNode(d);
-        centerOn(d);
-      }
-    });
-
-    return true;
-  }
-
-  function searchStart(q) {
-    const query = normQuery(q);
-    if (!query || !fullData || !root) return { ok: false, ...searchInfo() };
-
-    lastSearchQ = query;
-    lastSearchHits = findAllMatchesInFullData(query);
-    lastSearchIdx = lastSearchHits.length ? 0 : -1;
-
-    const ok = lastSearchIdx >= 0 ? applyHit(lastSearchHits[lastSearchIdx]) : false;
-    return { ok, ...searchInfo() };
-  }
-
-  function searchNext() {
-    if (!lastSearchHits.length || !fullData || !root) return { ok: false, ...searchInfo() };
-    lastSearchIdx = (lastSearchIdx + 1) % lastSearchHits.length;
-    const ok = applyHit(lastSearchHits[lastSearchIdx]);
-    return { ok, ...searchInfo() };
-  }
-
-  function searchPrev() {
-    if (!lastSearchHits.length || !fullData || !root) return { ok: false, ...searchInfo() };
-    lastSearchIdx = (lastSearchIdx - 1 + lastSearchHits.length) % lastSearchHits.length;
-    const ok = applyHit(lastSearchHits[lastSearchIdx]);
-    return { ok, ...searchInfo() };
-  }
-
-  function focusByName(q) {
-    return !!searchStart(q).ok;
-  }
-
   // ---------------- API pública ----------------
   function destroySvgOnly() {
     const oldSvg = mount.querySelector("svg");
@@ -922,7 +613,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     expandedKeys.clear();
     selected.clear();
     selectedSpecies.clear();
-    searchClear();
 
     // sampling
     samplingMode = "";
@@ -953,7 +643,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       d.id = (d.data && d.data.__key) ? d.data.__key : keyFromD3Node(d);
     });
 
-
     userHasInteracted = false;
     lastAutoFitAt = 0;
 
@@ -970,6 +659,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     if (typeof onSelectionChange === "function") onSelectionChange(selectedSpecies);
     if (root) update(root);
   }
+
   function removeSelectedBySelId(selId) {
     const id = (selId || "").trim();
     if (!id) return;
@@ -1031,97 +721,13 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     rebuildHierarchyAndUpdate(root);
     setTimeout(fitToView, 0);
   }
+
   function countSpeciesUnderKey(rootKey = null) {
-    if (!fullData) return 0;
-
-    let startNode = fullData;
-
-    if (rootKey) {
-      const hit = findInFullDataByKey(rootKey);
-      if (!hit) return 0;
-      startNode = hit.node;
-    }
-
-    let count = 0;
-
-    (function walk(n) {
-      if (!n) return;
-
-      if (((n.rank || "") + "").toLowerCase() === "species") {
-        count++;
-        return;
-      }
-
-      const kids = Array.isArray(n.children) ? n.children : [];
-      for (const c of kids) walk(c);
-    })(startNode);
-
-    return count;
+    return countSpeciesUnderKeySvc(fullData, rootKey, { findByKey: (fd, k) => findInTreeByKey(fd, k) });
   }
+
   console.log("D3 Tree Renderer initialized.");
   console.log(countSpeciesUnderKey());
-  // ---------- helpers: scope node (full tree o clado seleccionado) ----------
-  function getScopeNode() {
-    if (!fullData) return null;
-
-    if (samplingMode === "node" && samplingRootKey) {
-      const hit = findInFullDataByKey(samplingRootKey);
-      if (hit?.node) return hit.node;
-    }
-    return fullData;
-  }
-
-  // Cuenta species debajo de un nodo arbitrario
-  function countSpeciesUnderNode(node) {
-    if (!node) return 0;
-
-    let count = 0;
-    (function walk(n) {
-      if (!n) return;
-      const r = ((n.rank || "") + "").toLowerCase();
-      if (r === "species") {
-        count += 1;
-        return;
-      }
-      const kids = Array.isArray(n.children) ? n.children : [];
-      for (const c of kids) walk(c);
-    })(node);
-
-    return count;
-  }
-
-  // Devuelve clados hijos inmediatos del scope, con key + richness
-  function listImmediateChildClades() {
-    const scope = getScopeNode();
-    if (!scope) return [];
-
-    const kids = Array.isArray(scope.children) ? scope.children : [];
-    if (!kids.length) return [];
-
-    // Necesitamos construir keys estables para cada hijo.
-    // Si estamos en clade mode, partimos de hit.parts para reconstruir la ruta.
-    let baseParts = [];
-    if (samplingMode === "node" && samplingRootKey) {
-      const hit = findInFullDataByKey(samplingRootKey);
-      if (hit?.parts) baseParts = hit.parts;
-    } else {
-      // scope == fullData (root real) => baseParts contiene el root
-      baseParts = [{ rank: scope.rank || "?", name: scope.name || "" }];
-    }
-
-    function keyForChild(child) {
-      const parts = [...baseParts, { rank: child.rank || "?", name: child.name || "" }];
-      return pathKeyFromParts(parts);
-    }
-
-    return kids.map((c) => ({
-      key: keyForChild(c),
-      name: c.name || "",
-      rank: (c.rank || "?").toLowerCase(),
-      species: countSpeciesUnderNode(c),
-      hasChildren: Array.isArray(c.children) && c.children.length > 0,
-    }));
-  }
 
   // Set/clear samplingRootKey. Dispatches an event so other modules can react.
   // opts:
@@ -1185,7 +791,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       const kids = Array.isArray(node.children) ? node.children : [];
 
       // expandimos todo lo que esté "por encima" del rank objetivo
-      // ej: targetRank=species => expandimos genus/family/... (si hay hijos)
       if (kids.length && idxNode < idxCut) {
         expandedKeys.add(k);
       }
@@ -1215,7 +820,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     expandAllToRank(rank, { fit: opts.fit !== false });
   }
 
-
   return {
     render,
     fitToView,
@@ -1226,14 +830,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     setRankCut,
     collapseAll,
 
-    // Search API
-    searchStart,
-    searchNext,
-    searchPrev,
-    searchClear,
-    searchInfo,
-    focusByName,
-
     // Sampling API
     setSamplingMode,
     setSamplingRootKey,
@@ -1242,7 +838,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     countSpeciesUnderKey,
     listImmediateChildClades,
     listCladesAtRank,
-
+    
     loadData,
     openToRank,
     revealKeys,

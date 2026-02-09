@@ -4,11 +4,11 @@
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
 
     <!-- Brand -->
-    <a class="navbar-brand navbar-brand-autodark me-2" href="{% url 'taxonomy:layout_base' %}"><span class="fw-semibold">TaxBridge</span></a>
+    <a class="navbar-brand navbar-brand-autodark me-2" href="{% url 'taxonomy:layout_base' %}"><span class="fw-semibold">TaxaBridge</span></a>
 
     <!-- LEFT: main nav (desktop inside collapse so it works on mobile too) -->
     <div class="collapse navbar-collapse" id="navbar-menu">
-      <ul class="navbar-nav me-md-3">
+      {% comment %} <ul class="navbar-nav me-md-3">
         <li class="nav-item">
           <a class="nav-link px-md-2" href="/sampling/"><span class="nav-link-title">Sampling</span></a>
         </li>
@@ -18,7 +18,7 @@
         <li class="nav-item">
           <a class="nav-link px-md-2" href="/reports/"><span class="nav-link-title">Reports</span></a>
         </li>
-      </ul>
+      </ul> {% endcomment %}
 
       <!-- SEARCH (desktop: right aligned). In mobile it appears below the menu inside collapse -->
       <form class="d-flex w-100 w-md-auto ms-md-auto mt-2 mt-md-0" role="search" onsubmit="return false;" style="max-width: 760px;">

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Tree Cut Debug</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 20px; }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      select, input { padding: 8px; }
+      button { padding: 8px 10px; }
+      .muted { color: #666; font-size: 12px; margin-top: 8px; }
+      pre { background: #f6f6f6; padding: 12px; overflow: auto; max-height: 45vh; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+      /* ---- Tree ---- */
+      .tree-wrap {
+        border: 1px solid #e5e5e5;
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 10px;
+      }
+      .tree-toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .tree {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12.5px;
+        line-height: 1.5;
+        user-select: none;
+      }
+      .node {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 1px 0;
+      }
+      .indent { width: 14px; flex: 0 0 14px; }
+      .twisty {
+        width: 14px;
+        height: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .twisty:hover { background: #f2f2f2; }
+      .twisty.disabled { opacity: .35; cursor: default; }
+      .badge {
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid #ddd;
+        color: #333;
+        background: #fafafa;
+      }
+      .badge.cut { border-color: #f0c36d; background: #fff7e6; }
+      .badge.open { border-color: #b7e1cd; background: #e6fff2; }
+      .badge.leaf { border-color: #ddd; background: #f9f9f9; }
+      .rk { color: #555; }
+      .nm { font-weight: 600; color: #111; }
+      .meta { color: #666; }
+      .searchbox { padding: 8px; width: 320px; }
+      .hint { color: #666; font-size: 12px; }
+    </style>
+  </head>
+
+  <body>
+    <h2>Tree Cut Debug (backend rankCut)</h2>
+
+    <div class="row">
+      <label>rankCut:</label>
+      <select id="rankCut">
+        <option value="">(vacío) => ROOT only</option>
+        <option value="dataset">dataset</option>
+        <option value="domain">domain</option>
+        <option value="kingdom">kingdom</option>
+        <option value="phylum">phylum</option>
+        <option value="class">class</option>
+        <option value="order">order</option>
+        <option value="family">family</option>
+        <option value="genus">genus</option>
+        <option value="species" selected>species</option>
+      </select>
+
+      <label>limit:</label>
+      <input id="limit" value="5000" style="width: 120px;" />
+
+      <button id="go">Cargar</button>
+      <button id="clr">Limpiar</button>
+    </div>
+
+    <div class="muted" id="meta"></div>
+
+    <!-- ====== Tree simulator ====== -->
+    <div class="tree-wrap">
+      <div class="tree-toolbar">
+        <button id="expandAll">Expandir todo (debug)</button>
+        <button id="collapseAll">Colapsar todo (debug)</button>
+
+        <input id="filterText" class="searchbox" placeholder="Filtrar por texto (rank o name)..." />
+        <span class="hint">El corte real lo define el backend: aquí solo inspeccionas children/_children.</span>
+      </div>
+
+      <div id="tree" class="tree">Sin datos.</div>
+    </div>
+
+    <h3>Raw JSON</h3>
+    <pre id="raw">{}</pre>
+
+    <script>
+      // Debe apuntar a tu endpoint real de tree_data
+      const TREE_URL = "{% url 'taxonomy:tree-data' %}";
+
+      const $rankCut = document.getElementById("rankCut");
+      const $limit = document.getElementById("limit");
+      const $go = document.getElementById("go");
+      const $clr = document.getElementById("clr");
+      const $raw = document.getElementById("raw");
+      const $meta = document.getElementById("meta");
+
+      const $tree = document.getElementById("tree");
+      const $expandAll = document.getElementById("expandAll");
+      const $collapseAll = document.getElementById("collapseAll");
+      const $filterText = document.getElementById("filterText");
+
+      let lastData = null;
+
+      // Estado local del debug: qué keys están expandidas (NO es el estado del backend)
+      const openKeys = new Set();
+
+      function safeInt(v, dflt) {
+        const n = parseInt(String(v ?? ""), 10);
+        return Number.isFinite(n) ? n : dflt;
+      }
+
+      function esc(s) {
+        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+        }[c]));
+      }
+
+      function keyOf(node, parentKey) {
+        // key debug estable: parent|rank:name (no depende del __key del backend)
+        const rk = (node?.rank ?? "?").toLowerCase();
+        const nm = (node?.name ?? "").trim();
+        const here = `${rk}:${nm}`;
+        return parentKey ? `${parentKey}|${here}` : here;
+      }
+
+      function nodeFlags(node) {
+        const hasOpen = Array.isArray(node?.children) && node.children.length > 0;
+        const hasCut = Array.isArray(node?._children) && node._children.length > 0;
+        return { hasOpen, hasCut, isLeaf: !hasOpen && !hasCut };
+      }
+
+      function matchesFilter(node, q) {
+        if (!q) return true;
+        const s = q.toLowerCase();
+        const rk = String(node?.rank ?? "").toLowerCase();
+        const nm = String(node?.name ?? "").toLowerCase();
+        return rk.includes(s) || nm.includes(s);
+      }
+
+      function renderTree(root) {
+        if (!root) { $tree.textContent = "Sin datos."; return; }
+
+        const q = ($filterText.value || "").trim().toLowerCase();
+        let out = "";
+
+        function walk(node, depth, parentKey) {
+          if (!node) return;
+          if (!matchesFilter(node, q) && q) {
+            // Si no matchea, igual dejamos pasar si algún descendiente matchea
+            const kids = []
+              .concat(Array.isArray(node.children) ? node.children : [])
+              .concat(Array.isArray(node._children) ? node._children : []);
+            const anyChild = kids.some(k => matchesFilter(k, q));
+            if (!anyChild) return;
+          }
+
+          const k = keyOf(node, parentKey);
+          const { hasOpen, hasCut, isLeaf } = nodeFlags(node);
+
+          const isExpanded = openKeys.has(k);
+          const canToggle = hasOpen || hasCut;
+
+          // qué se considera "hijos disponibles" en el debug:
+          // - si tiene children, esos son los visibles
+          // - si no tiene children pero tiene _children, esos son los colapsados por corte
+          const kidsVisible = hasOpen ? node.children : (hasCut ? node._children : []);
+          const showKids = canToggle && isExpanded;
+
+          const badge = isLeaf
+            ? `<span class="badge leaf">leaf</span>`
+            : (hasCut && !hasOpen)
+              ? `<span class="badge cut">CUT</span>`
+              : `<span class="badge open">open</span>`;
+
+          const twisty = isLeaf
+            ? `<span class="twisty disabled">•</span>`
+            : `<span class="twisty" data-k="${esc(k)}">${isExpanded ? "▾" : "▸"}</span>`;
+
+          out += `<div class="node">`;
+          for (let i = 0; i < depth; i++) out += `<span class="indent"></span>`;
+          out += `
+            ${twisty}
+            <span>${badge}</span>
+            <span class="rk">${esc(node.rank)}:</span>
+            <span class="nm">${esc(node.name)}</span>
+            <span class="meta">${(node.id || node.external_id) ? esc(` (id=${node.id ?? ""} ext=${node.external_id ?? ""})`) : ""}</span>
+          `;
+          out += `</div>`;
+
+          if (showKids) {
+            for (const c of kidsVisible) walk(c, depth + 1, k);
+          }
+        }
+
+        walk(root, 0, "");
+        $tree.innerHTML = out || `<div class="muted">Sin coincidencias con el filtro.</div>`;
+      }
+
+      function expandAllDebug(root) {
+        // Expande todo lo que tenga children o _children
+        function walk(node, parentKey) {
+          if (!node) return;
+          const k = keyOf(node, parentKey);
+          const { hasOpen, hasCut } = nodeFlags(node);
+          if (hasOpen || hasCut) openKeys.add(k);
+
+          const kids = []
+            .concat(Array.isArray(node.children) ? node.children : [])
+            .concat(Array.isArray(node._children) ? node._children : []);
+          for (const c of kids) walk(c, k);
+        }
+        openKeys.clear();
+        walk(root, "");
+      }
+
+      function collapseAllDebug(root) {
+        openKeys.clear();
+        // deja abierto solo Root para que se vea algo
+        if (root) openKeys.add(keyOf(root, ""));
+      }
+
+      async function run() {
+        const rankCut = $rankCut.value; // vacío es válido (ROOT only)
+        const limit = Math.max(1, Math.min(safeInt($limit.value, 5000), 200000));
+
+        const url = new URL(TREE_URL, window.location.origin);
+        url.searchParams.set("limit", String(limit));
+        // siempre enviamos rankCut para probar el comportamiento
+        url.searchParams.set("rankCut", rankCut);
+
+        const res = await fetch(url.toString(), {
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+
+        const txt = await res.text();
+        $raw.textContent = txt;
+
+        if (!res.ok) {
+          $meta.textContent = `ERROR ${res.status}`;
+          $tree.textContent = "Error cargando árbol.";
+          return;
+        }
+
+        // meta: bytes + rankCut
+        const bytes = new Blob([txt]).size;
+        $meta.textContent = `rankCut="${rankCut}" | limit=${limit} | bytes=${bytes}`;
+
+        try {
+          lastData = JSON.parse(txt);
+        } catch {
+          lastData = null;
+        }
+
+        // Estado inicial: abrir Root y su primer nivel (si existe)
+        openKeys.clear();
+        if (lastData) {
+          const rootKey = keyOf(lastData, "");
+          openKeys.add(rootKey);
+
+          // abre 1 nivel para inspección rápida
+          const kids = Array.isArray(lastData.children) ? lastData.children
+                    : Array.isArray(lastData._children) ? lastData._children
+                    : [];
+          for (const c of kids) openKeys.add(keyOf(c, rootKey));
+        }
+
+        renderTree(lastData);
+      }
+
+      // Toggle click
+      $tree.addEventListener("click", (e) => {
+        const t = e.target.closest(".twisty[data-k]");
+        if (!t) return;
+        const k = t.getAttribute("data-k");
+        if (!k) return;
+
+        if (openKeys.has(k)) openKeys.delete(k);
+        else openKeys.add(k);
+
+        renderTree(lastData);
+      });
+
+      $expandAll.addEventListener("click", () => {
+        if (!lastData) return;
+        expandAllDebug(lastData);
+        renderTree(lastData);
+      });
+
+      $collapseAll.addEventListener("click", () => {
+        if (!lastData) return;
+        collapseAllDebug(lastData);
+        renderTree(lastData);
+      });
+
+      $filterText.addEventListener("input", () => renderTree(lastData));
+
+      $go.addEventListener("click", run);
+
+      $clr.addEventListener("click", () => {
+        $rankCut.value = "species";
+        $limit.value = "5000";
+        $raw.textContent = "{}";
+        $meta.textContent = "";
+        $filterText.value = "";
+        openKeys.clear();
+        lastData = null;
+        $tree.textContent = "Sin datos.";
+      });
+
+      // auto-run inicial
+      run();
+    </script>
+  </body>
+</html>
