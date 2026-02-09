@@ -14,10 +14,6 @@ from .services.orthology_tree import sampling_to_tree_artifacts
 
 
 
-def colnav_page(request):
-    return render(request, "taxonomy/colnav/index.html")
-
-
 def home(request):
     """Home page with navigation to all features."""
     return render(request, "taxonomy/pages/home.html")

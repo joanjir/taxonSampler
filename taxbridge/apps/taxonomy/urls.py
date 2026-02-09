@@ -6,7 +6,6 @@ Only HTML page routes are defined here. API routes are in api/urls.py.
 from django.urls import path
 
 from .views import (
-    colnav_page,
     home,
     scroll_test,
     export_sampling,
@@ -21,7 +20,6 @@ urlpatterns = [
     # Main pages
     path("", home, name="home"),
     path("tree/", tree_page, name="tree"),
-    path("colnav/", colnav_page, name="colnav"),
     
     # Export endpoints (POST - special case, keeps here for now)
     path("sampling/export/<str:fmt>/", export_sampling, name="sampling-export"),
