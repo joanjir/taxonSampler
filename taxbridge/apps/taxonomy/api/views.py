@@ -33,11 +33,12 @@ def tree_data(request):
     
     Query params:
         - limit: Max species to include (default: 5000)
-        - max_rank: Maximum rank to show (default: class)
+        - max_rank or rankCut: Maximum rank to show (default: class)
         - expand_keys: Comma-separated keys to expand
     """
     limit = request.GET.get("limit", "5000")
-    max_rank = request.GET.get("max_rank", "class")
+    # Accept both 'max_rank' (backend standard) and 'rankCut' (frontend legacy)
+    max_rank = request.GET.get("max_rank") or request.GET.get("rankCut") or "class"
     expand_keys_str = request.GET.get("expand_keys", "")
     
     try:

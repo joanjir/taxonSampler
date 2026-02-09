@@ -43,10 +43,13 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     currentRankCut = (v === "" ? "" : v);
 
     // 1) pedir el árbol ya cortado al backend
-    const data = await loadTreeData({
+    const response = await loadTreeData({
       endpoint,
       rankCut: currentRankCut, // api.js: null => no manda param; "" => rankCut= ; "genus" => rankCut=genus
     });
+
+    // Extract tree from response (backend wraps it: {tree: {...}, limit, max_rank})
+    const data = response.tree || response;
 
     // 2) entregar data al sampling + renderer
     samplingCtl.setData(data);
@@ -910,7 +913,10 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       }
 
       // 1) fetch JSON (árbol ya construido en backend)
-      const data = await loadTreeData(endpoint);
+      const response = await loadTreeData(endpoint);
+
+      // Extract tree from response (backend wraps it: {tree: {...}, limit, max_rank})
+      const data = response.tree || response;
 
       // 2) entregar data a samplingCtl y renderer
       samplingCtl.setData(data);
