@@ -18,6 +18,7 @@ from apps.taxonomy.services.tree_builder import (
     build_tree_from_db,
     expand_to_keys,
 )
+from apps.taxonomy.services.sampling import run_sampling
 
 
 # =============================================================================
@@ -511,4 +512,102 @@ def col_resolve_selection(request):
         "dataset_code": dataset_code,
         "scanned_species": scanned if scanned <= limit_scan else limit_scan,
         "species": species_list,
+    })
+
+
+# =============================================================================
+# Sampling API Endpoint
+# =============================================================================
+
+@require_POST
+def sampling_run(request):
+    """
+    POST /api/v1/taxonomy/sampling/run/
+
+    Executes the sampling algorithm on the server side.
+    Receives sampling configuration, builds the tree, runs ingroup+outgroup
+    sampling, and returns the result.
+
+    Request body:
+        {
+            "scope_key": null | "rank:name|...",
+            "targets": [],
+            "K": 50,
+            "allocation_rank": "class",
+            "target_rank": "species",
+            "allocation": "proportional",
+            "min_one_per_clade": true,
+            "outgroup_rank": "",
+            "outgroup_n": 2,
+            "limit": 5000,
+            "max_rank": "class"
+        }
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("JSON inválido")
+
+    # Build tree from DB (same as tree_data endpoint)
+    limit = int(payload.get("limit", 5000))
+    max_rank = payload.get("max_rank") or "class"
+
+    tree = build_tree_from_db(limit=limit, rank_cut=max_rank, with_keys=True)
+    if not tree:
+        return JsonResponse({"error": "No tree data available"}, status=404)
+
+    # Expand all nodes so sampling can traverse the full tree
+    # (the tree from build_tree_from_db might be cut at max_rank)
+    full_tree = build_tree_from_db(limit=limit, rank_cut="species", with_keys=True)
+    if not full_tree:
+        full_tree = tree
+
+    # Prepare sampling config
+    config = {
+        "scope_key": payload.get("scope_key") or None,
+        "targets": payload.get("targets") or [],
+        "K": max(2, int(payload.get("K", 50))),
+        "allocation_rank": (payload.get("allocation_rank") or "class").strip().lower(),
+        "target_rank": (payload.get("target_rank") or "species").strip().lower(),
+        "allocation": (payload.get("allocation") or "proportional").strip().lower(),
+        "min_one_per_clade": bool(payload.get("min_one_per_clade", True)),
+        "outgroup_rank": (payload.get("outgroup_rank") or "").strip().lower(),
+        "outgroup_n": max(1, int(payload.get("outgroup_n", 2))),
+    }
+
+    # Run sampling
+    result = run_sampling(full_tree, config)
+
+    # Serialize response
+    ingroup = result.ingroup
+    outgroup = result.outgroup
+
+    return JsonResponse({
+        "scope_root_key": ingroup.scope_root_key,
+        "mode": payload.get("sampling_root_mode", "tree"),
+        "targets": config["targets"],
+        "K": config["K"],
+        "allocation": config["allocation"],
+        "allocationRank": ingroup.allocation_rank,
+        "targetRank": ingroup.target_rank,
+        "minOnePerClade": config["min_one_per_clade"],
+
+        "ingroup": {
+            "note": ingroup.note,
+            "quotas": [
+                {
+                    "key": q.get("key", ""),
+                    "name": q.get("name", ""),
+                    "rank": q.get("rank", ""),
+                    "speciesAvail": q.get("species_avail", 0),
+                    "quota": q.get("quota", 0),
+                    "picked": q.get("picked", []),
+                }
+                for q in (ingroup.quotas or [])
+            ],
+            "picked": ingroup.picked,
+        },
+
+        "outgroupPicked": outgroup.picked,
+        "outgroup": outgroup.meta,
     })

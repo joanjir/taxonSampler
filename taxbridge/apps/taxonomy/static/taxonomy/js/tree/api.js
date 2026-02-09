@@ -78,3 +78,48 @@ export async function apiSearchTree({ endpoint, q, limit = 50, nodes_scan_limit 
 
 export const loadTreeData = apiGetTree;
 export const apiLoadTree = apiGetTree;
+
+
+export async function apiRunSampling({ endpoint, config } = {}) {
+  const base = assertEndpoint(endpoint ?? window.SAMPLING_ENDPOINT, "window.SAMPLING_ENDPOINT");
+
+  const csrf = (() => {
+    const v = `; ${document.cookie}`;
+    const parts = v.split("; csrftoken=");
+    if (parts.length === 2) return parts.pop().split(";").shift();
+    return null;
+  })();
+
+  const res = await fetch(base, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "X-CSRFToken": csrf || "",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(config),
+  });
+
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+
+  if (!res.ok) {
+    const body = await readBodySafe(res);
+    const err = new Error(`[API] Sampling ${res.status} ${res.statusText}\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+
+  if (contentType.includes("application/json")) return await res.json();
+
+  const body = await readBodySafe(res);
+  try {
+    return JSON.parse(body);
+  } catch {
+    const err = new Error(`[API] Sampling non-JSON response\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+}

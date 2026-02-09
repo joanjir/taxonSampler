@@ -1049,8 +1049,10 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       samplingCtl.emitSamplingConfigChanged?.();
     }
 
-    const result = samplingCtl.runSamplingAndBuildResult();
+    const result = await samplingCtl.runSamplingAndBuildResult();
     console.log("[sampling] result:", result);
+
+    if (!result) return; // sampling failed or was cancelled
 
     const keys = []
       .concat(result?.ingroup?.picked || [])

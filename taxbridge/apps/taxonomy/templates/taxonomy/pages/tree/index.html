@@ -197,6 +197,7 @@
     // variables de server-side que el JS necesita (evita hardcode)
     window.TREE_ENDPOINT = "{% url 'taxonomy_api:tree-data' %}";
     window.TREE_SEARCH_ENDPOINT = "{% url 'taxonomy_api:tree-search' %}";
+    window.SAMPLING_ENDPOINT = "{% url 'taxonomy_api:sampling-run' %}";
   </script>
   <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}"></script>
 {% endblock %}

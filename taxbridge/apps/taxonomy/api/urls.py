@@ -14,6 +14,9 @@ urlpatterns = [
     path("tree/data/", views.tree_data, name="tree-data"),
     path("tree/search/", views.tree_search, name="tree-search"),
     
+    # Sampling API
+    path("sampling/run/", views.sampling_run, name="sampling-run"),
+    
     # COL Navigation API
     path("col/next-ranks/", views.col_next_ranks, name="col-next-ranks"),
     path("col/nodes/", views.col_nodes, name="col-nodes"),
