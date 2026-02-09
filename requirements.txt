@@ -16,3 +16,9 @@ six==1.17.0
 sqlparse==0.5.5
 tzdata==2025.3
 urllib3==2.6.2
+
+# Celery (Task Queue)
+celery==5.4.0
+redis==5.2.1
+django-celery-results==2.5.1
+django-celery-beat==2.7.0

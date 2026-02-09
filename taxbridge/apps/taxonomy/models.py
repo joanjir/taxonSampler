@@ -550,3 +550,148 @@ class NCBIGenome(models.Model):
         elif self.quality_score >= 0.5:
             return "medium"
         return "low"
+
+
+# ============================================================
+# NCBISyncRun - Registro de sincronizaciones NCBI
+# ============================================================
+class NCBISyncRun(models.Model):
+    """
+    Registra cada ejecución de sincronización con NCBI.
+    Permite ver el historial, progreso y estado de las sincronizaciones.
+    """
+
+    STATUS_CHOICES = [
+        ("pending", "Pendiente"),
+        ("running", "En ejecución"),
+        ("completed", "Completado"),
+        ("failed", "Fallido"),
+        ("cancelled", "Cancelado"),
+    ]
+
+    TRIGGER_CHOICES = [
+        ("scheduled", "Programado"),
+        ("manual", "Manual"),
+        ("webhook", "Webhook"),
+    ]
+
+    # Estado
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default="pending",
+        db_index=True,
+    )
+    trigger = models.CharField(
+        max_length=16,
+        choices=TRIGGER_CHOICES,
+        default="manual",
+    )
+
+    # Celery task tracking
+    celery_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="ID de la tarea Celery",
+    )
+
+    # Configuración usada
+    config = models.JSONField(
+        default=dict,
+        help_text="Configuración usada para esta sincronización",
+    )
+
+    # Progreso
+    total_taxa = models.PositiveIntegerField(default=0)
+    processed_taxa = models.PositiveIntegerField(default=0)
+    successful_taxa = models.PositiveIntegerField(default=0)
+    failed_taxa = models.PositiveIntegerField(default=0)
+    skipped_taxa = models.PositiveIntegerField(default=0)
+
+    # Genomas
+    genomes_created = models.PositiveIntegerField(default=0)
+    genomes_updated = models.PositiveIntegerField(default=0)
+
+    # Tiempos
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    # Errores y logs
+    error_message = models.TextField(blank=True, default="")
+    log = models.JSONField(
+        default=list,
+        help_text="Log detallado de la ejecución",
+    )
+
+    class Meta:
+        verbose_name = "NCBI Sync Run"
+        verbose_name_plural = "NCBI Sync Runs"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["celery_task_id"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Sync #{self.pk} [{self.status}] - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+    @property
+    def progress_percent(self) -> float:
+        """Porcentaje de progreso."""
+        if self.total_taxa == 0:
+            return 0.0
+        return round((self.processed_taxa / self.total_taxa) * 100, 1)
+
+    @property
+    def duration_seconds(self) -> int | None:
+        """Duración en segundos."""
+        if not self.started_at:
+            return None
+        end = self.finished_at or timezone.now()
+        return int((end - self.started_at).total_seconds())
+
+    @property
+    def is_running(self) -> bool:
+        return self.status == "running"
+
+    def add_log(self, level: str, message: str, **kwargs):
+        """Añade entrada al log."""
+        from django.utils import timezone
+        entry = {
+            "timestamp": timezone.now().isoformat(),
+            "level": level,
+            "message": message,
+            **kwargs,
+        }
+        self.log.append(entry)
+        self.save(update_fields=["log"])
+
+    def mark_started(self):
+        """Marca como iniciado."""
+        from django.utils import timezone
+        self.status = "running"
+        self.started_at = timezone.now()
+        self.save(update_fields=["status", "started_at"])
+
+    def mark_completed(self):
+        """Marca como completado."""
+        from django.utils import timezone
+        self.status = "completed"
+        self.finished_at = timezone.now()
+        self.save(update_fields=["status", "finished_at"])
+
+    def mark_failed(self, error: str):
+        """Marca como fallido."""
+        from django.utils import timezone
+        self.status = "failed"
+        self.finished_at = timezone.now()
+        self.error_message = error
+        self.save(update_fields=["status", "finished_at", "error_message"])
+
+
+# Import timezone at module level for the model
+from django.utils import timezone

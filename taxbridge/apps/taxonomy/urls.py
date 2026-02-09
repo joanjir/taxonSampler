@@ -12,6 +12,7 @@ from .views import (
     search_debug_page,
     tree_cut_debug_page,
 )
+from .views_sync import sync_dashboard, sync_detail
 from .tree.views import tree_page
 
 app_name = "taxonomy"
@@ -20,6 +21,10 @@ urlpatterns = [
     # Main pages
     path("", home, name="home"),
     path("tree/", tree_page, name="tree"),
+    
+    # NCBI Sync Dashboard
+    path("sync/", sync_dashboard, name="sync-dashboard"),
+    path("sync/<int:sync_id>/", sync_detail, name="sync-detail"),
     
     # Export endpoints (POST - special case, keeps here for now)
     path("sampling/export/<str:fmt>/", export_sampling, name="sampling-export"),

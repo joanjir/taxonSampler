@@ -46,8 +46,22 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # 'fontawesomefree',  # TODO: Enable Long Paths on Windows to install
     "rest_framework",
+    # Local apps
     "apps.taxonomy",
 ]
+
+# Celery apps (añadir si están instalados)
+try:
+    import django_celery_results
+    INSTALLED_APPS.append("django_celery_results")
+except ImportError:
+    pass
+
+try:
+    import django_celery_beat
+    INSTALLED_APPS.append("django_celery_beat")
+except ImportError:
+    pass
 
 # ======================
 # Middleware
@@ -143,3 +157,29 @@ LOGGING = {
         "level": LOG_LEVEL,
     },
 }
+
+# ======================
+# Celery Configuration
+# ======================
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 60 * 60  # 1 hora máximo por tarea
+
+# Cola por defecto
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_QUEUES = {
+    "default": {},
+    "ncbi_sync": {},  # Cola dedicada para sincronización NCBI
+}
+
+# ======================
+# NCBI Sync Settings
+# ======================
+NCBI_SYNC_BATCH_SIZE = env.int("NCBI_SYNC_BATCH_SIZE", default=100)
+NCBI_SYNC_CHECK_PROTEOMES = env.bool("NCBI_SYNC_CHECK_PROTEOMES", default=False)
+NCBI_SYNC_MAX_RETRIES = env.int("NCBI_SYNC_MAX_RETRIES", default=3)
