@@ -16,9 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.taxonomy.models import ExternalTaxon, Taxon
 from apps.taxonomy.services.tree_builder import (
     build_tree_from_db,
-    cut_by_rank,
     expand_to_keys,
-    add_keys_to_tree,
 )
 
 
@@ -34,40 +32,34 @@ def tree_data(request):
     Returns tree JSON for D3 visualization.
     
     Query params:
-        - root_id: Root taxon ID (default: 33208 = Metazoa)
+        - limit: Max species to include (default: 5000)
         - max_rank: Maximum rank to show (default: class)
         - expand_keys: Comma-separated keys to expand
     """
-    root_id = request.GET.get("root_id", "33208")
+    limit = request.GET.get("limit", "5000")
     max_rank = request.GET.get("max_rank", "class")
     expand_keys_str = request.GET.get("expand_keys", "")
     
     try:
-        root_id = int(root_id)
+        limit = int(limit)
     except ValueError:
-        return JsonResponse({"error": "root_id debe ser un entero"}, status=400)
+        limit = 5000
     
     expand_keys = [k.strip() for k in expand_keys_str.split(",") if k.strip()]
     
     # Build tree from database
-    tree = build_tree_from_db(root_taxon_id=root_id)
+    tree = build_tree_from_db(limit=limit, rank_cut=max_rank, with_keys=True)
     
     if not tree:
         return JsonResponse({"error": "No se encontró el árbol"}, status=404)
-    
-    # Apply rank cut
-    tree = cut_by_rank(tree, max_rank)
     
     # Expand specific keys if provided
     if expand_keys:
         tree = expand_to_keys(tree, expand_keys)
     
-    # Add keys to tree
-    tree = add_keys_to_tree(tree)
-    
     return JsonResponse({
         "tree": tree,
-        "root_id": root_id,
+        "limit": limit,
         "max_rank": max_rank,
         "expanded_keys": expand_keys,
     })
