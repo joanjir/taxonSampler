@@ -1,4 +1,4 @@
-{% extends "taxonomy/layout/app_shell.html" %}
+﻿{% extends "taxonomy/layout/app_shell.html" %}
 {% load static %}
 
 {% block title %}Sampled Tree{% endblock %}
@@ -22,10 +22,12 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
+  // Server-side data
   window.__TREE_JSON__ = {{ run.tree_json|safe }};
 </script>
-
 <script type="module" src="{% static 'taxonomy/js/tree/render_sample_tree.js' %}"></script>
 {% endblock %}

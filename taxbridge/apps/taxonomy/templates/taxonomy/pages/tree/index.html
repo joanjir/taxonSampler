@@ -1,4 +1,4 @@
-{% extends 'taxonomy/layout/app_shell.html' %}
+﻿{% extends 'taxonomy/layout/app_shell.html' %}
 {% load static %}
 
 {% block title %}
@@ -7,74 +7,6 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'taxonomy/css/tree.css' %}" />
-  <style>
-    .tree-fs-btn {
-      position: absolute;
-      right: 12px;
-      bottom: 12px;
-      z-index: 30;
-    
-      border: 0;
-      background: transparent;
-      padding: 6px;
-    
-      color: #111827; /* icono */
-      line-height: 1;
-      border-radius: 10px;
-    }
-    .tree-fs-btn:hover {
-      background: rgba(17, 24, 39, 0.06); /* “hover” suave */
-    }
-    .tree-fs-btn:focus {
-      outline: 0;
-      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25); /* foco Bootstrap-like */
-    }
-    .tree-fs-btn i {
-      font-size: 18px;
-    }
-    #treeMount:fullscreen {
-      width: 100vw !important;
-      height: 100vh !important;
-      border-radius: 0 !important;
-    }
-    
-    #treeMount:-webkit-full-screen {
-      width: 100vw !important;
-      height: 100vh !important;
-      border-radius: 0 !important;
-    }
-    
-    .help-icon {
-      font-size: 0.75em;
-      position: relative;
-      top: -0.35em;
-      cursor: help;
-    }
-    
-    /* estilo uniforme para todos los popovers de ayuda */
-    .popover-help {
-      font-size: 0.75rem;
-      max-width: 240px;
-    }
-    /* Ruta hacia el clado: muted */
-    g.node.clade-path text {
-      opacity: 0.75;
-    }
-    g.node.clade-path rect.node-box {
-      stroke-dasharray: 3 3;
-    }
-    
-    /* Clado raíz activo: verde */
-    g.node.clade-root rect.node-box {
-      stroke: #198754 !important;
-      stroke-width: 2 !important;
-    }
-    
-    /* Opcional: deja la ruta “sin interacción” (ya lo hacemos en JS para checkbox) */
-    g.node.clade-path {
-      cursor: default;
-    }
-  </style>
 {% endblock %}
 
 {% block content %}
@@ -127,46 +59,13 @@
 
 {% block extra_js %}
   <script src="https://cdn.jsdelivr.net/npm/d3@5/dist/d3.min.js"></script>
-
   <script>
-    // variables de server-side que el JS necesita (evita hardcode)
+    // Server-side variables (Django URLs)
     window.TREE_ENDPOINT = "{% url 'taxonomy_api:tree-data' %}";
     window.TREE_SEARCH_ENDPOINT = "{% url 'taxonomy_api:tree-search' %}";
     window.SAMPLING_ENDPOINT = "{% url 'taxonomy_api:sampling-run' %}";
     window.SCOPE_INFO_ENDPOINT = "{% url 'taxonomy_api:sampling-scope-info' %}";
-    
-    // Inicializar dropdown manualmente con vanilla JS (Tabler no expone bootstrap global)
-    document.addEventListener("DOMContentLoaded", function() {
-      const vizRankBtn = document.getElementById("vizRankBtn");
-      const dropdownMenu = vizRankBtn ? vizRankBtn.nextElementSibling : null;
-      
-      if (vizRankBtn && dropdownMenu) {
-        // Toggle dropdown on button click
-        vizRankBtn.addEventListener("click", function(e) {
-          e.stopPropagation();
-          const isOpen = dropdownMenu.classList.contains("show");
-          // Close all other dropdowns first
-          document.querySelectorAll(".dropdown-menu.show").forEach(m => m.classList.remove("show"));
-          if (!isOpen) {
-            dropdownMenu.classList.add("show");
-          }
-        });
-        
-        // Close dropdown when clicking outside
-        document.addEventListener("click", function(e) {
-          if (!vizRankBtn.contains(e.target) && !dropdownMenu.contains(e.target)) {
-            dropdownMenu.classList.remove("show");
-          }
-        });
-        
-        // Close dropdown when selecting an item
-        dropdownMenu.querySelectorAll(".dropdown-item").forEach(function(item) {
-          item.addEventListener("click", function() {
-            dropdownMenu.classList.remove("show");
-          });
-        });
-      }
-    });
   </script>
+  <script src="{% static 'taxonomy/js/tree/tree_init.js' %}"></script>
   <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}"></script>
 {% endblock %}

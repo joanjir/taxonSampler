@@ -65,3 +65,66 @@
   stroke-dasharray: none !important;
   fill: rgba(25, 135, 84, 0.08) !important;
 }
+
+/* Fullscreen button */
+.tree-fs-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 30;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  color: #111827;
+  line-height: 1;
+  border-radius: 10px;
+}
+.tree-fs-btn:hover {
+  background: rgba(17, 24, 39, 0.06);
+}
+.tree-fs-btn:focus {
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+.tree-fs-btn i {
+  font-size: 18px;
+}
+
+/* Fullscreen mode */
+#treeMount:fullscreen,
+#treeMount:-webkit-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0 !important;
+}
+
+/* Help icons */
+.help-icon {
+  font-size: 0.75em;
+  position: relative;
+  top: -0.35em;
+  cursor: help;
+}
+.popover-help {
+  font-size: 0.75rem;
+  max-width: 240px;
+}
+
+/* Ruta hacia el clado: muted text */
+g.node.clade-path text {
+  opacity: 0.75;
+}
+g.node.clade-path rect.node-box {
+  stroke-dasharray: 3 3;
+}
+
+/* Clado raíz activo: verde (g.node selector) */
+g.node.clade-root rect.node-box {
+  stroke: #198754 !important;
+  stroke-width: 2 !important;
+}
+
+/* Ruta sin interacción */
+g.node.clade-path {
+  cursor: default;
+}
