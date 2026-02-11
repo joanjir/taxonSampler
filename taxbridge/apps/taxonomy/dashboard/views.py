@@ -1,27 +1,27 @@
-# Create your views here.
+﻿# Create your views here.
 import json
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import render
 from django.db.models import Count, Q
 
-from .models import NCBIGenome, Taxon, ExternalTaxon, TaxonCrosswalk
-from .services.orthology_tree import sampling_to_tree_artifacts
+from apps.taxonomy.models import NCBIGenome, Taxon, ExternalTaxon, TaxonCrosswalk
+from apps.taxonomy.utils import sampling_to_tree_artifacts
 
 
 def home(request):
-    """Dashboard principal con estadísticas y lista de genomas."""
+    """Main dashboard with statistics and genome listing."""
     
-    # Estadísticas de genomas usando col_match_status (consistente con el listado)
+    # Genome statistics using col_match_status (consistent with the listing)
     total_genomes = NCBIGenome.objects.count()
     matched_genomes = NCBIGenome.objects.filter(col_match_status="matched").count()
     unmatched_genomes = NCBIGenome.objects.filter(col_match_status="unmatched").count()
-    # no_match (not found in COL) también cuenta como needs_review
+    # no_match (not found in COL) also counts as needs_review
     needs_review_count = NCBIGenome.objects.filter(
         Q(col_match_status="needs_review") | Q(col_match_status="no_match")
     ).count()
     
-    # Estadísticas por nivel de genoma
+    # Statistics by genome level
     genome_levels = list(
         NCBIGenome.objects
         .values("genome_level")
@@ -29,7 +29,7 @@ def home(request):
         .order_by("-count")
     )
     
-    # Estadísticas por phylum (todos los phyla, no solo top 10)
+    # Statistics by phylum (all phyla, not just top 10)
     phylum_stats = list(
         NCBIGenome.objects
         .exclude(phylum="")
@@ -39,26 +39,26 @@ def home(request):
         .order_by("-count")
     )
     
-    # Estadísticas de taxonomía
+    # Taxonomy statistics
     total_ncbi_taxa = Taxon.objects.count()
     total_col_taxa = ExternalTaxon.objects.filter(system="col").count()
     total_col_species = ExternalTaxon.objects.filter(system="col", rank="species", status="accepted").count()
     total_crosswalks = TaxonCrosswalk.objects.filter(is_active=True).count()
     
     context = {
-        # Genomas
+        # Genomes
         "total_genomes": total_genomes,
         "matched_genomes": matched_genomes,
         "unmatched_genomes": unmatched_genomes,
         "needs_review": needs_review_count,
         "genome_levels": genome_levels,
         "phylum_stats": phylum_stats,
-        # Taxonomía
+        # Taxonomy
         "total_ncbi_taxa": total_ncbi_taxa,
         "total_col_taxa": total_col_taxa,
         "total_col_species": total_col_species,
         "total_crosswalks": total_crosswalks,
-        # Porcentajes
+        # Percentages
         "match_percent": round(matched_genomes / total_genomes * 100, 1) if total_genomes else 0,
     }
     
@@ -69,15 +69,15 @@ def home(request):
 def export_sampling(request, fmt: str):
     """
     fmt: "json" | "txt" | "newick" | "treejson"
-    Body: JSON con el sampling result completo (lo que emite sampling:final)
+    Body: JSON with the complete sampling result (what sampling:final emits)
     """
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except Exception:
-        return JsonResponse({"error": "JSON inválido"}, status=400)
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     if fmt == "json":
-        # Devuelve el sampling tal cual
+        # Return the sampling as-is
         data = json.dumps(payload, ensure_ascii=False, indent=2)
         resp = HttpResponse(data, content_type="application/json; charset=utf-8")
         resp["Content-Disposition"] = 'attachment; filename="sampling.json"'
@@ -86,7 +86,7 @@ def export_sampling(request, fmt: str):
     if fmt == "txt":
         ing = payload.get("ingroup", {}).get("picked", []) or []
         out = payload.get("outgroupPicked", []) or []
-        # lista legible (ingroup/outgroup)
+        # human-readable list (ingroup/outgroup)
         lines = []
         for x in out:
             lines.append(f"OUTGROUP\t{x.get('rank','')}\t{x.get('name','')}\t{x.get('key','')}")
@@ -110,4 +110,4 @@ def export_sampling(request, fmt: str):
         resp["Content-Disposition"] = 'attachment; filename="sampling_tree.json"'
         return resp
 
-    return JsonResponse({"error": "Formato no soportado"}, status=400)
+    return JsonResponse({"error": "Unsupported format"}, status=400)

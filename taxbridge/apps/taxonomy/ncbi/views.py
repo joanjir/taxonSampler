@@ -1,4 +1,4 @@
-# apps/taxonomy/views_taxon_sync.py
+﻿# apps/taxonomy/ncbi/views.py
 """
 Views for Taxon Sync - Downloads from NCBI and matches with COL.
 
@@ -29,13 +29,13 @@ from apps.taxonomy.models import (
     TaxonCrosswalk,
     TaxonSyncRun,
 )
-from apps.taxonomy.services.checklistbank import (
+from apps.taxonomy.ncbi.clients import (
     ChecklistBankClient,
     canonicalize_scientific_name,
 )
 
-# Import from centralized service - Single Source of Truth
-from apps.taxonomy.services.ncbi_sync import (
+# Import from NCBI module service
+from apps.taxonomy.ncbi.service import (
     KINGDOMS,
     QUALITY_CRITERIA,
     COL_DATASET,
@@ -88,13 +88,13 @@ def taxon_sync_dashboard(request):
         "cancelled": TaxonSyncRun.objects.filter(status="cancelled").count(),
     }
 
-    # Estadísticas por reino
+    # Statistics per kingdom
     kingdom_stats = []
     for kingdom, taxid in KINGDOMS.items():
         phylum_filter = kingdom.capitalize()
         count = Taxon.objects.filter(
             genomes__isnull=False
-        ).distinct().count()  # Simplificado, mejorar con filtro real
+        ).distinct().count()  # Simplified, improve with a real filter
         kingdom_stats.append({"name": kingdom, "taxid": taxid, "count": count})
 
     context = {
@@ -124,7 +124,8 @@ def api_start_taxon_sync(request):
         {
             "kingdom": "metazoa",
             "limit": 100,           // optional
-            "skip_quality": false   // optional
+            "skip_quality": false,  // optional
+            "skip_existing": true   // optional - skip genomes already in DB (default: true)
         }
     """
     try:
@@ -146,7 +147,7 @@ def api_start_taxon_sync(request):
     if running:
         return JsonResponse({
             "success": False,
-            "error": "Ya hay una sincronización en curso",
+            "error": "A sync is already in progress",
         }, status=409)
 
     # Create sync run
@@ -155,6 +156,7 @@ def api_start_taxon_sync(request):
         config={
             "limit": data.get("limit", 0),
             "skip_quality": data.get("skip_quality", False),
+            "skip_existing": data.get("skip_existing", True),  # Skip existing by default
             "taxid": KINGDOMS[kingdom],
         },
     )
@@ -167,7 +169,7 @@ def api_start_taxon_sync(request):
     
     if celery_enabled:
         try:
-            from apps.taxonomy.tasks import sync_taxon_with_col
+            from apps.taxonomy.ncbi.tasks import sync_taxon_with_col
             from celery import current_app
             
             # Check if there are active Celery workers
@@ -295,6 +297,7 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
     taxid = config.get("taxid", KINGDOMS.get(sync_run.kingdom, 33208))
     limit = config.get("limit", 0)
     skip_quality = config.get("skip_quality", False)
+    skip_existing = config.get("skip_existing", True)  # Skip genomes already in DB
     quality = QUALITY_CRITERIA.get(sync_run.kingdom, QUALITY_CRITERIA["default"])
 
     sync_run.add_log("INFO", f"Fetching from NCBI taxid {taxid}")
@@ -302,7 +305,16 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
     # Cache for taxonomy lookups
     taxonomy_cache: Dict[int, Dict] = {}
     
+    # Pre-load existing genome accessions to skip them
+    existing_accessions = set()
+    if skip_existing:
+        existing_accessions = set(
+            NCBIGenome.objects.values_list("accession", flat=True)
+        )
+        sync_run.add_log("INFO", f"Skipping {len(existing_accessions)} existing genomes")
+    
     count = 0
+    skipped_existing = 0
     for genome_data in _fetch_ncbi_genomes_paged(taxid):
         sync_run.ncbi_total += 1
         
@@ -310,6 +322,12 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         sync_run.refresh_from_db(fields=["status"])
         if sync_run.status == "cancelled":
             return
+
+        # Skip already synced genomes
+        accession = genome_data.get("accession", "")
+        if skip_existing and accession and accession in existing_accessions:
+            skipped_existing += 1
+            continue
 
         # Apply filters
         if not _passes_refseq_filter(genome_data):
@@ -338,7 +356,7 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
                 "ncbi_total", "ncbi_fetched", "ncbi_filtered",
                 "taxa_created", "genomes_created",
             ])
-            sync_run.add_log("INFO", f"NCBI progress: {count} valid genomes")
+            sync_run.add_log("INFO", f"NCBI progress: {count} valid genomes (skipped {skipped_existing} existing)")
         
         if limit and count >= limit:
             break
@@ -348,6 +366,7 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         "ncbi_total", "ncbi_fetched", "ncbi_filtered",
         "taxa_created", "genomes_created",
     ])
+    sync_run.add_log("INFO", f"Skipped {skipped_existing} genomes that already exist in DB")
     sync_run.add_log("INFO", f"NCBI phase complete: {sync_run.ncbi_fetched} genomes")
 
 

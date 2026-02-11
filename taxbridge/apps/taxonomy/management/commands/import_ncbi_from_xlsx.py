@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.taxonomy.models import Taxon
-from apps.taxonomy.services.ncbi_taxonomy import resolve_name_to_taxon
+from apps.taxonomy.ncbi.clients import resolve_name_to_taxon
 
 
 class Command(BaseCommand):

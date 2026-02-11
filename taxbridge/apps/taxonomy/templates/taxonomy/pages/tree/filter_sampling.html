@@ -1,4 +1,4 @@
-<!-- Panel derecho: Sampling (wizard 2 pasos) -->
+﻿<!-- Right panel: Sampling (2-step wizard) -->
 <div class="col-12 col-lg-3">
   <div class="sticky-top" style="top: 84px;">
     <div class="card mb-3" id="samplingCard">
@@ -15,12 +15,12 @@
           Taxon sampling
         </div>
 
-        <!-- ====== Estado global (bloqueo tras generar) ====== -->
+        <!-- ====== Global state (locked after generation) ====== -->
         <div id="samLockAlert" class="alert alert-success py-2 px-2 d-none">
           <div class="small d-flex align-items-center justify-content-between gap-2">
             <div>
               <i class="fa-solid fa-lock me-1"></i>
-              Sampling generado. Para cambiar scope/targets, usa <b>Reset</b>.
+              Sampling generated. To change scope/targets, use <b>Reset</b>.
             </div>
             <button id="samReset" type="button" class="btn btn-sm btn-outline-secondary">
               <i class="fa-solid fa-rotate-left me-1"></i>Reset
@@ -47,7 +47,7 @@
 
         <hr class="my-2" />
 
-        <!-- ========== STEP 1: SCOPE + TARGETS (desde el árbol con checkbox único) ========== -->
+        <!-- ========== STEP 1: SCOPE + TARGETS (from tree with single checkbox) ========== -->
         <div id="samStep1">
           <!-- Scope -->
           <div class="mb-3">

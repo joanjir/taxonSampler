@@ -1,4 +1,4 @@
-"""
+﻿"""
 API views for taxonomy module.
 
 All JSON API endpoints are consolidated here following Django best practices.
@@ -14,14 +14,15 @@ from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.taxonomy.models import ExternalTaxon, Taxon
-from apps.taxonomy.services.tree_builder import (
-    build_tree_from_db,
+from apps.taxonomy.tree.managers import (
     expand_to_keys,
-    path_key_from_parts,
-    norm_rank,
     count_species_under,
 )
-from apps.taxonomy.services.sampling import run_sampling
+from apps.taxonomy.utils import (
+    path_key_from_parts,
+    norm_rank,
+)
+from apps.taxonomy.sampling.service import run_sampling
 
 
 # =============================================================================
@@ -32,13 +33,13 @@ _ROOT_RANKS_SET = {"domain", "superkingdom", "kingdom"}
 
 def _normalize_path_for_key(path: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     """
-    Normaliza classification_path para construir key.
-    Detecta y corrige orden leaf->root si es necesario.
+    Normalize classification_path to build key.
+    Detects and corrects leaf->root order if necessary.
     """
     if not path:
         return []
     
-    # Verificar si el path viene en orden leaf->root (último elemento es root)
+    # Check if path comes in leaf->root order (last element is root)
     last_rank = norm_rank(path[-1].get("rank", ""))
     if last_rank in _ROOT_RANKS_SET:
         path = list(reversed(path))
@@ -64,8 +65,9 @@ def tree_data(request):
     """
     limit = request.GET.get("limit", "5000")
     # Accept both 'max_rank' (backend standard) and 'rankCut' (frontend legacy)
-    # Default to "" (only root visible, all data in _children for expand on click)
-    max_rank = request.GET.get("max_rank") or request.GET.get("rankCut") or ""
+    # None = fully expanded tree; "" = collapsed root; "genus" = cut at genus
+    raw_rank = request.GET.get("max_rank") or request.GET.get("rankCut")
+    max_rank = raw_rank  # keep None when not provided
     expand_keys_str = request.GET.get("expand_keys", "")
     
     try:
@@ -76,16 +78,17 @@ def tree_data(request):
     expand_keys = [k.strip() for k in expand_keys_str.split(",") if k.strip()]
     
     # Build tree from database
-    tree = build_tree_from_db(limit=limit, rank_cut=max_rank, with_keys=True)
+    # rank_cut=None → fully expanded; rank_cut="" → collapsed root only
+    tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut=max_rank, with_keys=True)
     
     if not tree:
-        return JsonResponse({"error": "No se encontró el árbol"}, status=404)
+        return JsonResponse({"error": "Tree not found"}, status=404)
     
     # Expand specific keys if provided
     if expand_keys:
         tree = expand_to_keys(tree, expand_keys)
     
-    # Contar especies totales
+    # Count total species
     species_count = count_species_under(tree)
     
     return JsonResponse({
@@ -115,36 +118,74 @@ def tree_search(request):
     if len(query) < 2:
         return JsonResponse({"hits": [], "query": query, "total": 0})
     
-    # Buscar en ExternalTaxon (tiene classification_path para construir key)
-    qs = (
+    q_lower = query.lower()
+    hits = []
+    seen_keys: set = set()
+    
+    # 1) Direct name match on ExternalTaxon records (species)
+    species_qs = (
         ExternalTaxon.objects
         .filter(
-            Q(name__icontains=query) | Q(classification_path__icontains=query),
+            name__icontains=query,
             system="col",
-            status="accepted"
+            status="accepted",
         )
         .only("id", "external_id", "name", "rank", "classification_path")
         [:limit]
     )
     
-    hits = []
-    for ext in qs:
-        # Construir el key del árbol desde classification_path
+    for ext in species_qs:
         path = _normalize_path_for_key(ext.classification_path or [])
-        # Agregar la especie al path si no está
         if ext.rank == "species":
             path = list(path) + [{"rank": "species", "name": ext.name}]
         
-        # Construir key con prefijo "dataset:Root|" para coincidir con el árbol
         key = "dataset:Root|" + path_key_from_parts(path) if path else ""
+        if key and key not in seen_keys:
+            seen_keys.add(key)
+            hits.append({
+                "id": ext.id,
+                "external_id": ext.external_id,
+                "name": ext.name,
+                "rank": ext.rank,
+                "key": key,
+            })
+    
+    # 2) Search higher-level clades inside classification_path
+    #    (these taxa don't have their own ExternalTaxon record)
+    if len(hits) < limit:
+        clade_qs = (
+            ExternalTaxon.objects
+            .filter(
+                classification_path__icontains=query,
+                system="col",
+                status="accepted",
+            )
+            .only("classification_path")
+            [:500]  # scan more to find unique clades
+        )
         
-        hits.append({
-            "id": ext.id,
-            "external_id": ext.external_id,
-            "name": ext.name,
-            "rank": ext.rank,
-            "key": key,
-        })
+        for ext in clade_qs:
+            path = _normalize_path_for_key(ext.classification_path or [])
+            # Walk the path to find nodes whose name matches the query
+            for i, node in enumerate(path):
+                node_name = node.get("name", "")
+                if q_lower in node_name.lower():
+                    # Build key up to (and including) this node
+                    clade_path = path[:i + 1]
+                    key = "dataset:Root|" + path_key_from_parts(clade_path)
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        hits.append({
+                            "id": None,
+                            "external_id": None,
+                            "name": node_name,
+                            "rank": norm_rank(node.get("rank", "")),
+                            "key": key,
+                        })
+                        if len(hits) >= limit:
+                            break
+            if len(hits) >= limit:
+                break
     
     return JsonResponse({
         "hits": hits,
@@ -220,12 +261,12 @@ def _parse_path_param(path_param: str | None) -> List[Tuple[str, str]]:
     try:
         obj = json.loads(path_param)
     except json.JSONDecodeError:
-        raise ValueError("path no es JSON válido")
+        raise ValueError("path is not valid JSON")
 
     if obj is None:
         return []
     if not isinstance(obj, list):
-        raise ValueError("path debe ser una lista JSON")
+        raise ValueError("path must be a JSON list")
 
     out: List[Tuple[str, str]] = []
     for x in obj:
@@ -278,7 +319,7 @@ def col_next_ranks(request):
     """
     dataset_code = (request.GET.get("dataset_code") or "").strip()
     if not dataset_code:
-        return HttpResponseBadRequest("dataset_code es requerido")
+        return HttpResponseBadRequest("dataset_code is required")
 
     try:
         prefix = _parse_path_param(request.GET.get("path"))
@@ -350,11 +391,11 @@ def col_nodes(request):
     """
     dataset_code = (request.GET.get("dataset_code") or "").strip()
     if not dataset_code:
-        return HttpResponseBadRequest("dataset_code es requerido")
+        return HttpResponseBadRequest("dataset_code is required")
 
     rank = (request.GET.get("rank") or "").strip().lower()
     if not rank:
-        return HttpResponseBadRequest("rank es requerido")
+        return HttpResponseBadRequest("rank is required")
 
     try:
         prefix = _parse_path_param(request.GET.get("path"))
@@ -444,7 +485,7 @@ def col_species(request):
     """
     dataset_code = (request.GET.get("dataset_code") or "").strip()
     if not dataset_code:
-        return HttpResponseBadRequest("dataset_code es requerido")
+        return HttpResponseBadRequest("dataset_code is required")
 
     try:
         prefix = _parse_path_param(request.GET.get("path"))
@@ -509,15 +550,15 @@ def col_resolve_selection(request):
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
-        return HttpResponseBadRequest("JSON inválido")
+        return HttpResponseBadRequest("Invalid JSON")
 
     dataset_code = (payload.get("dataset_code") or "").strip()
     if not dataset_code:
-        return HttpResponseBadRequest("dataset_code es requerido")
+        return HttpResponseBadRequest("dataset_code is required")
 
     selected_paths = payload.get("selected_paths")
     if not isinstance(selected_paths, list):
-        return HttpResponseBadRequest("selected_paths debe ser una lista")
+        return HttpResponseBadRequest("selected_paths must be a list")
 
     prefixes: List[List[Tuple[str, str]]] = []
     for p in selected_paths:
@@ -596,7 +637,7 @@ def sampling_scope_info(request):
             "children": [{"key": "...", "name": "...", "rank": "...", "species_count": 5}, ...]
         }
     """
-    from apps.taxonomy.services.sampling import TreeIndex
+    from apps.taxonomy.sampling.service import TreeIndex
     
     scope_key = request.GET.get("scope_key", "").strip() or None
     target_keys_str = request.GET.get("target_keys", "").strip()
@@ -605,7 +646,7 @@ def sampling_scope_info(request):
     target_keys = [k.strip() for k in target_keys_str.split(",") if k.strip()] if target_keys_str else []
     
     # Build tree index
-    tree = build_tree_from_db(limit=10000, rank_cut="species", with_keys=True)
+    tree = ExternalTaxon.objects.build_tree(limit=10000, rank_cut="species", with_keys=True)
     if not tree:
         return JsonResponse({"error": "No tree data available"}, status=404)
     
@@ -723,19 +764,18 @@ def sampling_run(request):
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
-        return HttpResponseBadRequest("JSON inválido")
+        return HttpResponseBadRequest("Invalid JSON")
 
     # Build tree from DB (same as tree_data endpoint)
     limit = int(payload.get("limit", 5000))
     max_rank = payload.get("max_rank") or "class"
 
-    tree = build_tree_from_db(limit=limit, rank_cut=max_rank, with_keys=True)
+    tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut=max_rank, with_keys=True)
     if not tree:
         return JsonResponse({"error": "No tree data available"}, status=404)
 
     # Expand all nodes so sampling can traverse the full tree
-    # (the tree from build_tree_from_db might be cut at max_rank)
-    full_tree = build_tree_from_db(limit=limit, rank_cut="species", with_keys=True)
+    full_tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut="species", with_keys=True)
     if not full_tree:
         full_tree = tree
 
@@ -799,28 +839,28 @@ def genomes_list(request):
     """
     GET /api/v1/taxonomy/genomes/
     
-    Lista de genomas NCBI con filtrado y paginación.
+    List of NCBI genomes with filtering and pagination.
     
     Query params:
-        - page: Número de página (default: 1)
-        - page_size: Tamaño de página (default: 50, max: 200)
-        - search: Búsqueda por nombre de organismo
-        - phylum: Filtrar por phylum
-        - class_name: Filtrar por clase
-        - genome_level: Filtrar por nivel de genoma
-        - col_match_status: Filtrar por estado de vinculación
-        - ordering: Campo de ordenación (default: organism_name)
+        - page: Page number (default: 1)
+        - page_size: Page size (default: 50, max: 200)
+        - search: Search by organism name
+        - phylum: Filter by phylum
+        - class_name: Filter by class
+        - genome_level: Filter by genome level
+        - col_match_status: Filter by linkage status
+        - ordering: Sort field (default: organism_name)
     """
     from apps.taxonomy.models import NCBIGenome
     
-    # Paginación
+    # Pagination
     try:
         page = int(request.GET.get("page", 1))
         page_size = min(int(request.GET.get("page_size", 50)), 200)
     except ValueError:
         page, page_size = 1, 50
     
-    # Filtros
+    # Filters
     qs = NCBIGenome.objects.all()
     
     search = request.GET.get("search", "").strip()
@@ -861,7 +901,7 @@ def genomes_list(request):
             # Filter by external_taxon.status
             qs = qs.filter(external_taxon__status=col_status)
     
-    # Ordenación
+    # Sorting
     ordering = request.GET.get("ordering", "organism_name")
     valid_orderings = ["organism_name", "-organism_name", "accession", "-accession", 
                        "phylum", "-phylum", "genome_level", "-genome_level",
@@ -871,17 +911,17 @@ def genomes_list(request):
     else:
         qs = qs.order_by("organism_name")
     
-    # Conteo total
+    # Total count
     total_count = qs.count()
     
-    # Paginación
+    # Pagination
     offset = (page - 1) * page_size
     genomes = qs.select_related('external_taxon')[offset:offset + page_size]
     
-    # Serializar
+    # Serialize
     results = []
     for g in genomes:
-        # Obtener status de COL si existe
+        # Get COL status if it exists
         col_status = None
         if g.external_taxon:
             col_status = g.external_taxon.status
@@ -917,7 +957,7 @@ def genome_detail(request, accession: str):
     """
     GET /api/v1/taxonomy/genomes/<accession>/
     
-    Detalle de un genoma por accession.
+    Genome detail by accession.
     """
     from apps.taxonomy.models import NCBIGenome
     
@@ -1006,12 +1046,12 @@ def genome_update(request, accession: str):
     """
     POST /api/v1/taxonomy/genomes/<accession>/update/
     
-    Actualiza un genoma, principalmente para vincular con COL.
+    Update a genome, primarily for linking with COL.
     
     Body JSON:
         - col_match_status: "matched" | "unmatched" | "needs_review" | "no_match"
-        - external_taxon_id: ID del ExternalTaxon a vincular (o null para desvincular)
-        - col_match_notes: notas sobre el matching
+        - external_taxon_id: ExternalTaxon ID to link (or null to unlink)
+        - col_match_notes: notes about the matching
     """
     from apps.taxonomy.models import NCBIGenome
     
@@ -1065,11 +1105,11 @@ def col_search(request):
     """
     GET /api/v1/taxonomy/col/search/?q=query
     
-    Busca taxones en COL por nombre. Para usar en el modal de edición.
+    Search COL taxa by name. For use in the edit modal.
     
     Query params:
-        - q: Término de búsqueda (min 2 caracteres)
-        - limit: Máximo de resultados (default: 20)
+        - q: Search term (min 2 characters)
+        - limit: Max results (default: 20)
     """
     query = request.GET.get("q", "").strip()
     limit = min(int(request.GET.get("limit", 20)), 100)

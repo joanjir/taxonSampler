@@ -3,12 +3,12 @@ import { escapeHtml } from "./config.js";
 
 /**
  * UI utilities (DOM-only).
- * Renderiza la tabla <tbody> con <tr> reales + métricas/badges.
+ * Renders the <tbody> table with real <tr> rows + metrics/badges.
  */
 
 export function createUIRefs() {
   const mount = document.getElementById("treeMount");
-  if (!mount) throw new Error("No existe #treeMount en el DOM");
+  if (!mount) throw new Error("#treeMount not found in the DOM");
 
   return {
     mount,
@@ -22,7 +22,7 @@ export function createUIRefs() {
     clearFilters: document.getElementById("clearFilters"),
     clearSel: document.getElementById("clearSel"),
 
-    // Selection panel (nuevo)
+    // Selection panel 
     selCard: document.getElementById("selCard"),
     selModeBadge: document.getElementById("selModeBadge"),
     selSubtitle: document.getElementById("selSubtitle"),
@@ -35,7 +35,7 @@ export function createUIRefs() {
     applySamplingView: document.getElementById("applySamplingView"),
     clearSamplingView: document.getElementById("clearSamplingView"),
 
-    // Export actions (nuevo)
+    // Export actions 
     exportSelJson: document.getElementById("exportSelJson"),
     exportSelTxt: document.getElementById("exportSelTxt"),
     exportSelNewick: document.getElementById("exportSelNewick"),
@@ -80,14 +80,14 @@ export function setCrumb(crumbEl, text) {
 }
 
 /**
- * Renderiza el panel de selección/sampling en el <tbody>.
+ * Renders the selection/sampling panel in the <tbody>.
  *
  * items: [{ name, rank, key }]
  * opts:
  *  - mode: "manual" | "sampling"
  *  - targetRank: string|null
  *  - hint: string|null
- *  - onRemove: (item) => void   (solo manual normalmente)
+ *  - onRemove: (item) => void 
  */
 export function renderSelectionPanel(ui, items, opts = {}) {
   if (!ui?.selList) return;
@@ -96,7 +96,7 @@ export function renderSelectionPanel(ui, items, opts = {}) {
   const targetRank = opts.targetRank || "–";
   const hint = opts.hint || "";
 
-  // Badge + subtítulo
+  // Badge + subtitle
   if (ui.selModeBadge) {
     if (mode === "sampling") {
       ui.selModeBadge.textContent = "Sampling";
@@ -109,14 +109,14 @@ export function renderSelectionPanel(ui, items, opts = {}) {
   if (ui.selSubtitle) {
     ui.selSubtitle.textContent =
       mode === "sampling"
-        ? "Taxones seleccionados por el algoritmo de sampling"
-        : "Taxones seleccionados para muestreo/exportación";
+        ? "Taxa selected by the sampling algorithm"
+        : "Taxa selected for sampling/export";
   }
 
   if (ui.selTarget) ui.selTarget.textContent = targetRank;
   if (ui.selHint) ui.selHint.textContent = hint;
 
-  // métricas
+  // metrics
   const total = (items || []).length;
   const ranks = new Set((items || []).map((x) => (x.rank || "").toLowerCase()).filter(Boolean));
   if (ui.selCount) ui.selCount.textContent = String(total);
@@ -132,12 +132,12 @@ export function renderSelectionPanel(ui, items, opts = {}) {
   if (!total) {
     ui.selList.innerHTML = `
       <tr>
-        <td class="text-muted small ps-3" colspan="2">Sin selección.</td>
+        <td class="text-muted small ps-3" colspan="2">No selection.</td>
       </tr>`;
     return;
   }
 
-  // orden estable: rank -> name
+  // stable order: rank -> name
   const sorted = (items || []).slice().sort((a, b) => {
     const ra = (a.rank || "").toLowerCase();
     const rb = (b.rank || "").toLowerCase();
@@ -163,7 +163,7 @@ export function renderSelectionPanel(ui, items, opts = {}) {
           <td class="text-end pe-3">
             ${
               canRemove
-                ? `<button class="btn btn-sm btn-outline-danger sel-remove" type="button" title="Quitar">
+                ? `<button class="btn btn-sm btn-outline-danger sel-remove" type="button" title="Remove">
                      <i class="fa-solid fa-xmark"></i>
                    </button>`
                 : `<span class="text-muted small">—</span>`
@@ -173,7 +173,7 @@ export function renderSelectionPanel(ui, items, opts = {}) {
     })
     .join("");
 
-  // bind remove clicks (delegación)
+  // bind remove clicks (delegation)
   if (mode === "manual" && typeof opts.onRemove === "function") {
     ui.selList.querySelectorAll(".sel-remove").forEach((btn) => {
       btn.addEventListener("click", (ev) => {

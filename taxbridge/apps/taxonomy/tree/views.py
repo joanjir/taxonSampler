@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from collections import OrderedDict
@@ -10,15 +10,14 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.taxonomy.models import ExternalTaxon
-from apps.taxonomy.services.tree_builder import (
-    build_tree_from_db,
+from apps.taxonomy.tree.managers import (
     cut_by_rank,
     expand_to_keys,
     find_node_by_key,
     count_species_under,
     list_clades_at_rank,
 )
-from apps.taxonomy.services.taxonomy_core import (
+from apps.taxonomy.utils import (
     RANK_ORDER,
     ROOT_RANKS,
     norm_rank,
@@ -30,7 +29,7 @@ from apps.taxonomy.services.taxonomy_core import (
 
 
 def _parse_include(v: str) -> Set[str]:
-    """Parsea parámetro include=species,nodes."""
+    """Parses the include=species,nodes parameter."""
     s = (v or "").strip().lower()
     if not s:
         return {"species", "nodes"}
@@ -38,18 +37,18 @@ def _parse_include(v: str) -> Set[str]:
 
 
 # ============================================================
-# Endpoints del árbol
+# Tree endpoints
 # ============================================================
 
 @require_GET
 def tree_data(request):
     """
-    Endpoint principal: devuelve el árbol taxonómico.
+    Main endpoint: returns the taxonomic tree.
     
     Params:
-        - limit: máximo de especies (default: 5000)
-        - rankCut: rank hasta el cual expandir (default: None = todo expandido)
-        - expand: keys a expandir separados por coma
+        - limit: maximum species count (default: 5000)
+        - rankCut: rank to expand down to (default: None = fully expanded)
+        - expand: keys to expand, comma-separated
     """
     try:
         limit = int(request.GET.get("limit", "5000"))
@@ -60,15 +59,15 @@ def tree_data(request):
     rank_cut = request.GET.get("rankCut") or request.GET.get("rank_cut")
     expand_keys = request.GET.get("expand", "")
     
-    # Construir árbol usando el servicio unificado
-    tree = build_tree_from_db(
+    # Build tree using the manager
+    tree = ExternalTaxon.objects.build_tree(
         limit=limit,
         system="col",
         rank_cut=rank_cut,
         with_keys=True,
     )
     
-    # Expandir rutas específicas si se solicita
+    # Expand specific paths if requested
     if expand_keys:
         keys = [k.strip() for k in expand_keys.split(",") if k.strip()]
         if keys:
@@ -84,10 +83,10 @@ def tree_search(request):
 
     Params:
       - q: query string (min len 2)
-      - include: "species,nodes" (default ambos)
+      - include: "species,nodes" (default both)
       - limit: page size
       - offset: pagination offset
-      - nodes_scan_limit: cuántos species se escanean para encontrar matches en paths
+      - nodes_scan_limit: how many species are scanned to find matches in paths
     """
     q = (request.GET.get("q") or "").strip()
     q_lc = q.lower()
@@ -123,7 +122,7 @@ def tree_search(request):
     hits_by_key: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
     scanned = False
 
-    # A) Species hits (rápido)
+    # A) Species hits (fast)
     if "species" in include:
         sp_qs = (
             ExternalTaxon.objects
@@ -152,8 +151,8 @@ def tree_search(request):
                 "kind": "species",
             }
 
-    # B) Node hits dentro de classification_path
-    #    (esto es lo que te faltaba para que "hom" devuelva Homo/Hominidae/etc)
+    # B) Node hits within classification_path
+    #    (this is what was missing for "hom" to return Homo/Hominidae/etc)
     if "nodes" in include:
         scanned = True
         try:
@@ -191,7 +190,7 @@ def tree_search(request):
                         "kind": "node",
                     }
 
-    # Orden: exact/prefix/contains + profundidad
+    # Order: exact/prefix/contains + depth
     def _score(hit: Dict[str, Any]) -> Tuple[int, int, str]:
         name = (hit.get("name") or "").lower()
         if name == q_lc:

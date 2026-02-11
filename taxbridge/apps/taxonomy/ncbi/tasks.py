@@ -1,4 +1,4 @@
-# apps/taxonomy/tasks.py
+# apps/taxonomy/ncbi/tasks.py
 """
 Celery tasks for NCBI synchronization.
 
@@ -15,8 +15,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-# Import from centralized service
-from apps.taxonomy.services.ncbi_sync import (
+# Import from NCBI module service
+from apps.taxonomy.ncbi.service import (
     KINGDOMS,
     QUALITY_CRITERIA,
     COL_DATASET,
@@ -65,7 +65,6 @@ def sync_ncbi_genomes(
         Dict with sync statistics
     """
     from apps.taxonomy.models import NCBIGenome, NCBISyncRun, Taxon
-    from apps.taxonomy.services.ncbi_api import fetch_and_save_genomes
 
     # Create or retrieve sync run record
     if sync_run_id:
@@ -138,7 +137,7 @@ def sync_ncbi_genomes(
                     continue
 
                 # Get genomes
-                count = fetch_and_save_genomes(taxon, check_proteomes=check_proteomes)
+                count = NCBIGenome.fetch_and_save(taxon, check_proteomes=check_proteomes)
                 
                 if count > 0:
                     successful += 1
@@ -220,8 +219,7 @@ def sync_single_taxon(self, taxid: int, check_proteomes: bool = True) -> dict:
     Sync a single taxon on demand.
     Useful for one-off updates from the UI.
     """
-    from apps.taxonomy.models import Taxon
-    from apps.taxonomy.services.ncbi_api import fetch_and_save_genomes
+    from apps.taxonomy.models import NCBIGenome, Taxon
 
     try:
         taxon = Taxon.objects.get(taxid=taxid)
@@ -229,7 +227,7 @@ def sync_single_taxon(self, taxid: int, check_proteomes: bool = True) -> dict:
         return {"status": "error", "error": f"Taxid {taxid} not found"}
 
     try:
-        count = fetch_and_save_genomes(taxon, check_proteomes=check_proteomes)
+        count = NCBIGenome.fetch_and_save(taxon, check_proteomes=check_proteomes)
         return {
             "status": "completed",
             "taxid": taxid,
@@ -333,7 +331,7 @@ def sync_taxon_with_col(
         TaxonCrosswalk,
         TaxonSyncRun,
     )
-    from apps.taxonomy.services.checklistbank import (
+    from apps.taxonomy.ncbi.clients import (
         ChecklistBankClient,
         canonicalize_scientific_name,
     )

@@ -1,13 +1,13 @@
-# config/celery.py
+﻿# config/celery.py
 """
-Configuración de Celery para TaxaBridge.
-Para iniciar el worker:
+Celery configuration for TaxaBridge.
+To start the worker:
     celery -A config worker -l info
 
-Para iniciar el scheduler (beat):
+To start the scheduler (beat):
     celery -A config beat -l info
 
-O ambos en uno:
+Or both in one:
     celery -A config worker -B -l info
 """
 from __future__ import absolute_import
@@ -17,31 +17,31 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-# Configurar settings module por defecto
+# Set default settings module
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 
 app = Celery("taxbridge")
 
-# Usar string para evitar problemas de serialización
+# Use string to avoid serialization issues
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-# Autodiscover tasks en todas las apps instaladas
+# Autodiscover tasks in all installed apps
 app.autodiscover_tasks()
 
 # ======================
-# Tareas programadas
+# Scheduled tasks
 # ======================
 app.conf.beat_schedule = {
-    # Sincronizar NCBI genomas diariamente a las 3:00 AM
+    # Sync NCBI genomes daily at 3:00 AM
     "sync-ncbi-genomes-daily": {
         "task": "apps.taxonomy.tasks.sync_ncbi_genomes",
         "schedule": crontab(hour=3, minute=0),
         "options": {"queue": "ncbi_sync"},
     },
-    # Limpieza de sincronizaciones antiguas (semanal)
+    # Clean up old sync runs (weekly)
     "cleanup-old-syncs-weekly": {
         "task": "apps.taxonomy.tasks.cleanup_old_sync_runs",
-        "schedule": crontab(hour=4, minute=0, day_of_week=0),  # Domingos 4 AM
+        "schedule": crontab(hour=4, minute=0, day_of_week=0),  # Sundays 4 AM
     },
 }
 
@@ -53,5 +53,5 @@ app.conf.task_routes = {
 
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
-    """Task de prueba para verificar que Celery funciona."""
+    """Test task to verify that Celery is working."""
     print(f"Request: {self.request!r}")

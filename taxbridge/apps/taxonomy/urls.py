@@ -5,8 +5,8 @@ Only HTML page routes are defined here. API routes are in api/urls.py.
 """
 from django.urls import path
 
-from .views import home, export_sampling
-from .views_taxon_sync import taxon_sync_dashboard
+from .dashboard.views import home, export_sampling
+from .ncbi.views import taxon_sync_dashboard
 from .tree.views import tree_page
 
 app_name = "taxonomy"

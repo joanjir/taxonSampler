@@ -1,17 +1,17 @@
-// taxonomy/static/taxonomy/js/tree/main.js
+﻿// taxonomy/static/taxonomy/js/tree/main.js
 /**
- * Página Árbol taxonómico (Tree Page Orchestrator)
+ * Taxonomic Tree Page (Tree Page Orchestrator)
  *
- * Responsabilidad:
- *  - Inicializar UI (refs, tooltip, botones).
- *  - Crear renderer D3 (solo render/interaction).
- *  - Crear controller de sampling (solo sampling).
- *  - Cargar dataset (JSON del backend) y entregarlo a renderer + samplingCtl.
+ * Responsibility:
+ *  - Initialize UI (refs, tooltip, buttons).
+ *  - Create D3 renderer (render/interaction only).
+ *  - Create sampling controller (sampling only).
+ *  - Load dataset (JSON from backend) and deliver to renderer + samplingCtl.
  *
- * No debe:
- *  - Construir árbol (eso es backend).
- *  - Normalizar rutas / ranks / keys (eso es backend).
- *  - Hacer búsqueda “inteligente” en frontend (idealmente backend-driven).
+ * Must not:
+ *  - Build tree (that's backend).
+ *  - Normalize paths / ranks / keys (that's backend).
+ *  - Perform “smart” search in frontend (ideally backend-driven).
  */
 
 import {
@@ -31,18 +31,18 @@ import { createTreeRenderer } from "../trees/d3_tree.js";
 import { createSamplingFiltersController } from "./sampling_filters.js";
 (function initTreePage() {
   const endpoint = window.TREE_ENDPOINT;
-  // justo después de: const endpoint = window.TREE_ENDPOINT;
-  let currentRankCut = null; // null => no enviar parámetro (sin cut). "" => rankCut= (root colapsado). "genus" => cut real.
+  // right after: const endpoint = window.TREE_ENDPOINT;
+  let currentRankCut = null; // null => don't send parameter (no cut). "" => rankCut= (collapsed root). "genus" => actual cut.
 
   async function reloadTreeWithRankCut(nextRankCut, { fit = true } = {}) {
-    // normaliza: null | "" | "genus"
+    // normalize: null | "" | "genus"
     const v = (nextRankCut === null || typeof nextRankCut === "undefined")
       ? null
       : String(nextRankCut).trim().toLowerCase();
 
     currentRankCut = (v === "" ? "" : v);
 
-    // 1) pedir el árbol ya cortado al backend
+    // 1) request the already-cut tree from backend
     const response = await loadTreeData({
       endpoint,
       rankCut: currentRankCut, // api.js: null => no manda param; "" => rankCut= ; "genus" => rankCut=genus
@@ -51,12 +51,33 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     // Extract tree from response (backend wraps it: {tree: {...}, limit, max_rank})
     const data = response.tree || response;
 
-    // 2) entregar data al sampling + renderer
+    // 2) deliver data to sampling + renderer
     samplingCtl.setData(data);
     renderer.render(data);
 
     if (fit) renderer.fitToView?.();
   }
+  $(document).ready(function () {
+
+    // Rank selector (single)
+    $('#rankSelect').select2({
+      theme: 'bootstrap-5',
+      width: 'style',
+      placeholder: 'Select rank...',
+      allowClear: true
+    });
+
+    // Taxa selector (multiple con búsqueda)
+    $('#taxaSelect').select2({
+      theme: 'bootstrap-5',
+      width: 'style',
+      placeholder: 'Select taxa...',
+      multiple: true,
+      closeOnSelect: false,
+      allowClear: true
+    });
+
+  });
 
   // =========================================================================
   // 1) UI base (refs + tooltip)
@@ -65,9 +86,9 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   const tooltip = makeTooltip(ui.mount, ui.tt);
 
   // =========================================================================
-  // 2) Helpers locales (NO dependen de ui.js)
-  //    - utilidades de rendering HTML
-  //    - utilidades de selección y export
+  // 2) Local helpers (DO NOT depend on ui.js)
+  //    - HTML rendering utilities
+  //    - selection and export utilities
   // =========================================================================
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
@@ -90,8 +111,8 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     }
   }
 
-  // Convierte selección manual del renderer a payload liviano
-  // (lo mínimo que el backend necesita para exportar)
+  // Converts manual selection from renderer to lightweight payload
+  // (the minimum the backend needs to export)
   function selectionToPayload(selectedMap) {
     return asArraySelected(selectedMap).map((x) => ({
       id: x.id,
@@ -145,7 +166,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     if (el) el.textContent = txt;
   }
 
-  // Badge del modo de selección: Manual vs Sampling
+  // Selection mode badge: Manual vs Sampling
   function setBadgeMode(modeText, isSampling) {
     const badge = document.getElementById("selModeBadge");
     if (!badge) return;
@@ -161,7 +182,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   }
 
   // =========================================================================
-  // 3) Renderer (D3) — solo render + interacción
+  // 3) Renderer (D3) — render + interaction only
   // =========================================================================
   const renderer = createTreeRenderer({
     mount: ui.mount,
@@ -171,9 +192,9 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   });
 
   // =========================================================================
-  // 4) Vista de selección (panel derecho)
+  // 4) Selection view (right panel)
   // =========================================================================
-  function renderSelListTbody(rowsHtml, emptyMsg = "Sin selección.") {
+  function renderSelListTbody(rowsHtml, emptyMsg = "No selection.") {
     const tbody = document.getElementById("selList");
     if (!tbody) return;
     tbody.innerHTML =
@@ -181,7 +202,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       `<tr><td class="text-muted small ps-3" colspan="2">${escapeHtml(emptyMsg)}</td></tr>`;
   }
 
-  // Render selección manual (resultado directo de clicks en el árbol)
+  // Render manual selection (direct result of clicks on the tree)
   function renderSelectionManualTbody(selectedMap) {
     const items = asArraySelected(selectedMap);
 
@@ -216,8 +237,8 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
             <button type="button"
                     class="btn btn-sm btn-outline-danger"
                     data-sel-remove="${escapeHtml(selId)}"
-                    title="Quitar">
-              Quitar
+                    title="Remove">
+              Remove
             </button>
           </td>
         </tr>
@@ -227,7 +248,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     renderSelListTbody(rows);
   }
 
-  // Normaliza respuesta de sampling a filas outgroup+ingroup sin duplicados
+  // Normalizes sampling response to outgroup+ingroup rows without duplicates
   function buildSamplingRows(result) {
     const ing = Array.isArray(result?.ingroup?.picked) ? result.ingroup.picked : [];
     const out = Array.isArray(result?.outgroupPicked) ? result.outgroupPicked : [];
@@ -244,7 +265,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       .concat(ing.map((x) => norm(x, "ingroup")))
       .filter((x) => x.key);
 
-    // uniq por key
+    // unique by key
     const seen = new Set();
     const uniq = [];
     for (const r of rows) {
@@ -253,7 +274,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       uniq.push(r);
     }
 
-    // sort: outgroup primero, luego por rank/name
+    // sort: outgroup first, then by rank/name
     uniq.sort((a, b) => {
       if (a.group !== b.group) return a.group === "outgroup" ? -1 : 1;
       const ra = String(a.rank || ""), rb = String(b.rank || "");
@@ -265,13 +286,13 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     return uniq;
   }
 
-  // Render selección proveniente del sampling
+  // Render selection from sampling
   function renderSelectionSamplingTbody(result) {
     const rows = buildSamplingRows(result);
 
     if (!rows.length) {
       setText("selCount", "0");
-      renderSelListTbody("", "Sin selección.");
+      renderSelListTbody("", "No selection.");
       return;
     }
 
@@ -291,7 +312,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
           <button class="btn btn-sm btn-outline-secondary"
                   type="button"
                   data-copy-key="${escapeHtml(r.key)}"
-                  title="Copiar key">
+                  title="Copy key">
             <i class="fa-solid fa-copy"></i>
           </button>
         </td>
@@ -311,9 +332,9 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     if (hint) hint.textContent = `Ingroup: ${ingN} | Outgroup: ${outN}`;
   }
 
-  // Delegación de eventos del tbody de selección:
-  //  - Quitar elemento (manual)
-  //  - Copiar key (sampling)
+  // Event delegation for the selection tbody:
+  //  - Remove element (manual)
+  //  - Copy key (sampling)
   function bindSelListDelegation() {
     const tbody = document.getElementById("selList");
     if (!tbody) return () => { };
@@ -345,12 +366,12 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   const unbindSelList = bindSelListDelegation();
 
   // =========================================================================
-  // 5) Sampling controller (estado + ejecución)
+  // 5) Sampling controller (state + execution)
   // =========================================================================
   const samplingCtl = createSamplingFiltersController({ renderer });
   samplingCtl.attachEventHandlers();
 
-  // Estado: si hay resultado de sampling, la “selección” visible proviene de ahí.
+  // State: if a sampling result exists, the visible "selection" comes from it.
   let lastSamplingResult = null;
 
   function updateSelectionBadge(count) {
@@ -379,7 +400,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     updateSelectionBadge(count);
   }
 
-  // Payload para export: sampling (si existe) o manual (fallback)
+  // Payload for export: sampling (if exists) or manual (fallback)
   function getExportPayload({ allowManualFallback = true } = {}) {
     if (lastSamplingResult) return lastSamplingResult;
     if (!allowManualFallback) return null;
@@ -422,7 +443,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   });
 
   // =========================================================================
-  // 7) Resultado final de sampling (evento global)
+  // 7) Final sampling result (global event)
   // =========================================================================
   window.addEventListener("sampling:final", (ev) => {
     lastSamplingResult = ev.detail || null;
@@ -431,7 +452,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     setBadgeMode("Sampling", true);
 
     const sub = document.getElementById("selSubtitle");
-    if (sub) sub.textContent = "Taxones seleccionados por sampling (ingroup + outgroup)";
+    if (sub) sub.textContent = "Taxa selected by sampling (ingroup + outgroup)";
 
     renderSelectionSamplingTbody(lastSamplingResult);
 
@@ -471,7 +492,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     setBadgeMode("Manual", false);
 
     const sub = document.getElementById("selSubtitle");
-    if (sub) sub.textContent = "Taxones seleccionados para muestreo/exportación";
+    if (sub) sub.textContent = "Taxa selected for sampling/export";
 
     const hint = document.getElementById("selHint");
     if (hint) hint.textContent = "";
@@ -490,20 +511,153 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   });
 
   // =========================================================================
-  // 9) Expand-to-rank dropdown (solo UI -> renderer)
+  // 9) Rank-based Navigation (rank select + taxa multi-select with Select2)
   // =========================================================================
-  document.querySelectorAll(".dropdown-menu [data-rank]").forEach((item) => {
-    item.addEventListener("click", (e) => {
-      e.preventDefault();
-      const rank = item.dataset.rank || "";
-      const label = item.textContent.trim();
+  const rankSelect = document.getElementById("rankSelect");
+  const taxaSelect = document.getElementById("taxaSelect");
+  const rankNavResetBtn = document.getElementById("rankNavReset");
+  let $taxaSelect = null;
+  let currentRankNodes = [];
+  let previousSelection = [];
+  const ALL_KEY = "__ALL__";
 
-      renderer.setRankCut?.(rank);
+  // Register rank change event IMMEDIATELY
+  if (rankSelect) {
+    rankSelect.onchange = function() {
+      populateTaxaSelect(this.value);
+    };
+  }
 
-      const lbl = document.getElementById("vizRankLabel");
-      if (lbl) lbl.textContent = label;
+  // Initialize Select2 on taxaSelect
+  function initSelect2() {
+    if (!taxaSelect) return;
+    if (typeof $ === "undefined" || !$.fn.select2) return;
+
+    $taxaSelect = $(taxaSelect);
+    $taxaSelect.select2({
+      theme: "bootstrap-5",
+      placeholder: "Select taxa...",
+      allowClear: true,
+      width: "250px",
+      closeOnSelect: false,
+      disabled: true
     });
-  });
+
+    // Listen for Select2 change
+    $taxaSelect.on("change", onTaxaSelectionChange);
+  }
+
+  function populateTaxaSelect(rank) {
+    if (!taxaSelect) return;
+    if (!$taxaSelect) {
+      initSelect2();
+      if (!$taxaSelect) return;
+    }
+
+    // Get all nodes of this rank from the tree
+    currentRankNodes = rank ? (renderer.getNodesByRank?.(rank) || []) : [];
+
+    // Build options array with "All" as first option
+    const data = [];
+    if (rank && currentRankNodes.length > 0) {
+      data.push({ id: ALL_KEY, text: `── All ${rank}s (${currentRankNodes.length}) ──` });
+      currentRankNodes.forEach(node => {
+        data.push({ id: node.key, text: node.name });
+      });
+    }
+
+    // Destroy and recreate Select2 with new data
+    $taxaSelect.empty();
+    $taxaSelect.select2("destroy");
+    $taxaSelect.select2({
+      theme: "bootstrap-5",
+      placeholder: rank ? `Select ${rank}...` : "Select taxa...",
+      allowClear: true,
+      width: "250px",
+      closeOnSelect: false,
+      data: data,
+      disabled: !rank || data.length === 0
+    });
+
+    // Re-bind change event
+    $taxaSelect.off("change").on("change", onTaxaSelectionChange);
+    previousSelection = [];
+  }
+
+  function onTaxaSelectionChange() {
+    if (!$taxaSelect) return;
+    
+    let selected = $taxaSelect.val() || [];
+    const hadAll = previousSelection.includes(ALL_KEY);
+    const hasAll = selected.includes(ALL_KEY);
+    const hasOthers = selected.some(k => k !== ALL_KEY);
+
+    // Logic:
+    // - If "All" just got selected → keep only "All", show all taxa
+    // - If had "All" and user selected something specific → remove "All", show only that specific one
+    if (hasAll && hasOthers) {
+      if (!hadAll) {
+        // User just selected "All" while having others → keep only "All"
+        selected = [ALL_KEY];
+      } else {
+        // User selected something else while "All" was selected → remove "All", keep only new selection
+        selected = selected.filter(k => k !== ALL_KEY);
+      }
+      $taxaSelect.val(selected).trigger("change.select2");
+      return; // Will re-trigger with clean selection
+    }
+
+    previousSelection = [...selected];
+
+    // Show ONLY selected nodes (filters out siblings)
+    if (selected.length > 0) {
+      let keysToShow;
+      if (selected.includes(ALL_KEY)) {
+        keysToShow = currentRankNodes.map(n => n.key);
+      } else {
+        keysToShow = selected;
+      }
+      renderer.showOnlyKeys?.(keysToShow, { fit: true });
+    } else {
+      // Nothing selected - collapse to root (clears filter)
+      renderer.collapseAll?.();
+    }
+  }
+
+  // Event: Reset button - collapse all and show only Root
+  if (rankNavResetBtn) {
+    rankNavResetBtn.addEventListener("click", () => {
+      // Clear rank select - force both value and selectedIndex
+      if (rankSelect) {
+        rankSelect.value = "";
+        rankSelect.selectedIndex = 0;
+      }
+      // Clear taxa select
+      if ($taxaSelect) {
+        $taxaSelect.val(null).trigger("change.select2");
+      }
+      populateTaxaSelect("");
+      previousSelection = [];
+      currentRankNodes = [];
+      renderer.collapseAll?.();
+    });
+  }
+
+  // Initialize Select2 after page load
+  initSelect2();
+  
+  // Clear selects on page load (after browser restores cached values)
+  // Use setTimeout to ensure this runs AFTER browser auto-fill
+  setTimeout(() => {
+    if (rankSelect) {
+      rankSelect.value = "";
+    }
+    if ($taxaSelect) {
+      $taxaSelect.val(null).trigger("change.select2");
+    }
+    previousSelection = [];
+    currentRankNodes = [];
+  }, 0);
 
   // =========================================================================
   // 10) Sampling root dropdown (legacy)
@@ -536,7 +690,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
 
   // =========================================================================
   // 11) Wizard (scope + multi-targets)
-  //     - Es una UI opcional; si no existe el HTML, no hace nada.
+  //     - It's an optional UI; if the HTML doesn't exist, it does nothing.
   // =========================================================================
   function tryGetActiveNodeInfo() {
     // 1) API directa del renderer (preferida)
@@ -554,8 +708,8 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     return null;
   }
 
-  // Valida descendencia por prefijo: childKey startsWith(ancestorKey + "|")
-  // Requiere keys en formato path "rank:name|rank:name|..."
+  // Validates descent by prefix: childKey startsWith(ancestorKey + "|")
+  // Requires keys in path format "rank:name|rank:name|..."
   function isDescendantPath(childKey, ancestorKey) {
     const c = String(childKey || "");
     const a = String(ancestorKey || "");
@@ -582,7 +736,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     const warnBox = document.getElementById("targetsWarn");
     const warnText = document.getElementById("targetsWarnText");
 
-    // Si no existe el HTML del wizard, no hacemos nada.
+    // If the wizard HTML doesn't exist, we do nothing.
     if (!scopeSel || !targetsChips || !targetAddActive) return null;
 
     const state = {
@@ -623,7 +777,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
         }
       }
 
-      // Si cambia scope: elimina targets fuera del scope
+      // If scope changes: removes targets outside the scope
       if (state.scopeKey && state.targetKeys.length) {
         const kept = [];
         for (const k of state.targetKeys) {
@@ -751,7 +905,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       } catch (_) { }
     }
 
-    // Exponer estado para integración con samplingCtl
+    // Expose state for integration with samplingCtl
     window.__samplingWizard = { state, reset, setStep };
 
     // init
@@ -770,7 +924,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   // =========================================================================
   const searchEndpoint = window.TREE_SEARCH_ENDPOINT;
 
-  // Estado local de navegación de hits
+  // Local search hit navigation state
   let searchState = {
     q: "",
     hits: [],
@@ -795,7 +949,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     if (clrBtn) clrBtn.disabled = !hasAny;
   }
 
-  // Navega al hit actual (abre el árbol y centra si puede)
+  // Navigate to the current hit (opens the tree and centers if possible)
   function revealActiveHit({ fit = false } = {}) {
     const hit = searchState.hits[searchState.idx];
     if (!hit?.key) return;
@@ -823,18 +977,20 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     if (!inp) return;
 
     const q = inp.value.trim();
+    console.log("[SEARCH] query:", q, "len:", q.length);
     if (q.length < 2) return;
 
     if (!searchEndpoint || typeof searchEndpoint !== "string") {
       console.error("TREE_SEARCH_ENDPOINT is missing");
       return;
     }
+    console.log("[SEARCH] endpoint:", searchEndpoint);
 
-    // Config base (puedes exponer limit desde UI si quieres)
+    // Base config (you can expose limit from UI if desired)
     const limit = 50;
     const offset = 0;
 
-    // Reset state antes de buscar
+    // Reset state before searching
     searchState = {
       q,
       hits: [],
@@ -847,26 +1003,33 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
 
     try {
       const data = await apiSearchTree({
-        url: searchEndpoint,
+        endpoint: searchEndpoint,
         q,
         limit,
         offset,
         include: searchState.include,
       });
 
+      console.log("[SEARCH] response:", JSON.stringify(data).slice(0, 500));
+
       const hits = Array.isArray(data?.hits) ? data.hits : [];
       searchState.hits = hits;
       searchState.total = Number(data?.total || hits.length || 0);
       searchState.idx = hits.length ? 0 : -1;
 
+      console.log("[SEARCH] hits:", hits.length, "idx:", searchState.idx);
+
       setSearchControlsStateFromState();
 
       if (searchState.idx >= 0) {
+        console.log("[SEARCH] revealing hit:", hits[searchState.idx]?.name, "key:", hits[searchState.idx]?.key?.slice(0, 80));
         revealActiveHit({ fit: false });
+      } else {
+        console.log("[SEARCH] no hits found");
       }
     } catch (err) {
-      console.error(err);
-      // dejar botones coherentes aunque falle
+      console.error("[SEARCH] error:", err);
+      // keep buttons consistent even if it fails
       setSearchControlsStateFromState();
     }
   }
@@ -875,7 +1038,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     const n = searchState.hits.length;
     if (!n) return;
 
-    // navegación circular como el main original
+    // circular navigation like the original main
     let next = searchState.idx + delta;
     if (next < 0) next = n - 1;
     if (next >= n) next = 0;
@@ -922,7 +1085,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
 
 
   // =========================================================================
-  // 13) Carga inicial del dataset (backend -> renderer + samplingCtl)
+  // 13) Initial dataset load (backend -> renderer + samplingCtl)
   // =========================================================================
   async function load() {
     try {
@@ -930,17 +1093,17 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
         throw new Error("TREE_ENDPOINT is empty or undefined. Check your template (window.TREE_ENDPOINT).");
       }
 
-      // 1) fetch JSON (árbol ya construido en backend)
+      // 1) fetch JSON (tree already built in backend)
       const response = await loadTreeData(endpoint);
 
       // Extract tree from response (backend wraps it: {tree: {...}, limit, max_rank})
       const data = response.tree || response;
 
-      // 2) entregar data a samplingCtl y renderer
+      // 2) deliver data to samplingCtl and renderer
       samplingCtl.setData(data);
       renderer.render(data);
 
-      // 2b) actualizar contador de especies (viene del backend)
+      // 2b) update species counter (comes from backend)
       const speciesCount = response.species_count ?? 0;
       const speciesEl = document.getElementById("speciesCount");
       if (speciesEl) speciesEl.textContent = String(speciesCount);
@@ -984,7 +1147,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   }
 
   // =========================================================================
-  // 14) Botones UI (fit, collapse, clear, fullscreen, etc.)
+  // 14) UI Buttons (fit, collapse, clear, fullscreen, etc.)
   // =========================================================================
   ui.loadBtn?.addEventListener("click", load);
 
@@ -1018,8 +1181,8 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
     if (st && !lastSamplingResult) st.classList.add("d-none");
   });
 
-  // Export local (client-side) — útil para depurar o cuando no quieres pasar por backend.
-  // Nota: tus exports oficiales ya están arriba vía postDownload().
+  // Local export (client-side) — useful for debugging or when you don't want to go through the backend.
+  // Note: official exports are above via postDownload().
   ui.exportSel?.addEventListener("click", () => {
     const payload = selectionToPayload(renderer.getSelectedSpecies?.());
     downloadText("selection.json", JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
@@ -1049,7 +1212,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   });
 
   // =========================================================================
-  // 15) Ejecutar sampling (UI -> samplingCtl -> renderer reveal)
+  // 15) Execute sampling (UI -> samplingCtl -> renderer reveal)
   // =========================================================================
   document.getElementById("runSampling")?.addEventListener("click", async () => {
     if (typeof samplingCtl.runSamplingAndBuildResult !== "function") {
@@ -1057,7 +1220,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       return;
     }
 
-    // Integración wizard: scope/targets -> samplingCtl (si existe)
+    // Wizard integration: scope/targets -> samplingCtl (if exists)
     const wiz = window.__samplingWizard?.state;
     if (wiz) {
       const scopeKey = wiz.scopeKey || "";
@@ -1099,7 +1262,7 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   const treeTabEl = document.getElementById("treeTab");
   if (treeTabEl) {
     treeTabEl.addEventListener("shown.bs.tab", () => {
-      // Cuando se muestra la tab del árbol, redimensionar y ajustar
+      // When the tree tab is shown, resize and adjust
       setTimeout(() => {
         renderer.resizeToMount?.();
         renderer.fitToView?.();

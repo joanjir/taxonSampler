@@ -1,5 +1,5 @@
-// taxonomy/static/taxonomy/js/trees/tree_ui_state.js
-// Estado UI derivado (puro). No toca D3; solo calcula banderas.
+﻿// taxonomy/static/taxonomy/js/trees/tree_ui_state.js
+// Derived UI state (pure). Does not touch D3; only calculates flags.
 
 export function computeNodeUIState({ d, samplingMode, samplingRootKey, samplingTargetKeys, keyFromD3Node }) {
   const k = d?.data?.__key || keyFromD3Node(d);

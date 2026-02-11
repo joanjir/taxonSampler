@@ -7,7 +7,7 @@
 //  2. POSTs config to /api/v1/taxonomy/sampling/run/
 //  3. Dispatches results to the renderer via events
 //
-// Backend service: apps/taxonomy/services/sampling.py
+// Backend service: apps/taxonomy/sampling/service.py
 
 import { apiRunSampling, apiGetScopeInfo } from "./api.js";
 import { normRank } from "../trees/tree_keying.js";

@@ -1,13 +1,9 @@
 <header class="navbar navbar-expand-md d-print-none" data-bs-theme="light">
   <div class="container-xl">
     <!-- Brand -->
-    <a class="navbar-brand navbar-brand-autodark me-4" href="{% url 'taxonomy:home' %}">
-      <span class="fw-bold">TaxaBridge</span>
-    </a>
+    <a class="navbar-brand navbar-brand-autodark me-4" href="{% url 'taxonomy:home' %}"><span class="fw-bold">TaxaBridge</span></a>
     <!-- Mobile toggler -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
 
     <div class="collapse navbar-collapse" id="navbar-menu">
       <ul class="navbar-nav me-auto">
@@ -22,68 +18,47 @@
         </li>
       </ul>
       {% if show_tree_controls %}
-      <!-- SEARCH (desktop: right aligned). In mobile it appears below the menu inside collapse -->
-      <form class="d-flex w-100 w-md-auto ms-md-auto mt-2 mt-md-0" role="search" onsubmit="return false;" style="max-width: 760px;">
-        <div class="input-group input-group-sm w-100">
-          <!-- Expand dropdown (envuelto para Bootstrap 5) -->
-          <div class="dropdown">
-            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="vizRankBtn" data-bs-toggle="dropdown" aria-expanded="false" style="white-space:nowrap; border-top-right-radius:0; border-bottom-right-radius:0;">
-              <span class="me-1">Expand:</span>
-              <span id="vizRankLabel">—</span>
-            </button>
-            <ul class="dropdown-menu" aria-labelledby="vizRankBtn" style="max-height:420px; overflow:auto;">
-              <li>
-                <a class="dropdown-item" href="#" data-rank="">No auto-expand</a>
-              </li>
-              <li>
-                <hr class="dropdown-divider" />
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="domain">Domain</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="kingdom">Kingdom</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="phylum">Phylum</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="class">Class</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="order">Order</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="family">Family</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="genus">Genus</a>
-              </li>
-              <li>
-                <a class="dropdown-item" href="#" data-rank="species">Species</a>
-              </li>
-            </ul>
-          </div>
+        <!-- Rank-based navigation -->
+        <div class="d-flex align-items-center ms-md-auto mt-2 mt-md-0 me-3" id="rankNavContainer">
+          <!-- Rank selector -->
+          <select id="rankSelect" class="form-select form-select-sm me-2" style="width: 130px;" autocomplete="off">
+            <option value="">Rank...</option>
+            <option value="domain">Domain</option>
+            <option value="kingdom">Kingdom</option>
+            <option value="phylum">Phylum</option>
+            <option value="class">Class</option>
+            <option value="order">Order</option>
+            <option value="family">Family</option>
+            <option value="genus">Genus</option>
+            <option value="species">Species</option>
+          </select>
 
-          <!-- Help icon con popover -->
-          <button type="button" class="btn btn-outline-secondary" id="vizRankHelp" tabindex="0" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-html="true" data-bs-custom-class="popover-help" data-bs-content="<div class='small'>Automatically expands the taxonomy tree up to the selected rank.</div>" aria-label="Help" style="max-width:38px;"><i class="fa-solid fa-circle-question"></i></button>
+          <!-- Taxa multi-select (Select2) with "All" option -->
+          <select id="taxaSelect" multiple style="width: 250px;" autocomplete="off"></select>
 
-          <!-- Search input -->
-          <input id="taxSearch" type="search" class="form-control" placeholder="Search taxon (e.g. Mammalia, Primates)…" aria-label="Search taxon" />
-
-          <!-- Prev -->
-          <button id="taxSearchPrev" class="btn btn-outline-secondary" type="button" title="Previous match" disabled><i class="fa-solid fa-chevron-left"></i></button>
-
-          <!-- Next -->
-          <button id="taxSearchNext" class="btn btn-outline-secondary" type="button" title="Next match" disabled><i class="fa-solid fa-chevron-right"></i></button>
-
-          <!-- Clear -->
-          <button id="taxSearchClear" class="btn btn-outline-secondary" type="button" title="Clear search" disabled><i class="fa-solid fa-xmark"></i></button>
-
-          <!-- Search -->
-          <button id="taxSearchGo" class="btn btn-primary" type="button">Search</button>
+          <!-- Reset button -->
+          <button id="rankNavReset" class="btn btn-sm btn-outline-secondary ms-2" title="Reset to Root"><i class="fa-solid fa-rotate-left"></i></button>
         </div>
-      </form>
+
+        <!-- SEARCH -->
+        <form class="d-flex mt-2 mt-md-0" role="search" onsubmit="return false;">
+          <div class="input-group input-group-sm">
+            <!-- Search input -->
+            <input id="taxSearch" type="search" class="form-control form-control-sm" placeholder="Search taxon…" aria-label="Search taxon" style="max-width: 150px;" />
+
+            <!-- Prev -->
+            <button id="taxSearchPrev" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Previous match" disabled><i class="fa-solid fa-chevron-left fa-xs"></i></button>
+
+            <!-- Next -->
+            <button id="taxSearchNext" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Next match" disabled><i class="fa-solid fa-chevron-right fa-xs"></i></button>
+
+            <!-- Clear -->
+            <button id="taxSearchClear" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Clear search" disabled><i class="fa-solid fa-xmark fa-xs"></i></button>
+
+            <!-- Search -->
+            <button id="taxSearchGo" class="btn btn-sm btn-primary px-2" type="button" title="Search"><i class="fa-solid fa-magnifying-glass fa-xs"></i></button>
+          </div>
+        </form>
       {% endif %}
     </div>
   </div>

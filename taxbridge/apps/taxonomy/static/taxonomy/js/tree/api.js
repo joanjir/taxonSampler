@@ -3,7 +3,7 @@
 function assertEndpoint(endpoint, name) {
   const url = String(endpoint || "").trim();
   if (!url) {
-    throw new Error(`[API] endpoint vacío: ${name} no está definido o es inválido.`);
+    throw new Error(`[API] empty endpoint: ${name} is not defined or is invalid.`);
   }
   return url;
 }
@@ -12,7 +12,7 @@ async function readBodySafe(res) {
   try {
     return await res.text();
   } catch {
-    return "[API] (no se pudo leer el body)";
+    return "[API] (could not read the body)";
   }
 }
 
@@ -41,7 +41,7 @@ async function fetchJson(url) {
   try {
     return JSON.parse(body);
   } catch {
-    const err = new Error(`[API] Respuesta no-JSON (content-type=${contentType || "none"})\n${body}`);
+    const err = new Error(`[API] Non-JSON response (content-type=${contentType || "none"})\n${body}`);
     err.status = res.status;
     err.statusText = res.statusText;
     err.body = body;

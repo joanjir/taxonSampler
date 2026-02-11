@@ -6,7 +6,7 @@ All API routes are defined here with RESTful naming conventions.
 from django.urls import path
 
 from . import views
-from ..views_taxon_sync import (
+from apps.taxonomy.ncbi.views import (
     api_start_taxon_sync,
     api_taxon_sync_status,
     api_cancel_taxon_sync,

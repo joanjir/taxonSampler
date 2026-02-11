@@ -128,3 +128,75 @@ g.node.clade-root rect.node-box {
 g.node.clade-path {
   cursor: default;
 }
+
+/* Cascade navigation */
+#cascadeNavContainer {
+  flex-wrap: wrap;
+}
+#cascadeSelects {
+  max-width: 100%;
+}
+#cascadeSelects .badge {
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+#cascadeSelects .badge:hover {
+  opacity: 0.85;
+}
+#cascadeSelects select {
+  font-size: 0.8rem;
+}
+
+/* Rank-based navigation */
+#rankNavContainer {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+/* Select2 in navbar adjustments */
+#rankNavContainer .select2-container {
+  display: inline-block;
+  vertical-align: middle;
+}
+#rankNavContainer .select2-container--bootstrap-5 .select2-selection {
+  min-height: 31px;
+  font-size: 0.8125rem;
+  border-color: #dadfe5;
+}
+#rankNavContainer .select2-container--bootstrap-5 .select2-selection--multiple {
+  padding: 2px 4px;
+}
+#rankNavContainer .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice {
+  font-size: 0.7rem;
+  padding: 0 5px;
+  margin: 1px 2px 1px 0;
+  background-color: #0d6efd;
+  color: #fff;
+  border: none;
+}
+#rankNavContainer .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice__remove {
+  color: #fff;
+  margin-right: 3px;
+}
+#rankNavContainer .select2-container--bootstrap-5 .select2-search--inline .select2-search__field {
+  font-size: 0.8125rem;
+  margin-top: 2px;
+}
+#rankNavContainer .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__rendered {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+/* Select2 dropdown */
+.select2-container--bootstrap-5 .select2-dropdown {
+  z-index: 1060;
+  border-color: #dadfe5;
+}
+.select2-container--bootstrap-5 .select2-results__option {
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+.select2-container--bootstrap-5 .select2-results__option--highlighted {
+  background-color: #0d6efd;
+}

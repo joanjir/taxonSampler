@@ -23,7 +23,7 @@ from apps.taxonomy.models import (
     TaxonCrosswalk,
     NCBIGenome,
 )
-from apps.taxonomy.services.checklistbank import ChecklistBankClient, canonicalize_scientific_name
+from apps.taxonomy.ncbi.clients import ChecklistBankClient, canonicalize_scientific_name
 
 
 # Default COL dataset

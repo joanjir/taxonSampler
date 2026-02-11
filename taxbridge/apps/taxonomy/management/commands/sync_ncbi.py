@@ -27,7 +27,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.taxonomy.services.ncbi_sync import (
+from apps.taxonomy.ncbi.service import (
     KINGDOMS,
     QUALITY_CRITERIA,
     NCBISyncService,
@@ -161,7 +161,7 @@ class Command(BaseCommand):
         
         # Initialize service
         # Default: Reference genomes, RefSeq only, Annotated only (like NCBI web UI defaults)
-        from apps.taxonomy.services.ncbi_sync import NCBIApiFilters
+        from apps.taxonomy.ncbi.service import NCBIApiFilters
         
         api_filters = NCBIApiFilters(
             reference_only=not opts["skip_refseq"],

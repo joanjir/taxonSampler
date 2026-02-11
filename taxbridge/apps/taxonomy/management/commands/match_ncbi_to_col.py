@@ -8,25 +8,24 @@ from typing import Optional
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.taxonomy.models import ExternalTaxon, Taxon, TaxonCrosswalk
-from apps.taxonomy.services.checklistbank import ChecklistBankClient, canonicalize_scientific_name
-from apps.taxonomy.services.ncbi_api import fetch_and_save_genomes
+from apps.taxonomy.models import ExternalTaxon, NCBIGenome, Taxon, TaxonCrosswalk
+from apps.taxonomy.ncbi.clients import ChecklistBankClient, canonicalize_scientific_name
 
 
 class Command(BaseCommand):
-    help = "Machea Taxon (NCBI) a ExternalTaxon (CoL/ChecklistBank) y crea TaxonCrosswalk. Opcionalmente trae datos de genomas NCBI."
+    help = "Match Taxon (NCBI) to ExternalTaxon (CoL/ChecklistBank) and create TaxonCrosswalk. Optionally fetch NCBI genome data."
 
     def add_arguments(self, parser):
-        parser.add_argument("--dataset", default="COL25.12", help="Dataset ChecklistBank, ej: COL25.12 o 3LR")
-        parser.add_argument("--system", default="col", help="Etiqueta de sistema para ExternalTaxon.system")
-        parser.add_argument("--rank", default=None, help="Filtra Taxon.rank (ej: species)")
-        parser.add_argument("--limit", type=int, default=0, help="Limitar cantidad de Taxon a procesar (0 = sin límite)")
-        parser.add_argument("--taxids", nargs="*", type=int, default=None, help="Procesa solo estos taxids")
-        parser.add_argument("--kingdom", default="Animalia", help="Filtro kingdom para match/nameusage")
-        parser.add_argument("--dry-run", action="store_true", help="No escribe en DB, solo muestra acciones")
-        # Nuevos argumentos para NCBI genomes
-        parser.add_argument("--fetch-genomes", action="store_true", help="Traer información de genomas de NCBI")
-        parser.add_argument("--check-proteomes", action="store_true", help="Verificar proteomas (más lento)")
+        parser.add_argument("--dataset", default="COL25.12", help="ChecklistBank Dataset, e.g., COL25.12 or 3LR")
+        parser.add_argument("--system", default="col", help="tag system for ExternalTaxon.system")
+        parser.add_argument("--rank", default=None, help="Filter Taxon.rank (e.g., species)")
+        parser.add_argument("--limit", type=int, default=0, help="Limit number of Taxon to process (0 = no limit)")
+        parser.add_argument("--taxids", nargs="*", type=int, default=None, help="Process only these taxids")
+        parser.add_argument("--kingdom", default="Animalia", help="Filter kingdom for match/nameusage")
+        parser.add_argument("--dry-run", action="store_true", help="Do not write to DB, only show actions")
+        # New arguments for NCBI genomes
+        parser.add_argument("--fetch-genomes", action="store_true", help="Fetch NCBI genome information")
+        parser.add_argument("--check-proteomes", action="store_true", help="Check proteomes (slower)")
 
     def handle(self, *args, **opts):
         dataset = opts["dataset"]
@@ -53,11 +52,11 @@ class Command(BaseCommand):
             qs = qs[:limit]
 
         if not qs.exists():
-            raise CommandError("No hay Taxon para procesar con esos filtros.")
+            raise CommandError("No Taxon to process with those filters.")
 
         n_total = qs.count()
         n_high = n_review = n_nomatch = 0
-        n_genomes = 0  # Contador de genomas obtenidos
+        n_genomes = 0  # Counter for genomes obtained
 
         self.stdout.write(f"==> Dataset: {dataset}")
         self.stdout.write(f"==> Taxa   : {n_total}")
@@ -77,16 +76,16 @@ class Command(BaseCommand):
             )
 
             # ------------------------------------------------------------
-            # FIX CRÍTICO:
-            # ChecklistBank puede responder "no match" pero tu client igual
-            # construye un objeto m con external_id=None.
-            # En ese caso NO se debe insertar ExternalTaxon.
+            # CRITICAL FIX:
+            # ChecklistBank may respond "no match" but your client still
+            # constructs an object m with external_id=None.
+            # In that case, ExternalTaxon should NOT be inserted.
             # ------------------------------------------------------------
             ext_id = getattr(m, "external_id", None) if m is not None else None
             if not m or not ext_id:
                 n_nomatch += 1
                 if verbosity >= 2:
-                    # intenta dejar evidencia mínima sin romper si m.raw no existe
+                    # attempt to leave minimal evidence without breaking if m.raw does not exist
                     raw = getattr(m, "raw", None) if m is not None else None
                     hint = ""
                     if isinstance(raw, dict):
@@ -94,7 +93,7 @@ class Command(BaseCommand):
                     self.stdout.write(f"[NO_MATCH] taxid={t.taxid} name={t.scientific_name}{hint}")
                 continue
 
-            # A partir de aquí ya hay external_id real
+            # From here on, there is a real external_id
             decision, method, score = self._decide(t_rank=t.rank, m_rank=m.rank, m_status=m.status)
 
             if dry:
@@ -119,10 +118,10 @@ class Command(BaseCommand):
 
                 self._upsert_crosswalk(t, ext, qname, dataset, decision, method, score, m)
 
-            # --- NUEVO: Obtener genomas de NCBI ---
+            # --- NEW: Fetch NCBI genomes ---
             if fetch_genomes:
                 try:
-                    genome_count = fetch_and_save_genomes(t, check_proteomes=check_proteomes)
+                    genome_count = NCBIGenome.fetch_and_save(t, check_proteomes=check_proteomes)
                     n_genomes += genome_count
                     if verbosity >= 2 and genome_count > 0:
                         self.stdout.write(f"    [NCBI] {genome_count} genoma(s) guardado(s) para taxid={t.taxid}")

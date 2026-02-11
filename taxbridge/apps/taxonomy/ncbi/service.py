@@ -1,4 +1,4 @@
-# apps/taxonomy/services/ncbi_sync.py
+# apps/taxonomy/ncbi/service.py
 """
 Unified NCBI Genome Synchronization Service.
 
@@ -10,7 +10,7 @@ This module centralizes ALL NCBI sync logic:
 - COL matching integration
 
 Usage:
-    from apps.taxonomy.services.ncbi_sync import NCBISyncService
+    from apps.taxonomy.ncbi.service import NCBISyncService
     
     service = NCBISyncService(kingdom="metazoa")
     for result in service.sync_genomes(limit=100):

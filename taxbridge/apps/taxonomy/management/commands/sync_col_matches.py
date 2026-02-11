@@ -22,7 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.taxonomy.models import Taxon, ExternalTaxon, TaxonCrosswalk, NCBIGenome
-from apps.taxonomy.services.checklistbank import ChecklistBankClient, canonicalize_scientific_name
+from apps.taxonomy.ncbi.clients import ChecklistBankClient, canonicalize_scientific_name
 
 
 # Dataset COL en ChecklistBank (COL checklist actual)

@@ -1,7 +1,7 @@
 # taxonomy/management/commands/import_genomes_from_xlsx.py
 """
-Importa genomas desde el archivo XLSX de metazoa_genomes_taxonomy.
-Crea o actualiza registros NCBIGenome vinculándolos a Taxon existentes.
+Import genomes from the metazoa_genomes_taxonomy XLSX file.
+Create or update NCBIGenome records linked to existing Taxon.
 """
 from __future__ import annotations
 
@@ -15,22 +15,22 @@ from apps.taxonomy.models import NCBIGenome, Taxon
 
 
 class Command(BaseCommand):
-    help = "Importa genomas desde XLSX (metazoa_genomes_taxonomy.xlsx)"
+    help = "Import genomes from XLSX (metazoa_genomes_taxonomy.xlsx)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--file",
             default="data/metazoa_genomes_taxonomy.xlsx",
-            help="Ruta al XLSX",
+            help="Path to the XLSX file",
         )
-        parser.add_argument("--sheet", default="Sheet1", help="Nombre de hoja")
-        parser.add_argument("--dry-run", action="store_true", help="No escribe en DB")
-        parser.add_argument("--update", action="store_true", help="Actualiza existentes")
+        parser.add_argument("--sheet", default="Sheet1", help="Sheet name")
+        parser.add_argument("--dry-run", action="store_true", help="Do not write to DB")
+        parser.add_argument("--update", action="store_true", help="Update existing records")
 
     def handle(self, *args, **opts):
         xlsx = Path(opts["file"])
         if not xlsx.exists():
-            raise CommandError(f"No existe el archivo: {xlsx}")
+            raise CommandError(f"File does not exist: {xlsx}")
 
         dry = opts["dry_run"]
         update = opts["update"]
@@ -38,18 +38,18 @@ class Command(BaseCommand):
 
         wb = openpyxl.load_workbook(xlsx, read_only=True, data_only=True)
         if sheet_name not in wb.sheetnames:
-            raise CommandError(f"Hoja '{sheet_name}' no existe. Disponibles: {wb.sheetnames}")
+            raise CommandError(f"Sheet '{sheet_name}' does not exist. Available: {wb.sheetnames}")
         ws = wb[sheet_name]
 
-        # Leer headers
+        # Read headers
         header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
         if not header_row:
-            raise CommandError("La hoja está vacía")
+            raise CommandError("Sheet is empty or missing header row")
 
         header = [str(x).strip() if x else "" for x in header_row]
-        self.stdout.write(f"Columnas encontradas: {header}")
+        self.stdout.write(f"Columns found: {header}")
 
-        # Mapeo de columnas
+        # Column mapping: XLSX column name -> NCBIGenome field
         col_map = {
             "Phylum": "phylum",
             "Clase": "class_name",
@@ -66,7 +66,7 @@ class Command(BaseCommand):
             "Protein-Coding": "protein_coding",
         }
 
-        # Encontrar índices
+        # Find indices
         idx = {}
         for xlsx_col, field in col_map.items():
             if xlsx_col in header:
@@ -96,7 +96,7 @@ class Command(BaseCommand):
                         stats["skipped"] += 1
                         continue
 
-                    # Buscar Taxon por nombre
+                    # Search Taxon by name (case-insensitive)
                     taxon = None
                     if organism:
                         taxon = Taxon.objects.filter(scientific_name__iexact=organism).first()

@@ -12,7 +12,7 @@ export const VIS = {
     BTN_W: 34,
     ROW_GAP: 50,
     COL_GAP: 200,
-    MAX_INITIAL_DEPTH: 3  // Max depth to expand initially for large trees
+    MAX_INITIAL_DEPTH: 0  // Start fully collapsed (only root visible)
 };
 
 export const AUTOFIT = {

@@ -1,6 +1,5 @@
 // taxonomy/static/taxonomy/js/trees/tree_zoom.js
-// Zoom/fit aislado. Depende de d3 global (igual que tu archivo original).
-
+// Tree zooming and auto-fit logic.
 export function initZoom({ svgRoot, gZoom, tooltip, onUserInteracted }) {
   const zoomBehavior = d3
     .zoom()

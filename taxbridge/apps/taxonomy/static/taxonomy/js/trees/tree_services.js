@@ -1,5 +1,5 @@
-// taxonomy/static/taxonomy/js/trees/tree_services.js
-// Servicios sobre fullData/scope: búsqueda por key, conteos, listados, matches.
+﻿// taxonomy/static/taxonomy/js/trees/tree_services.js
+// Services over fullData/scope: search by key, counts, listings, matches.
 
 import { walkTree, walkTreeCut, pushPart, keyOf, getKids } from "./tree_keying.js";
 
@@ -25,7 +25,7 @@ export function countSpeciesUnderNode(node) {
       count += 1;
       return;
     }
-    // Buscar en children o _children
+    // Search in children or _children
     const kids = getKids(n);
     for (const c of kids) dfs(c);
   })(node);
@@ -44,9 +44,9 @@ export function countSpeciesUnderKey(fullData, rootKey, { findByKey = findInTree
 
 
 /**
- * Contexto de scope para generar keys estables dentro de un árbol o clado.
- * - Si hay samplingRootKey, baseParts = hit.parts y parentParts = baseParts.slice(0,-1)
- * - Si no, baseParts = [{rank: scope.rank, name: scope.name}] y parentParts=[]
+ * Scope context for generating stable keys within a tree or clade.
+ * - If samplingRootKey exists, baseParts = hit.parts and parentParts = baseParts.slice(0,-1)
+ * - Otherwise, baseParts = [{rank: scope.rank, name: scope.name}] and parentParts=[]
  */
 export function makeScopeContext({ fullData, scopeNode, samplingRootKey, findByKey = findInTreeByKey }) {
   if (!scopeNode) return { scope: null, baseParts: [], parentParts: [] };
@@ -95,7 +95,7 @@ export function listCladesAtRank({ scope, parentParts, targetRank }) {
         species: countSpeciesUnderNode(node),
         hasChildren: Array.isArray(node?.children) && node.children.length > 0,
       });
-      return false; // no desciende
+      return false; // does not descend
     }
     return true;
   });

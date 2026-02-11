@@ -1,8 +1,8 @@
-// taxonomy/static/taxonomy/js/trees/tree_keying.js
-// Utilidades puras: ranks, parts/keys + recorridos DFS.
+﻿// taxonomy/static/taxonomy/js/trees/tree_keying.js
+// Pure utilities: ranks, parts/keys + DFS traversals.
 
 // ============================================================
-// Constantes y funciones de ranks
+// Rank constants and functions
 // ============================================================
 
 export const RANK_ORDER = [
@@ -27,7 +27,7 @@ export function rankIndex(rank) {
 }
 
 // ============================================================
-// Funciones de keys
+// Key functions
 // ============================================================
 
 export function pushPart(parts, node) {
@@ -64,7 +64,7 @@ export function walkTree(node, parts, visitor) {
     for (const c of kids) walkTree(c, nextParts, visitor);
 }
 
-// visitor devuelve false => corta descendencia
+// visitor returns false => cuts descent
 export function walkTreeCut(node, parts, visitor) {
     if (!node) return;
     const nextParts = pushPart(parts, node);

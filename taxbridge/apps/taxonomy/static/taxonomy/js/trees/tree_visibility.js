@@ -1,23 +1,39 @@
-// taxonomy/static/taxonomy/js/trees/tree_visibility.js
-// Construcción del árbol visible (puro sobre fullData + policy).
+﻿// taxonomy/static/taxonomy/js/trees/tree_visibility.js
+// Visible tree construction (pure over fullData + policy).
 
 import { pushPart, keyOf } from "./tree_keying.js";
 import { findInTreeByKey } from "./tree_services.js";
 
 /**
- * Builder genérico para materializar un subárbol visible:
- * - leafByCut(node) => true fuerza hoja (borra children)
- * - shouldExpandKey(node,key) => decide expansión si tiene hijos
+ * Check if a key is an ancestor of (or equal to) any of the filter keys.
+ * A key is relevant if any filterKey starts with this key.
  */
-export function makeVisibleBuilder({ shouldExpandKey, leafByCut }) {
+function isRelevantToFilter(key, filterKeys) {
+  if (!filterKeys || filterKeys.size === 0) return true;
+  for (const fk of filterKeys) {
+    if (fk === key || fk.startsWith(key + "|")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Generic builder to materialize a visible subtree:
+ * - leafByCut(node) => true forces leaf (deletes children)
+ * - shouldExpandKey(node,key) => decides expansion if it has children
+ * - filterKeys (optional Set) => only include children whose paths lead to these keys
+ */
+export function makeVisibleBuilder({ shouldExpandKey, leafByCut, filterKeys }) {
   return function build(node, parts) {
     const nextParts = pushPart(parts, node);
     const key = keyOf(nextParts);
 
-    // Buscar hijos en children O _children (nodos colapsados del backend)
-    const kids = Array.isArray(node.children) && node.children.length
+    // Search for children in children OR _children (collapsed nodes from backend)
+    let kids = Array.isArray(node.children) && node.children.length
       ? node.children
       : (Array.isArray(node._children) ? node._children : []);
+    
     const out = { ...node, __key: key };
 
     if (leafByCut(node)) {
@@ -39,6 +55,21 @@ export function makeVisibleBuilder({ shouldExpandKey, leafByCut }) {
       return out;
     }
 
+    // Filter children if filterKeys is active
+    if (filterKeys && filterKeys.size > 0) {
+      kids = kids.filter(child => {
+        const childParts = pushPart(nextParts, child);
+        const childKey = keyOf(childParts);
+        return isRelevantToFilter(childKey, filterKeys);
+      });
+    }
+
+    if (kids.length === 0) {
+      delete out.children;
+      out.__hasChildren = true; // Original had children, just filtered out
+      return out;
+    }
+
     out.children = kids.map((c) => build(c, nextParts));
     out.__hasChildren = true;
     return out;
@@ -48,7 +79,8 @@ export function makeVisibleBuilder({ shouldExpandKey, leafByCut }) {
 /**
  * buildVisibleTree:
  * - Caso normal: buildVisible(fullData, [])
- * - Caso clado: crea ruta ROOT->...->clado y cuelga el subárbol visible del clado
+ * - Clade case: creates path ROOT->...->clade and attaches the visible subtree of the clade
+ * - filterKeys: optional Set of keys to filter visible children
  */
 export function buildVisibleTree({
   fullData,
@@ -56,37 +88,31 @@ export function buildVisibleTree({
   samplingRootKey,
   shouldExpandKey,
   leafByCut,
+  filterKeys,
   findByKey = findInTreeByKey,
 }) {
   if (!fullData) return null;
 
-  const buildVisible = makeVisibleBuilder({ shouldExpandKey, leafByCut });
+  const buildVisible = makeVisibleBuilder({ shouldExpandKey, leafByCut, filterKeys });
 
-  // Caso A: No hay scope seleccionado - mostrar árbol completo
+  // Case A: No scope selected - show full tree
   if (!(samplingMode === "node" && samplingRootKey)) {
-    console.log("[tree_visibility] Caso A: árbol completo (no scope)");
     return buildVisible(fullData, []);
   }
 
-  // Caso B: Hay scope - mostrar ruta + subárbol del scope
-  console.log("[tree_visibility] Caso B: scope activo:", samplingRootKey);
-  
+  // Case B: Scope present - show path + subtree of the scope
   const hit = findByKey(fullData, samplingRootKey);
   if (!hit) {
-    console.log("[tree_visibility] Scope no encontrado, fallback a árbol completo");
-    // fallback al árbol completo
+    // fallback to the full tree
     return buildVisible(fullData, []);
   }
   
-  console.log("[tree_visibility] Scope encontrado:", hit.node?.name, "parts:", hit.parts?.length);
-
-  const parts = hit.parts; // ROOT..clado
+  const parts = hit.parts; // ROOT..clade
   const rootNode = fullData;
 
-  // Caso especial: si el scope es la raíz del árbol (parts.length === 1),
-  // simplemente construir el árbol visible normal marcando el root como activeRoot
+  // Special case: if the scope is the tree root (parts.length === 1),
+  // simply build the normal visible tree marking root as activeRoot
   if (parts.length === 1) {
-    console.log("[tree_visibility] Caso especial: scope es la raíz");
     const visible = buildVisible(fullData, []);
     visible.__activeRoot = true;
     return visible;
@@ -109,7 +135,7 @@ export function buildVisibleTree({
       return out;
     }
 
-    // Buscar hijos en children O _children
+    // Search for children in children OR _children
     const kids = Array.isArray(fullNode.children) && fullNode.children.length
       ? fullNode.children
       : (Array.isArray(fullNode._children) ? fullNode._children : []);

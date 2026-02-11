@@ -1,14 +1,14 @@
-# taxonomy/services/sampling.py
+﻿# taxonomy/services/sampling.py
 """
-Servicio de muestreo taxonómico (Sampling).
-Migrado desde sampling_filters.js para centralizar lógica en backend.
+Taxonomic sampling service.
+Migrated from sampling_filters.js to centralize logic in the backend.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Set
 from functools import lru_cache
 
-from apps.taxonomy.services.taxonomy_core import (
+from apps.taxonomy.utils import (
     RANK_ORDER,
     LAST_RANK_INDEX,
     norm_rank,
@@ -21,7 +21,7 @@ from apps.taxonomy.services.taxonomy_core import (
 
 
 def parent_key_above_rank(key: str, rank: str) -> Optional[str]:
-    """Obtiene el key padre por encima del rank especificado."""
+    """Gets the parent key above the specified rank."""
     target = norm_rank(rank)
     parts = parse_key_parts(key)
     
@@ -34,13 +34,13 @@ def parent_key_above_rank(key: str, rank: str) -> Optional[str]:
 
 
 # ============================================================
-# Índices y cache de nodos
+# Indexes and node cache
 # ============================================================
 
 class TreeIndex:
     """
-    Índice bidireccional para búsqueda rápida de nodos por key.
-    Construido una vez al cargar el árbol.
+    Bidirectional index for fast node lookup by key.
+    Built once when loading the tree.
     """
     
     def __init__(self):
@@ -48,7 +48,7 @@ class TreeIndex:
         self._count_cache: Dict[str, Dict[str, int]] = {}  # key -> {rank -> count}
     
     def build(self, root: Dict[str, Any]) -> None:
-        """Construye el índice desde la raíz del árbol."""
+        """Builds the index from the tree root."""
         self._node_by_key.clear()
         self._count_cache.clear()
         
@@ -56,7 +56,7 @@ class TreeIndex:
             self._walk_and_index(root, [])
     
     def _walk_and_index(self, node: Dict[str, Any], parts: List[Dict[str, str]]) -> None:
-        """Recorre el árbol indexando cada nodo."""
+        """Walks the tree indexing each node."""
         next_parts = parts + [{"rank": node.get("rank", "?"), "name": node.get("name", "")}]
         key = path_key_from_parts(next_parts)
         
@@ -67,23 +67,23 @@ class TreeIndex:
             self._walk_and_index(child, next_parts)
     
     def get_node(self, key: str) -> Optional[Dict[str, Any]]:
-        """Obtiene un nodo por su key."""
+        """Gets a node by its key."""
         return self._node_by_key.get(key)
     
     def get_key(self, node: Dict[str, Any]) -> Optional[str]:
-        """Obtiene el key de un nodo (búsqueda inversa)."""
-        # Búsqueda O(n), pero generalmente usamos get_node
+        """Gets the key of a node (reverse lookup)."""
+        # O(n) lookup, but we generally use get_node
         for k, n in self._node_by_key.items():
             if n is node:
                 return k
         return None
     
     def count_rank_under(self, node: Dict[str, Any], target_rank: str) -> int:
-        """Cuenta nodos de un rank específico bajo un nodo (memoizado)."""
+        """Counts nodes of a specific rank under a node (memoized)."""
         if not node:
             return 0
         
-        # Usamos id del dict como identificador (para memo)
+        # We use the dict id as identifier (for memoization)
         node_id = id(node)
         target = norm_rank(target_rank)
         
@@ -99,7 +99,7 @@ class TreeIndex:
         return count
     
     def _count_recursive(self, node: Dict[str, Any], target_rank: str) -> int:
-        """Cuenta recursivamente nodos del rank dado."""
+        """Recursively counts nodes of the given rank."""
         if not node:
             return 0
         
@@ -114,7 +114,7 @@ class TreeIndex:
 
 
 def list_nodes_at_rank_under(root: Dict[str, Any], target_rank: str) -> List[Dict[str, Any]]:
-    """Lista todos los nodos de un rank específico bajo root."""
+    """Lists all nodes of a specific rank under root."""
     target = norm_rank(target_rank)
     if not root:
         return []
@@ -139,12 +139,12 @@ def list_nodes_at_rank_under(root: Dict[str, Any], target_rank: str) -> List[Dic
 
 
 # ============================================================
-# Cálculo de Quotas
+# Quota Calculation
 # ============================================================
 
 @dataclass
 class CladeQuota:
-    """Representa un clado con su quota asignada."""
+    """Represents a clade with its assigned quota."""
     key: str
     name: str
     rank: str
@@ -160,18 +160,18 @@ def compute_quotas(
     clades: List[Dict[str, Any]]
 ) -> Tuple[List[CladeQuota], str]:
     """
-    Calcula la distribución de K especies entre clados.
+    Calculates the distribution of K species among clades.
     
     Args:
-        K: Total de especies a seleccionar
-        allocation: "balanced" o "proportional"
-        min_one_per_clade: Si True, garantiza al menos 1 por clado
-        clades: Lista de {key, name, rank, species, node}
+        K: Total number of species to select
+        allocation: "balanced" or "proportional"
+        min_one_per_clade: If True, guarantees at least 1 per clade
+        clades: List of {key, name, rank, species, node}
     
     Returns:
-        Tuple de (lista de CladeQuota, nota/mensaje)
+        Tuple of (list of CladeQuota, note/message)
     """
-    # Filtrar clados con especies y ordenar por riqueza descendente
+    # Filter clades with species and sort by richness descending
     items = [c for c in clades if (c.get("species") or 0) > 0]
     items.sort(key=lambda c: c.get("species", 0), reverse=True)
     
@@ -181,7 +181,7 @@ def compute_quotas(
     
     quotas = [0] * m
     
-    # Caso especial: K < número de clados con minOnePerClade
+    # Special case: K < number of clades with minOnePerClade
     if min_one_per_clade and K < m:
         for i in range(min(K, m)):
             quotas[i] = 1
@@ -197,14 +197,14 @@ def compute_quotas(
             for i in range(m)
         ], f"minOnePerClade ON but K ({K}) < #clades ({m}) => assigned 1 to top-K clades only"
     
-    # Distribución según modo
+    # Distribution according to mode
     if allocation == "balanced":
         base = K // m
         rem = K % m
         for i in range(m):
             quotas[i] = base + (1 if i < rem else 0)
     else:
-        # Proporcional a la riqueza
+        # Proportional to richness
         total = sum(c.get("species", 0) for c in items) or 1
         raw = [(K * c.get("species", 0)) / total for c in items]
         
@@ -212,7 +212,7 @@ def compute_quotas(
         floor_vals = [int(x) for x in raw]
         quotas = floor_vals.copy()
         
-        # Distribuir resto por fracciones más altas
+        # Distribute remainder by highest fractions
         used = sum(floor_vals)
         rem = K - used
         
@@ -225,12 +225,12 @@ def compute_quotas(
         for k in range(min(rem, len(frac_order))):
             quotas[frac_order[k]] += 1
     
-    # Aplicar mínimo 1 por clado si está habilitado
+    # Apply minimum 1 per clade if enabled
     if min_one_per_clade:
         for i in range(m):
             quotas[i] = max(1, quotas[i])
         
-        # Reducir si excede K
+        # Reduce if exceeds K
         total_sum = sum(quotas)
         while total_sum > K:
             reduced = False
@@ -244,7 +244,7 @@ def compute_quotas(
             if not reduced:
                 break
     
-    # Limitar quota a especies disponibles
+    # Limit quota to available species
     for i in range(m):
         quotas[i] = min(quotas[i], items[i].get("species", 0))
     
@@ -264,7 +264,7 @@ def compute_quotas(
 
 
 # ============================================================
-# Selección de Tips (especies)
+# Tip Selection (species)
 # ============================================================
 
 def pick_tips_in_clade(
@@ -274,8 +274,8 @@ def pick_tips_in_clade(
     index: TreeIndex
 ) -> List[Dict[str, str]]:
     """
-    Selecciona determinísticamente `quota` tips del rank dado bajo el clado.
-    Ordenados alfabéticamente por key para reproducibilidad.
+    Deterministically selects `quota` tips of the given rank under the clade.
+    Sorted alphabetically by key for reproducibility.
     """
     tips = list_nodes_at_rank_under(clade_node, target_rank)
     
@@ -288,7 +288,7 @@ def pick_tips_in_clade(
             "key": key,
         })
     
-    # Ordenar por key y tomar quota
+    # Sort by key and take quota
     enriched.sort(key=lambda x: x["key"])
     selected = enriched[:quota]
     
@@ -301,7 +301,7 @@ def pick_tips_in_clade(
 
 @dataclass
 class IngroupResult:
-    """Resultado del muestreo de ingroup."""
+    """Ingroup sampling result."""
     note: str
     allocation_rank: str
     target_rank: str
@@ -319,17 +319,17 @@ def run_ingroup_sampling(
     index: TreeIndex
 ) -> IngroupResult:
     """
-    Ejecuta el muestreo de ingroup.
+    Executes ingroup sampling.
     
     Args:
         config: {K, allocation_rank, target_rank, allocation, min_one_per_clade}
-        scope_node: Nodo raíz del scope
-        scope_root_key: Key del scope root
-        target_keys: Lista de keys de clados objetivo (opcional)
-        index: TreeIndex para búsquedas
+        scope_node: Root node of the scope
+        scope_root_key: Key of the scope root
+        target_keys: List of target clade keys (optional)
+        index: TreeIndex for lookups
     
     Returns:
-        IngroupResult con los taxa seleccionados
+        IngroupResult with the selected taxa
     """
     alloc_rank = norm_rank(config.get("allocation_rank", "family"))
     target_rank = norm_rank(config.get("target_rank", "species"))
@@ -340,7 +340,7 @@ def run_ingroup_sampling(
     targets = [k for k in (target_keys or []) if k]
     use_targets = len(targets) > 0
     
-    # Resolver target scopes
+    # Resolve target scopes
     target_scopes = []
     if use_targets:
         for k in targets:
@@ -357,7 +357,7 @@ def run_ingroup_sampling(
                     "rank": norm_rank(node.get("rank", ""))
                 })
     
-    # Si no hay targets válidos, usar el scope completo
+    # If there are no valid targets, use the full scope
     if not target_scopes:
         target_scopes = [{
             "key": scope_root_key,
@@ -367,7 +367,7 @@ def run_ingroup_sampling(
             "rank": norm_rank(scope_node.get("rank", "")) if scope_node else ""
         }]
     
-    # Distribuir K entre scopes
+    # Distribute K among scopes
     total_species_scopes = sum(s["species"] for s in target_scopes) or 1
     
     if len(target_scopes) == 1:
@@ -381,7 +381,7 @@ def run_ingroup_sampling(
             for i, s in enumerate(target_scopes)
         ]
     else:
-        # Proporcional
+        # Proportional
         raw = [(K * s["species"]) / total_species_scopes for s in target_scopes]
         floor_vals = [int(x) for x in raw]
         used = sum(floor_vals)
@@ -402,18 +402,18 @@ def run_ingroup_sampling(
             for i, s in enumerate(target_scopes)
         ]
     
-    # Muestrear cada scope
+    # Sample each scope
     picked_by_scopes = []
     for scope in scopes_with_k:
         scope_rank = norm_rank(scope["node"].get("rank", "") if scope["node"] else "")
         
-        # Obtener nodos de allocation rank
+        # Get nodes at allocation rank
         if scope["node"] and scope_rank == alloc_rank:
             alloc_nodes = [scope["node"]]
         else:
             alloc_nodes = list_nodes_at_rank_under(scope["node"], alloc_rank)
         
-        # Construir lista de clados
+        # Build list of clades
         clades = []
         for n in alloc_nodes:
             key = index.get_key(n) or f"{alloc_rank}:{n.get('name', '')}"
@@ -426,10 +426,10 @@ def run_ingroup_sampling(
                 "node": n
             })
         
-        # Calcular quotas
+        # Calculate quotas
         quota_result, note = compute_quotas(scope["K"], allocation, min_one_per_clade, clades)
         
-        # Seleccionar tips por clado
+        # Select tips per clade
         picked_by_clade = []
         for qrow in quota_result:
             picked = pick_tips_in_clade(qrow.node, target_rank, qrow.quota, index)
@@ -456,7 +456,7 @@ def run_ingroup_sampling(
             "picked": flat
         })
     
-    # Merge y deduplicar
+    # Merge and deduplicate
     seen: Set[str] = set()
     ingroup_picked = []
     for blk in picked_by_scopes:
@@ -486,7 +486,7 @@ def run_ingroup_sampling(
 
 @dataclass
 class OutgroupResult:
-    """Resultado del muestreo de outgroup."""
+    """Outgroup sampling result."""
     picked: List[Dict[str, str]]
     meta: Dict[str, Any]
 
@@ -498,16 +498,16 @@ def run_outgroup_sampling(
     index: TreeIndex
 ) -> OutgroupResult:
     """
-    Ejecuta el muestreo de outgroup.
+    Executes outgroup sampling.
     
     Args:
         config: {outgroup_rank, outgroup_n}
-        scope_root_key: Key del scope root
-        target_rank: Rank de las especies a muestrear
-        index: TreeIndex para búsquedas
+        scope_root_key: Key of the scope root
+        target_rank: Rank of species to sample
+        index: TreeIndex for lookups
     
     Returns:
-        OutgroupResult con los taxa seleccionados
+        OutgroupResult with the selected taxa
     """
     out_rank = norm_rank(config.get("outgroup_rank", ""))
     n = int(config.get("outgroup_n", 2))
@@ -534,7 +534,7 @@ def run_outgroup_sampling(
             meta={"rank_distance": out_rank, "n": n, "note": "parent not found"}
         )
     
-    # Obtener clados candidatos
+    # Get candidate clades
     cand_nodes = list_nodes_at_rank_under(parent_node, out_rank)
     
     candidates = []
@@ -555,7 +555,7 @@ def run_outgroup_sampling(
             "species": species
         })
     
-    # Ordenar por riqueza descendente, luego por key
+    # Sort by richness descending, then by key
     candidates.sort(key=lambda c: (-c["species"], c["key"]))
     
     if not candidates:
@@ -564,7 +564,7 @@ def run_outgroup_sampling(
             meta={"rank_distance": out_rank, "n": n, "note": "no candidates"}
         )
     
-    # Seleccionar outgroup
+    # Select outgroup
     outgroup_picked = []
     idx = 0
     max_iterations = n * 10
@@ -583,12 +583,12 @@ def run_outgroup_sampling(
 
 
 # ============================================================
-# API Principal
+# Main API
 # ============================================================
 
 @dataclass
 class SamplingResult:
-    """Resultado completo del muestreo."""
+    """Complete sampling result."""
     ingroup: IngroupResult
     outgroup: OutgroupResult
 
@@ -598,30 +598,30 @@ def run_sampling(
     config: Dict[str, Any]
 ) -> SamplingResult:
     """
-    Ejecuta el muestreo completo (ingroup + outgroup).
+    Executes complete sampling (ingroup + outgroup).
     
     Args:
-        tree_data: Árbol completo (dict con children)
+        tree_data: Complete tree (dict with children)
         config: {
-            scope_key: str (opcional),
-            targets: List[str] (opcional),
+            scope_key: str (optional),
+            targets: List[str] (optional),
             K: int,
             allocation_rank: str,
             target_rank: str,
             allocation: "balanced" | "proportional",
             min_one_per_clade: bool,
-            outgroup_rank: str (opcional),
+            outgroup_rank: str (optional),
             outgroup_n: int
         }
     
     Returns:
-        SamplingResult con ingroup y outgroup
+        SamplingResult with ingroup and outgroup
     """
-    # Construir índice
+    # Build index
     index = TreeIndex()
     index.build(tree_data)
     
-    # Resolver scope
+    # Resolve scope
     scope_key = config.get("scope_key")
     if scope_key:
         scope_node = index.get_node(scope_key)
