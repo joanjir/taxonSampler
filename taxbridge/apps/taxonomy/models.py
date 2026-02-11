@@ -491,6 +491,158 @@ class NCBIGenome(models.Model):
         help_text="Score de calidad calculado",
     )
 
+    # Anotación de genes
+    genes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número total de genes",
+    )
+    protein_coding = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número de genes codificantes de proteínas",
+    )
+    non_coding_genes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número de genes no codificantes",
+    )
+    pseudogenes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número de pseudogenes",
+    )
+
+    # Extended genome metrics
+    total_sequence_length = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Tamaño total del genoma en bp",
+    )
+    gc_percent = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Porcentaje de GC del genoma",
+    )
+    chromosome_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número total de cromosomas",
+    )
+    contig_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Número de contigs",
+    )
+
+    # Sequencing and assembly info
+    sequencing_tech = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Tecnología de secuenciación",
+    )
+    assembly_method = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Método de ensamblaje",
+    )
+    release_date = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Fecha de liberación del ensamblaje",
+    )
+    source_database = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="refseq o genbank",
+    )
+
+    # Annotation info
+    annotation_provider = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Proveedor de anotación (NCBI RefSeq, WormBase, etc.)",
+    )
+    annotation_status = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Estado de anotación (Full annotation, etc.)",
+    )
+
+    # BUSCO completeness scores
+    busco_complete = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="BUSCO: % genes completos",
+    )
+    busco_single_copy = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="BUSCO: % single copy",
+    )
+    busco_duplicated = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="BUSCO: % duplicados",
+    )
+    busco_fragmented = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="BUSCO: % fragmentados",
+    )
+    busco_missing = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="BUSCO: % faltantes",
+    )
+    busco_lineage = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Linaje BUSCO usado (ej: actinopterygii_odb10)",
+    )
+
+    # Strain/isolate info
+    strain = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Cepa/strain del organismo",
+    )
+    ecotype = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Ecotipo del organismo",
+    )
+
+    # Nombres adicionales
+    common_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Nombre común del organismo",
+    )
+    directory_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Nombre de directorio en NCBI",
+    )
+
+    # Clasificación taxonómica (cacheada del xlsx o taxon)
+    phylum = models.CharField(max_length=128, db_index=True, blank=True, default="")
+    class_name = models.CharField(max_length=128, db_index=True, blank=True, default="")
+
     # Proteoma
     has_proteome = models.BooleanField(
         default=False,
@@ -516,6 +668,35 @@ class NCBIGenome(models.Model):
         help_text="Es el mejor ensamblaje para este taxón",
     )
 
+    # Vinculación con CoL
+    external_taxon = models.ForeignKey(
+        ExternalTaxon,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ncbi_genomes",
+        help_text="Taxón CoL vinculado (via matching)",
+    )
+    
+    COL_MATCH_STATUS_CHOICES = [
+        ("unmatched", "Sin vincular"),
+        ("matched", "Vinculado"),
+        ("needs_review", "Requiere revisión"),
+        ("no_match", "Sin coincidencia en CoL"),
+    ]
+    col_match_status = models.CharField(
+        max_length=32,
+        choices=COL_MATCH_STATUS_CHOICES,
+        default="unmatched",
+        db_index=True,
+        help_text="Estado de vinculación con CoL",
+    )
+    col_match_notes = models.TextField(
+        blank=True,
+        default="",
+        help_text="Notas sobre el matching con CoL",
+    )
+
     # Metadatos
     raw = models.JSONField(
         default=dict,
@@ -537,6 +718,9 @@ class NCBIGenome(models.Model):
             models.Index(fields=["genome_level"]),
             models.Index(fields=["quality_score"]),
             models.Index(fields=["has_proteome"]),
+            models.Index(fields=["phylum"]),
+            models.Index(fields=["class_name"]),
+            models.Index(fields=["col_match_status"]),
         ]
 
     def __str__(self) -> str:
@@ -687,6 +871,161 @@ class NCBISyncRun(models.Model):
     def mark_failed(self, error: str):
         """Marca como fallido."""
         from django.utils import timezone
+        self.status = "failed"
+        self.finished_at = timezone.now()
+        self.error_message = error
+        self.save(update_fields=["status", "finished_at", "error_message"])
+
+
+# ============================================================
+# TaxonSyncRun (Sincronización NCBI ↔ COL)
+# ============================================================
+class TaxonSyncRun(models.Model):
+    """
+    Registra sincronizaciones de taxones: descarga de NCBI y matching con COL.
+    Similar a NCBISyncRun pero para el proceso completo de taxones.
+    """
+
+    STATUS_CHOICES = [
+        ("pending", "Pendiente"),
+        ("fetching_ncbi", "Descargando NCBI"),
+        ("matching_col", "Sincronizando COL"),
+        ("completed", "Completado"),
+        ("failed", "Fallido"),
+        ("cancelled", "Cancelado"),
+    ]
+
+    KINGDOM_CHOICES = [
+        ("metazoa", "Metazoa"),
+        ("fungi", "Fungi"),
+        ("viridiplantae", "Viridiplantae"),
+        ("bacteria", "Bacteria"),
+        ("archaea", "Archaea"),
+    ]
+
+    # Estado
+    status = models.CharField(
+        max_length=24,
+        choices=STATUS_CHOICES,
+        default="pending",
+        db_index=True,
+    )
+    
+    # Reino/grupo a sincronizar
+    kingdom = models.CharField(
+        max_length=32,
+        choices=KINGDOM_CHOICES,
+        default="metazoa",
+        db_index=True,
+    )
+
+    # Configuración
+    config = models.JSONField(
+        default=dict,
+        help_text="Configuración de la sincronización (límite, filtros, etc.)",
+    )
+
+    # Celery task tracking
+    celery_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="ID de la tarea Celery",
+    )
+
+    # Progreso NCBI
+    ncbi_total = models.PositiveIntegerField(default=0)
+    ncbi_fetched = models.PositiveIntegerField(default=0)
+    ncbi_filtered = models.PositiveIntegerField(default=0)
+    taxa_created = models.PositiveIntegerField(default=0)
+    genomes_created = models.PositiveIntegerField(default=0)
+
+    # Progreso COL
+    col_total = models.PositiveIntegerField(default=0)
+    col_matched = models.PositiveIntegerField(default=0)
+    col_unmatched = models.PositiveIntegerField(default=0)
+    external_taxa_created = models.PositiveIntegerField(default=0)
+    crosswalks_created = models.PositiveIntegerField(default=0)
+
+    # Tiempos
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    # Errores y logs
+    error_message = models.TextField(blank=True, default="")
+    log = models.JSONField(
+        default=list,
+        help_text="Log detallado de la ejecución",
+    )
+
+    class Meta:
+        verbose_name = "Taxon Sync Run"
+        verbose_name_plural = "Taxon Sync Runs"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["kingdom"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"TaxonSync #{self.pk} [{self.kingdom}] [{self.status}]"
+
+    @property
+    def progress_percent(self) -> float:
+        """Porcentaje de progreso total."""
+        # Fase 1: NCBI (50%), Fase 2: COL (50%)
+        if self.status == "fetching_ncbi":
+            if self.ncbi_total == 0:
+                return 0.0
+            return round((self.ncbi_fetched / max(self.ncbi_total, 1)) * 50, 1)
+        elif self.status == "matching_col":
+            if self.col_total == 0:
+                return 50.0
+            return round(50 + (self.col_matched + self.col_unmatched) / max(self.col_total, 1) * 50, 1)
+        elif self.status == "completed":
+            return 100.0
+        return 0.0
+
+    @property
+    def duration_seconds(self) -> int | None:
+        if not self.started_at:
+            return None
+        end = self.finished_at or timezone.now()
+        return int((end - self.started_at).total_seconds())
+
+    @property
+    def is_running(self) -> bool:
+        return self.status in ("fetching_ncbi", "matching_col")
+
+    def add_log(self, level: str, message: str, **kwargs):
+        """Añade entrada al log."""
+        entry = {
+            "timestamp": timezone.now().isoformat(),
+            "level": level,
+            "message": message,
+            **kwargs,
+        }
+        self.log.append(entry)
+        self.save(update_fields=["log"])
+
+    def mark_started(self):
+        self.status = "fetching_ncbi"
+        self.started_at = timezone.now()
+        self.save(update_fields=["status", "started_at"])
+
+    def mark_col_phase(self):
+        self.status = "matching_col"
+        self.save(update_fields=["status"])
+
+    def mark_completed(self):
+        self.status = "completed"
+        self.finished_at = timezone.now()
+        self.save(update_fields=["status", "finished_at"])
+
+    def mark_failed(self, error: str):
         self.status = "failed"
         self.finished_at = timezone.now()
         self.error_message = error

@@ -1,26 +1,68 @@
 # Create your views here.
 import json
 from django.http import JsonResponse, HttpResponse
-from django.views.decorators.http import require_POST, require_GET
-from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_POST
+from django.shortcuts import render
+from django.db.models import Count, Q
 
-from .models import SamplingRun
+from .models import NCBIGenome, Taxon, ExternalTaxon, TaxonCrosswalk
 from .services.orthology_tree import sampling_to_tree_artifacts
 
 
-
-
-
-
-
 def home(request):
-    """Home page with navigation to all features."""
-    return render(request, "taxonomy/pages/home.html")
-
-
-def scroll_test(request):
-    return render(request, "taxonomy/pages/test.html")
+    """Dashboard principal con estadísticas y lista de genomas."""
+    
+    # Estadísticas de genomas usando col_match_status (consistente con el listado)
+    total_genomes = NCBIGenome.objects.count()
+    matched_genomes = NCBIGenome.objects.filter(col_match_status="matched").count()
+    unmatched_genomes = NCBIGenome.objects.filter(col_match_status="unmatched").count()
+    # no_match (not found in COL) también cuenta como needs_review
+    needs_review_count = NCBIGenome.objects.filter(
+        Q(col_match_status="needs_review") | Q(col_match_status="no_match")
+    ).count()
+    
+    # Estadísticas por nivel de genoma
+    genome_levels = list(
+        NCBIGenome.objects
+        .values("genome_level")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+    
+    # Estadísticas por phylum (todos los phyla, no solo top 10)
+    phylum_stats = list(
+        NCBIGenome.objects
+        .exclude(phylum="")
+        .exclude(phylum__isnull=True)
+        .values("phylum")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+    
+    # Estadísticas de taxonomía
+    total_ncbi_taxa = Taxon.objects.count()
+    total_col_taxa = ExternalTaxon.objects.filter(system="col").count()
+    total_col_species = ExternalTaxon.objects.filter(system="col", rank="species", status="accepted").count()
+    total_crosswalks = TaxonCrosswalk.objects.filter(is_active=True).count()
+    
+    context = {
+        # Genomas
+        "total_genomes": total_genomes,
+        "matched_genomes": matched_genomes,
+        "unmatched_genomes": unmatched_genomes,
+        "needs_review": needs_review_count,
+        "genome_levels": genome_levels,
+        "phylum_stats": phylum_stats,
+        # Taxonomía
+        "total_ncbi_taxa": total_ncbi_taxa,
+        "total_col_taxa": total_col_taxa,
+        "total_col_species": total_col_species,
+        "total_crosswalks": total_crosswalks,
+        # Porcentajes
+        "match_percent": round(matched_genomes / total_genomes * 100, 1) if total_genomes else 0,
+    }
+    
+    return render(request, "taxonomy/pages/home.html", context)
 
 
 @require_POST
@@ -69,13 +111,3 @@ def export_sampling(request, fmt: str):
         return resp
 
     return JsonResponse({"error": "Formato no soportado"}, status=400)
-
-
-@require_GET
-def search_debug_page(request):
-    return render(request, "taxonomy/tree_search_debug.html", {})
-
-
-@require_GET
-def tree_cut_debug_page(request):
-    return render(request, "taxonomy/tree_cut_debug.html", {})

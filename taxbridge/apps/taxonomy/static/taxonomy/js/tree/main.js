@@ -353,12 +353,30 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   // Estado: si hay resultado de sampling, la “selección” visible proviene de ahí.
   let lastSamplingResult = null;
 
+  function updateSelectionBadge(count) {
+    const badge = document.getElementById("selBadge");
+    if (badge) {
+      if (count > 0) {
+        badge.textContent = String(count);
+        badge.className = "badge rounded-pill bg-primary ms-2";
+        badge.style.display = "";
+      } else {
+        badge.style.display = "none";
+      }
+    }
+  }
+
   function repaintSelection() {
+    let count = 0;
     if (lastSamplingResult) {
       renderSelectionSamplingTbody(lastSamplingResult);
-      return;
+      count = Array.isArray(lastSamplingResult.rows) ? lastSamplingResult.rows.length : 0;
+    } else {
+      const selectedMap = renderer.getSelectedSpecies?.();
+      renderSelectionManualTbody(selectedMap);
+      count = asArraySelected(selectedMap).length;
     }
-    renderSelectionManualTbody(renderer.getSelectedSpecies?.());
+    updateSelectionBadge(count);
   }
 
   // Payload para export: sampling (si existe) o manual (fallback)
@@ -922,6 +940,11 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
       samplingCtl.setData(data);
       renderer.render(data);
 
+      // 2b) actualizar contador de especies (viene del backend)
+      const speciesCount = response.species_count ?? 0;
+      const speciesEl = document.getElementById("speciesCount");
+      if (speciesEl) speciesEl.textContent = String(speciesCount);
+
       // 3) reset UI state
       searchState = {
         q: "",
@@ -1071,7 +1094,21 @@ import { createSamplingFiltersController } from "./sampling_filters.js";
   });
 
   // =========================================================================
-  // 16) Init
+  // 16) Tab change handler (resize when tree tab shown)
+  // =========================================================================
+  const treeTabEl = document.getElementById("treeTab");
+  if (treeTabEl) {
+    treeTabEl.addEventListener("shown.bs.tab", () => {
+      // Cuando se muestra la tab del árbol, redimensionar y ajustar
+      setTimeout(() => {
+        renderer.resizeToMount?.();
+        renderer.fitToView?.();
+      }, 100);
+    });
+  }
+
+  // =========================================================================
+  // 17) Init
   // =========================================================================
   load();
 

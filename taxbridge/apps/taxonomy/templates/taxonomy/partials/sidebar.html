@@ -1,14 +1,16 @@
 <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
   <div class="container-fluid">
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    
+    <!-- Brand -->
     <h1 class="navbar-brand navbar-brand-autodark">
       <a href="{% url 'taxonomy:home' %}">
         <span class="text-white fw-bold">TaxaBridge</span>
       </a>
     </h1>
+    
+    <!-- Mobile toggle -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
     
     <div class="collapse navbar-collapse" id="sidebar-menu">
       <ul class="navbar-nav pt-lg-3">
@@ -32,27 +34,13 @@
           </a>
         </li>
         
-        <!-- Divider -->
-        <li class="nav-item mt-3">
-          <span class="nav-link text-muted small text-uppercase">Developer</span>
-        </li>
-        
-        <!-- Debug Tools -->
+        <!-- Taxon Sync (NCBI + COL) -->
         <li class="nav-item">
-          <a class="nav-link" href="{% url 'taxonomy:search-debug' %}">
+          <a class="nav-link" href="{% url 'taxonomy:taxon-sync-dashboard' %}">
             <span class="nav-link-icon d-md-none d-lg-inline-block">
-              <i class="ti ti-bug"></i>
+              <i class="ti ti-arrows-exchange"></i>
             </span>
-            <span class="nav-link-title">Search Debug</span>
-          </a>
-        </li>
-        
-        <li class="nav-item">
-          <a class="nav-link" href="{% url 'taxonomy:tree-cut-debug' %}">
-            <span class="nav-link-icon d-md-none d-lg-inline-block">
-              <i class="ti ti-cut"></i>
-            </span>
-            <span class="nav-link-title">Tree Cut Debug</span>
+            <span class="nav-link-title">Taxon Sync</span>
           </a>
         </li>
       </ul>

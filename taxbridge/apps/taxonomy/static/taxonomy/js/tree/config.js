@@ -11,7 +11,8 @@ export const VIS = {
     BTN_H: 14,
     BTN_W: 34,
     ROW_GAP: 50,
-    COL_GAP: 320
+    COL_GAP: 200,
+    MAX_INITIAL_DEPTH: 3  // Max depth to expand initially for large trees
 };
 
 export const AUTOFIT = {

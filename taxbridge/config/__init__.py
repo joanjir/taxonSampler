@@ -1,11 +1,11 @@
 # config/__init__.py
 """
-Este módulo carga Celery cuando Django inicia (si está instalado).
+This module loads Celery when Django starts (if installed).
 """
 try:
     from .celery import app as celery_app
     __all__ = ("celery_app",)
 except ImportError:
-    # Celery no instalado - continuar sin él
+    # Celery not installed - continue without it
     celery_app = None
     __all__ = ()

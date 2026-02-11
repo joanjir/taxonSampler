@@ -1,69 +1,72 @@
-<header class="navbar navbar-expand-md d-print-none sticky-top bg-white" style="z-index:1030; box-shadow:0 .1rem 1rem rgba(0,0,0,.15);">
+<header class="navbar navbar-expand-md d-print-none" data-bs-theme="light">
   <div class="container-xl">
-    <!-- Toggler (mobile) -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
-
     <!-- Brand -->
-    <a class="navbar-brand navbar-brand-autodark me-2" href="{% url 'taxonomy:home' %}"><span class="fw-semibold">TaxaBridge</span></a>
+    <a class="navbar-brand navbar-brand-autodark me-4" href="{% url 'taxonomy:home' %}">
+      <span class="fw-bold">TaxaBridge</span>
+    </a>
+    <!-- Mobile toggler -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-    <!-- LEFT: main nav (desktop inside collapse so it works on mobile too) -->
     <div class="collapse navbar-collapse" id="navbar-menu">
-      {% comment %} <ul class="navbar-nav me-md-3">
+      <ul class="navbar-nav me-auto">
         <li class="nav-item">
-          <a class="nav-link px-md-2" href="/sampling/"><span class="nav-link-title">Sampling</span></a>
+          <a class="nav-link" href="{% url 'taxonomy:home' %}"><i class="ti ti-home me-1"></i> Home</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link px-md-2" href="/runs/"><span class="nav-link-title">Runs</span></a>
+          <a class="nav-link" href="{% url 'taxonomy:tree' %}"><i class="ti ti-binary-tree me-1"></i> Taxonomy Tree</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link px-md-2" href="/reports/"><span class="nav-link-title">Reports</span></a>
+          <a class="nav-link" href="{% url 'taxonomy:taxon-sync-dashboard' %}"><i class="ti ti-arrows-exchange me-1"></i> Taxon Sync</a>
         </li>
-      </ul> {% endcomment %}
-
+      </ul>
+      {% if show_tree_controls %}
       <!-- SEARCH (desktop: right aligned). In mobile it appears below the menu inside collapse -->
       <form class="d-flex w-100 w-md-auto ms-md-auto mt-2 mt-md-0" role="search" onsubmit="return false;" style="max-width: 760px;">
         <div class="input-group input-group-sm w-100">
-          <!-- Expand dropdown (sin wrapper popover) -->
-          <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="vizRankBtn" data-bs-toggle="dropdown" aria-expanded="false" style="white-space:nowrap;">
-            <span class="me-1">Expand:</span>
-            <span id="vizRankLabel">—</span>
-          </button>
+          <!-- Expand dropdown (envuelto para Bootstrap 5) -->
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="vizRankBtn" data-bs-toggle="dropdown" aria-expanded="false" style="white-space:nowrap; border-top-right-radius:0; border-bottom-right-radius:0;">
+              <span class="me-1">Expand:</span>
+              <span id="vizRankLabel">—</span>
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="vizRankBtn" style="max-height:420px; overflow:auto;">
+              <li>
+                <a class="dropdown-item" href="#" data-rank="">No auto-expand</a>
+              </li>
+              <li>
+                <hr class="dropdown-divider" />
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="domain">Domain</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="kingdom">Kingdom</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="phylum">Phylum</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="class">Class</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="order">Order</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="family">Family</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="genus">Genus</a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="#" data-rank="species">Species</a>
+              </li>
+            </ul>
+          </div>
 
-          <!-- Help icon con popover (aquí sí) -->
+          <!-- Help icon con popover -->
           <button type="button" class="btn btn-outline-secondary" id="vizRankHelp" tabindex="0" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-html="true" data-bs-custom-class="popover-help" data-bs-content="<div class='small'>Automatically expands the taxonomy tree up to the selected rank.</div>" aria-label="Help" style="max-width:38px;"><i class="fa-solid fa-circle-question"></i></button>
-
-          <ul class="dropdown-menu" aria-labelledby="vizRankBtn" style="max-height:420px; overflow:auto;">
-            <li>
-              <a class="dropdown-item" href="#" data-rank="">No auto-expand</a>
-            </li>
-            <li>
-              <hr class="dropdown-divider" />
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="domain">Domain</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="kingdom">Kingdom</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="phylum">Phylum</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="class">Class</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="order">Order</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="family">Family</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="genus">Genus</a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" data-rank="species">Species</a>
-            </li>
-          </ul>
 
           <!-- Search input -->
           <input id="taxSearch" type="search" class="form-control" placeholder="Search taxon (e.g. Mammalia, Primates)…" aria-label="Search taxon" />
@@ -81,6 +84,7 @@
           <button id="taxSearchGo" class="btn btn-primary" type="button">Search</button>
         </div>
       </form>
+      {% endif %}
     </div>
   </div>
 </header>

@@ -123,3 +123,24 @@ export async function apiRunSampling({ endpoint, config } = {}) {
     throw err;
   }
 }
+
+
+/**
+ * Get scope/target/active richness info from backend.
+ * @param {Object} params
+ * @param {string} [params.endpoint] - API endpoint (defaults to window.SCOPE_INFO_ENDPOINT)
+ * @param {string|null} [params.scopeKey] - Key of scope node
+ * @param {string[]} [params.targetKeys] - Array of target keys
+ * @param {string|null} [params.activeKey] - Key of currently active node
+ * @returns {Promise<{scope: Object|null, targets: Object[], active: Object|null, children: Object[]}>}
+ */
+export async function apiGetScopeInfo({ endpoint, scopeKey, targetKeys, activeKey } = {}) {
+  const base = assertEndpoint(endpoint ?? window.SCOPE_INFO_ENDPOINT, "window.SCOPE_INFO_ENDPOINT");
+  const u = new URL(base, window.location.origin);
+  
+  if (scopeKey) u.searchParams.set("scope_key", scopeKey);
+  if (targetKeys?.length) u.searchParams.set("target_keys", targetKeys.join(","));
+  if (activeKey) u.searchParams.set("active_key", activeKey);
+  
+  return fetchJson(u.toString());
+}

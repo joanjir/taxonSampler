@@ -9,11 +9,8 @@
 //
 // Backend service: apps/taxonomy/services/sampling.py
 
-import { apiRunSampling } from "./api.js";
-
-function normRank(r) {
-  return ((r || "") + "").trim().toLowerCase();
-}
+import { apiRunSampling, apiGetScopeInfo } from "./api.js";
+import { normRank } from "../trees/tree_keying.js";
 
 function parseKeyParts(key) {
   const s = (key || "").trim();
@@ -56,13 +53,15 @@ export function createSamplingFiltersController({ renderer }) {
     samStep1: null,
     samStep2: null,
     richScopeBadge: null,
-    richTargetsLine: null,
+    richTargetsCount: null,
     richActiveLine: null,
     samLockAlert: null,
     samReset: null,
 
     samplingRoot: null,
     scopeBadge: null,
+    scopeLabel: null,
+    scopeSpeciesCount: null,
     scopeSetActive: null,
     scopeClear: null,
     targetAddActive: null,
@@ -93,7 +92,7 @@ export function createSamplingFiltersController({ renderer }) {
     dom.samStep2 = document.getElementById("samStep2");
 
     dom.richScopeBadge = document.getElementById("richScopeBadge");
-    dom.richTargetsLine = document.getElementById("richTargetsLine");
+    dom.richTargetsCount = document.getElementById("richTargetsCount");
     dom.richActiveLine = document.getElementById("richActiveLine");
 
     dom.samLockAlert = document.getElementById("samLockAlert");
@@ -101,6 +100,8 @@ export function createSamplingFiltersController({ renderer }) {
 
     dom.samplingRoot = document.getElementById("samplingRoot");
     dom.scopeBadge = document.getElementById("scopeBadge");
+    dom.scopeLabel = document.getElementById("scopeLabel");
+    dom.scopeSpeciesCount = document.getElementById("scopeSpeciesCount");
     dom.scopeSetActive = document.getElementById("scopeSetActive");
     dom.scopeClear = document.getElementById("scopeClear");
     dom.targetAddActive = document.getElementById("targetAddActive");
@@ -127,7 +128,7 @@ export function createSamplingFiltersController({ renderer }) {
     if (!dom.targetsWarn || !dom.targetsWarnText) return;
     if (!msg) {
       dom.targetsWarn.classList.add("d-none");
-      dom.targetsWarnText.textContent = "\u2014";
+      dom.targetsWarnText.textContent = "—";
       return;
     }
     dom.targetsWarnText.textContent = msg;
@@ -178,17 +179,30 @@ export function createSamplingFiltersController({ renderer }) {
 
   function updateScopeBadge() {
     const scopeKey = currentScopeKey();
-    if (!dom.scopeBadge) return;
 
-    if (rootModeIsNode() && scopeKey) {
-      dom.scopeBadge.style.display = "inline-block";
+    // Update badge if there's a scope key (regardless of rootModeIsNode)
+    if (scopeKey) {
       const parts = parseKeyParts(scopeKey);
       const last = parts[parts.length - 1];
-      const label = last ? `${last.rank}:${last.name}` : "scope";
-      dom.scopeBadge.textContent = `scope=${label}`;
+      const label = last ? last.name : "scope";
+      
+      if (dom.scopeBadge) {
+        dom.scopeBadge.textContent = `scope=${last?.rank}:${last?.name}`;
+        dom.scopeBadge.classList.remove("bg-secondary-lt", "text-secondary");
+        dom.scopeBadge.classList.add("bg-success-lt", "text-success");
+      }
+      if (dom.scopeLabel) {
+        dom.scopeLabel.textContent = label;
+      }
     } else {
-      dom.scopeBadge.style.display = "none";
-      dom.scopeBadge.textContent = "scope=\u2014";
+      if (dom.scopeBadge) {
+        dom.scopeBadge.textContent = "scope=—";
+        dom.scopeBadge.classList.remove("bg-success-lt", "text-success");
+        dom.scopeBadge.classList.add("bg-secondary-lt", "text-secondary");
+      }
+      if (dom.scopeLabel) {
+        dom.scopeLabel.textContent = "Click a node in the tree";
+      }
     }
   }
 
@@ -248,31 +262,125 @@ export function createSamplingFiltersController({ renderer }) {
   }
 
   function setActiveNodeFromTree(detail) {
+    console.log("[sampling_filters] setActiveNodeFromTree:", detail);
     if (!detail?.key) return;
     activeNode = {
       key: String(detail.key),
       rank: normRank(detail.rank || "?"),
       name: String(detail.name || ""),
     };
+    console.log("[sampling_filters] activeNode set to:", activeNode);
   }
 
-  function repaintRichnessPanel() {
-    if (dom.richScopeBadge) {
-      const scopeKey = rootModeIsNode() ? (currentScopeKey() || null) : null;
-      if (!rootModeIsNode()) dom.richScopeBadge.textContent = "scope=tree";
-      else if (scopeKey) dom.richScopeBadge.textContent = "scope=active";
-      else dom.richScopeBadge.textContent = "scope=\u2014";
-    }
+  // Cache for richness data to avoid excessive API calls
+  let lastRichnessRequest = null;
+  
+  const repaintRichnessPanelDebounced = debounce(async () => {
+    await repaintRichnessPanel();
+  }, 150);
 
-    if (dom.richTargetsLine) {
-      const n = currentTargetKeys().length;
-      dom.richTargetsLine.textContent = n ? `targets=${n} clades` : "targets=\u2014";
+  async function repaintRichnessPanel() {
+    const scopeKey = rootModeIsNode() ? (currentScopeKey() || null) : null;
+    const targetKeys = currentTargetKeys();
+    const activeKey = activeNode?.key || null;
+    
+    // Quick update: Show loading state
+    if (dom.scopeLabel) {
+      dom.scopeLabel.textContent = scopeKey ? "..." : "Click a node in the tree";
     }
-
+    if (dom.scopeSpeciesCount) {
+      dom.scopeSpeciesCount.textContent = scopeKey ? "..." : "— spp";
+    }
+    if (dom.richTargetsCount) {
+      dom.richTargetsCount.textContent = targetKeys.length > 0 ? `${targetKeys.length} clades (...)` : "—";
+    }
     if (dom.richActiveLine) {
-      dom.richActiveLine.textContent = activeNode?.key
-        ? `active=${activeNode.name || activeNode.key}`
-        : "active=\u2014";
+      dom.richActiveLine.innerHTML = activeNode?.key
+        ? `<strong>${activeNode.name || "..."}</strong> <span class="text-muted">(loading...)</span>`
+        : '<span class="text-muted">Click a node</span>';
+    }
+    
+    // Build request signature to detect duplicate requests
+    const requestSig = JSON.stringify({ scopeKey, targetKeys: targetKeys.sort(), activeKey });
+    if (requestSig === lastRichnessRequest) {
+      return; // Skip duplicate request
+    }
+    lastRichnessRequest = requestSig;
+    
+    // Fetch richness data from backend
+    try {
+      const data = await apiGetScopeInfo({
+        scopeKey,
+        targetKeys,
+        activeKey,
+      });
+      
+      // Check if request is still valid (user might have changed scope)
+      const currentSig = JSON.stringify({
+        scopeKey: rootModeIsNode() ? (currentScopeKey() || null) : null,
+        targetKeys: currentTargetKeys().sort(),
+        activeKey: activeNode?.key || null,
+      });
+      if (currentSig !== requestSig) {
+        return; // Stale response, ignore
+      }
+      
+      // Update Scope stats
+      if (dom.scopeLabel) {
+        dom.scopeLabel.textContent = data.scope?.name || "Click a node in the tree";
+      }
+      if (dom.scopeSpeciesCount) {
+        if (data.scope) {
+          const count = data.scope.species_count ?? "?";
+          dom.scopeSpeciesCount.textContent = `${count} spp`;
+        } else {
+          dom.scopeSpeciesCount.textContent = "— spp";
+        }
+      }
+      
+      // Also update richScopeBadge (Stats panel)
+      if (dom.richScopeBadge) {
+        if (data.scope) {
+          const count = data.scope.species_count ?? "?";
+          dom.richScopeBadge.textContent = `${count} spp`;
+        } else {
+          dom.richScopeBadge.textContent = "-";
+        }
+      }
+
+      // Update Targets stats
+      if (dom.richTargetsCount) {
+        if (data.targets?.length) {
+          const total = data.targets.reduce((sum, t) => sum + (t.species_count || 0), 0);
+          dom.richTargetsCount.textContent = `${data.targets.length} clades (${total} spp)`;
+        } else {
+          dom.richTargetsCount.textContent = "— (entire scope)";
+        }
+      }
+
+      // Update Active/cursor stats
+      if (dom.richActiveLine) {
+        if (data.active) {
+          const count = data.active.species_count ?? "?";
+          const name = data.active.name || "?";
+          const rank = data.active.rank || "";
+          // Check if this node is already a target
+          const isTarget = targetKeys.includes(activeKey);
+          const isScope = activeKey === scopeKey;
+          let badge = "";
+          if (isScope) badge = ' <span class="badge bg-success">scope</span>';
+          else if (isTarget) badge = ' <span class="badge bg-primary">target</span>';
+          dom.richActiveLine.innerHTML = `<strong>${name}</strong> <span class="text-muted">[${rank}]</span> — ${count} spp${badge}`;
+        } else {
+          dom.richActiveLine.innerHTML = '<span class="text-muted">Click a node</span>';
+        }
+      }
+    } catch (err) {
+      console.error("[sampling] Error fetching richness:", err);
+      // Show error state
+      if (dom.scopeSpeciesCount) {
+        dom.scopeSpeciesCount.textContent = "error";
+      }
     }
   }
 
@@ -371,9 +479,10 @@ export function createSamplingFiltersController({ renderer }) {
     setLocked(false);
     setStep(1);
 
-    if (dom.samplingRoot) dom.samplingRoot.value = "";
-    renderer.setSamplingSetupEnabled?.(false);
+    // Keep sampling setup enabled, just reset the state
+    if (dom.samplingRoot) dom.samplingRoot.value = "node";
     renderer.resetSamplingSetup?.();
+    renderer.setSamplingSetupEnabled?.(true);
 
     updateScopeBadge();
     renderTargetsChips();
@@ -388,7 +497,7 @@ export function createSamplingFiltersController({ renderer }) {
     if (dom.outgroupN) dom.outgroupN.value = "2";
 
     emitSamplingConfigChanged();
-    repaintRichnessPanel();
+    repaintRichnessPanelDebounced();
     window.dispatchEvent(new CustomEvent("sampling:reset", { detail: {} }));
   }
 
@@ -406,7 +515,7 @@ export function createSamplingFiltersController({ renderer }) {
       renderTargetsChips();
       validateTargetsAgainstScope();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
     });
   }
 
@@ -448,17 +557,19 @@ export function createSamplingFiltersController({ renderer }) {
       updateScopeBadge();
       renderTargetsChips();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
       setWarn(null);
     });
 
     dom.scopeSetActive?.addEventListener("click", () => {
+      console.log("[sampling_filters] scopeSetActive clicked, locked:", locked, "activeNode:", activeNode);
       if (locked) return;
 
       if (dom.samplingRoot) dom.samplingRoot.value = "node";
       renderer.setSamplingSetupEnabled?.(true);
 
       const a = activeNode;
+      console.log("[sampling_filters] active node for scope:", a);
       if (!a?.key) {
         setWarn("No active node. Click a node in the tree to make it active, then set scope.");
         return;
@@ -468,12 +579,13 @@ export function createSamplingFiltersController({ renderer }) {
         return;
       }
 
+      console.log("[sampling_filters] calling renderer.setSamplingScopeKey with key:", a.key);
       renderer.setSamplingScopeKey?.(a.key);
 
       updateScopeBadge();
       renderTargetsChips();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
       setWarn(null);
     });
 
@@ -488,7 +600,7 @@ export function createSamplingFiltersController({ renderer }) {
       updateScopeBadge();
       renderTargetsChips();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
       setWarn(null);
     });
 
@@ -522,7 +634,7 @@ export function createSamplingFiltersController({ renderer }) {
       renderTargetsChips();
       validateTargetsAgainstScope();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
       setWarn(null);
     });
 
@@ -532,7 +644,7 @@ export function createSamplingFiltersController({ renderer }) {
       for (const k of keys) renderer.toggleSamplingTargetKey?.(k);
       renderTargetsChips();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
       setWarn(null);
     });
 
@@ -562,22 +674,31 @@ export function createSamplingFiltersController({ renderer }) {
 
     window.addEventListener("tree:active-changed", (ev) => {
       setActiveNodeFromTree(ev.detail || null);
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
+      // Clear "No active node" warning when user selects a node
+      if (ev.detail?.key) {
+        setWarn(null);
+      }
     });
 
     window.addEventListener("sampling:scope-changed", () => {
       if (locked) return;
+      // Ensure samplingRoot is set to "node" when scope changes via tree click
+      if (currentScopeKey() && dom.samplingRoot) {
+        dom.samplingRoot.value = "node";
+      }
       updateScopeBadge();
       renderTargetsChips();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
+      setWarn(null); // Clear any warning when scope is set from tree
     });
 
     window.addEventListener("sampling:targets-changed", () => {
       if (locked) return;
       renderTargetsChips();
       emitSamplingConfigChanged();
-      repaintRichnessPanel();
+      repaintRichnessPanelDebounced();
     });
 
     dom.runSampling?.addEventListener("click", () => {
@@ -587,22 +708,22 @@ export function createSamplingFiltersController({ renderer }) {
     updateScopeBadge();
     renderTargetsChips();
     emitSamplingConfigChanged();
-    repaintRichnessPanel();
+    repaintRichnessPanelDebounced();
   }
 
   function setData(data) {
     fullTreeData = data;
     activeNode = null;
 
-    if (dom.samplingRoot) dom.samplingRoot.value = "";
-    renderer.setSamplingSetupEnabled?.(false);
-    renderer.resetSamplingSetup?.();
+    // Activate sampling setup by default so checkboxes are visible
+    if (dom.samplingRoot) dom.samplingRoot.value = "node";
+    renderer.setSamplingSetupEnabled?.(true);
 
     setLocked(false);
     setStep(1);
     updateScopeBadge();
     renderTargetsChips();
-    repaintRichnessPanel();
+    repaintRichnessPanelDebounced();
   }
 
   function resetDefaults() {
@@ -619,6 +740,5 @@ export function createSamplingFiltersController({ renderer }) {
     attachEventHandlers,
     resetDefaults,
     runSamplingAndBuildResult,
-    resetWizardAndState,
   };
 }

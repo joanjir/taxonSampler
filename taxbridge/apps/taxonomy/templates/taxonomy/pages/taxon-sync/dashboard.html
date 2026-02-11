@@ -1,0 +1,576 @@
+{% extends "taxonomy/layout/app_shell.html" %}
+
+{% block title %}Taxon Sync - TaxaBridge{% endblock %}
+
+{% block content %}
+<div class="page-header d-print-none">
+  <div class="container-xl">
+    <div class="row g-2 align-items-center">
+      <div class="col">
+        <h2 class="page-title d-flex align-items-center">
+          <i class="ti ti-arrows-exchange me-2"></i> Taxon Synchronization
+          <span class="ms-2" id="taxonSyncHelp" tabindex="0" 
+                data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="right" 
+                data-bs-html="true" data-bs-custom-class="popover-help"
+                data-bs-content="<div class='small'><strong>Taxon Sync</strong> downloads genome metadata from NCBI Datasets API and links each taxon with the Catalogue of Life (COL) using the ChecklistBank API.<br><br><strong>Process:</strong><br>1. Fetch genomes by kingdom from NCBI<br>2. Create/update local taxa records<br>3. Match each taxon name with COL<br>4. Store crosswalk relationships</div>"
+                style="cursor: pointer;"><i class="ti ti-info-circle text-primary" style="font-size: 1.25rem;"></i></span>
+        </h2>
+        <div class="text-secondary mt-1">
+          Download from NCBI and link with Catalogue of Life
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="container-xl">
+    <!-- Stats Cards -->
+    <div class="row row-deck row-cards mb-4">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-blue-lt me-3">
+                <i class="ti ti-dna-2 fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">NCBI Taxa</div>
+                <div class="h1 mb-0">{{ stats.total_taxa|default:"0" }}</div>
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} species
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-green-lt me-3">
+                <i class="ti ti-link fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">COL Linked</div>
+                <div class="h1 mb-0">{{ stats.crosswalks|default:"0" }}</div>
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-world me-1"></i> {{ stats.external_taxa|default:"0" }} external taxa
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-yellow-lt me-3">
+                <i class="ti ti-percentage fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">Coverage</div>
+                {% if stats.total_taxa > 0 %}
+                <div class="h1 mb-0">{% widthratio stats.matched_taxa stats.total_taxa 100 %}%</div>
+                {% else %}
+                <div class="h1 mb-0">0%</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} linked taxa
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-purple-lt me-3">
+                <i class="ti ti-history fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">Syncs</div>
+                <div class="h1 mb-0">{{ stats.successful_syncs|default:"0" }} / {{ stats.total_syncs|default:"0" }}</div>
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-circle-check me-1"></i> Successful / Total
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row row-deck row-cards">
+      <!-- Start Sync Panel -->
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="ti ti-player-play me-2"></i> New Synchronization
+            </h3>
+          </div>
+          <div class="card-body">
+            <form id="sync-form">
+              <div class="mb-3">
+                <label class="form-label required">Taxonomic Kingdom</label>
+                <select class="form-select form-select-lg" name="kingdom" id="kingdom-select" {% if running_sync %}disabled{% endif %}>
+                  <option value="metazoa" selected>🦁 Metazoa (Animals)</option>
+                  <option value="fungi">🍄 Fungi</option>
+                  <option value="viridiplantae">🌿 Viridiplantae (Plants)</option>
+                  <option value="bacteria">🦠 Bacteria</option>
+                  <option value="archaea">🧬 Archaea</option>
+                </select>
+                <small class="form-hint">Select the kingdom to sync from NCBI</small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Genome Limit</label>
+                <input type="number" class="form-control form-control-lg" name="limit" id="limit-input" 
+                       value="0" min="0" placeholder="0 = no limit" {% if running_sync %}disabled{% endif %}>
+                <small class="form-hint">Use 0 to download all available genomes</small>
+              </div>
+              <div class="mb-4">
+                <label class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="skip_quality" id="skip-quality" {% if running_sync %}disabled{% endif %}>
+                  <span class="form-check-label">Skip quality filters</span>
+                </label>
+                <small class="form-hint d-block mt-1">Coverage and N50 filters are applied by default</small>
+              </div>
+              <button type="button" class="btn btn-primary btn-lg w-100" id="btn-start-sync" {% if running_sync %}disabled{% endif %}>
+                {% if running_sync %}
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                Synchronization in progress...
+                {% else %}
+                <i class="ti ti-rocket me-2"></i> Start Synchronization
+                {% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs: Tarea Actual / Historial -->
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <a href="#tab-current" class="nav-link {% if running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if running_sync %}aria-selected="true"{% endif %}>
+                  <i class="ti ti-player-play me-2"></i>
+                  Current Task
+                  {% if running_sync %}
+                  <span class="badge bg-green-lt text-green ms-2">Running</span>
+                  {% endif %}
+                </a>
+              </li>
+              <li class="nav-item" role="presentation">
+                <a href="#tab-history" class="nav-link {% if not running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if not running_sync %}aria-selected="true"{% endif %}>
+                  <i class="ti ti-history me-2"></i>
+                  History
+                  <span class="badge bg-blue-lt text-blue ms-2">{{ recent_syncs|length }}</span>
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div class="card-body">
+            <div class="tab-content">
+              <!-- Tab: Tarea Actual -->
+              <div class="tab-pane {% if running_sync %}active show{% endif %}" id="tab-current" role="tabpanel">
+                {% if running_sync %}
+                <div id="running-sync-card" data-sync-id="{{ running_sync.pk }}">
+                  <!-- Header con estado -->
+                  <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                      <h3 class="mb-1 text-dark">
+                        <span class="status-indicator status-green status-indicator-animated me-2"></span>
+                        Sync #{{ running_sync.pk }}
+                      </h3>
+                      <span class="badge bg-azure-lt text-azure fs-5">
+                        {% if running_sync.kingdom == 'metazoa' %}🦁{% elif running_sync.kingdom == 'fungi' %}🍄{% elif running_sync.kingdom == 'viridiplantae' %}🌿{% elif running_sync.kingdom == 'bacteria' %}🦠{% else %}🧬{% endif %}
+                        {{ running_sync.kingdom|title }}
+                      </span>
+                    </div>
+                    <div class="text-end">
+                      <span class="badge bg-blue-lt text-blue text-uppercase fs-5 me-2" id="sync-phase-badge">
+                        {{ running_sync.get_status_display }}
+                      </span>
+                      <button class="btn btn-outline-danger" id="btn-cancel-sync">
+                        <i class="ti ti-x me-1"></i> Cancel
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- Progress Steps as Cards -->
+                  <div class="row row-deck row-cards my-4" id="sync-steps">
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.status == 'fetching_ncbi' %}border-primary{% endif %}" id="step-ncbi">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-blue-lt {% if running_sync.status != 'fetching_ncbi' and running_sync.status != 'matching_col' and running_sync.status != 'completed' %}opacity-50{% endif %}">
+                                <i class="ti ti-dna fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-blue-lt text-blue me-2">1</span>
+                                <span class="text-secondary small">NCBI Downloaded</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-ncbi-fetched">{{ running_sync.ncbi_fetched }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.taxa_created > 0 %}border-success{% endif %}" id="step-taxa">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-green-lt {% if running_sync.taxa_created == 0 %}opacity-50{% endif %}">
+                                <i class="ti ti-leaf fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-green-lt text-green me-2">2</span>
+                                <span class="text-secondary small">Taxa Created</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-taxa-created">{{ running_sync.taxa_created }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.status == 'matching_col' %}border-warning{% endif %}" id="step-col">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-yellow-lt {% if running_sync.status != 'matching_col' and running_sync.status != 'completed' %}opacity-50{% endif %}">
+                                <i class="ti ti-link fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-yellow-lt text-yellow me-2">3</span>
+                                <span class="text-secondary small">COL Linked</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-col-matched">{{ running_sync.col_matched }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.status == 'completed' %}border-purple{% endif %}" id="step-crosswalks">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-purple-lt {% if running_sync.status != 'completed' %}opacity-50{% endif %}">
+                                <i class="ti ti-route-2 fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-purple-lt text-purple me-2">4</span>
+                                <span class="text-secondary small">Crosswalks</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-crosswalks">{{ running_sync.crosswalks_created }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Current action indicator -->
+                  <div class="alert alert-info d-flex align-items-center" role="alert" id="sync-status-alert">
+                    <div class="spinner-border spinner-border-sm me-3" role="status"></div>
+                    <div id="sync-status-text">
+                      {% if running_sync.status == 'fetching_ncbi' %}
+                      <strong>Step 1/4:</strong> Downloading genomes from NCBI...
+                      {% elif running_sync.status == 'matching_col' %}
+                      <strong>Step 3/4:</strong> Linking taxa with Catalogue of Life...
+                      {% else %}
+                      {{ running_sync.get_status_display }}
+                      {% endif %}
+                    </div>
+                    <div class="ms-auto">
+                      <span class="badge bg-blue-lt text-blue fs-4" id="sync-progress-text">{{ running_sync.progress_percent|floatformat:0 }}%</span>
+                    </div>
+                  </div>
+                </div>
+                {% else %}
+                <div class="empty">
+                  <div class="empty-icon">
+                    <i class="ti ti-player-pause fs-1"></i>
+                  </div>
+                  <p class="empty-title">No task running</p>
+                  <p class="empty-subtitle text-secondary">
+                    Select a kingdom and start a new sync to download genomes from NCBI and link them with COL.
+                  </p>
+                </div>
+                {% endif %}
+              </div>
+
+              <!-- Tab: Historial -->
+              <div class="tab-pane {% if not running_sync %}active show{% endif %}" id="tab-history" role="tabpanel">
+                <div class="table-responsive">
+                  <table class="table table-vcenter table-hover">
+                    <thead>
+                      <tr>
+                        <th class="w-1">ID</th>
+                        <th>Kingdom</th>
+                        <th>Status</th>
+                        <th class="text-end">NCBI</th>
+                        <th class="text-end">COL</th>
+                        <th class="text-end">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for sync in recent_syncs %}
+                      <tr>
+                        <td><span class="fw-bold text-primary">#{{ sync.pk }}</span></td>
+                        <td>
+                          <span class="badge bg-azure-lt text-azure">
+                            {% if sync.kingdom == 'metazoa' %}🦁{% elif sync.kingdom == 'fungi' %}🍄{% elif sync.kingdom == 'viridiplantae' %}🌿{% elif sync.kingdom == 'bacteria' %}🦠{% else %}🧬{% endif %}
+                            {{ sync.kingdom|title }}
+                          </span>
+                        </td>
+                        <td>
+                          {% if sync.status == 'completed' %}
+                          <span class="badge bg-green-lt text-green">
+                            <i class="ti ti-check me-1"></i> Completed
+                          </span>
+                          {% elif sync.status == 'failed' %}
+                          <span class="badge bg-red-lt text-red">
+                            <i class="ti ti-x me-1"></i> Failed
+                          </span>
+                          {% elif sync.status == 'cancelled' %}
+                          <span class="badge bg-secondary-lt text-secondary">
+                            <i class="ti ti-ban me-1"></i> Cancelled
+                          </span>
+                          {% elif sync.status == 'fetching_ncbi' %}
+                          <span class="badge bg-blue-lt text-blue">
+                            <span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem;"></span>
+                            Downloading NCBI
+                          </span>
+                          {% elif sync.status == 'matching_col' %}
+                          <span class="badge bg-yellow-lt text-yellow">
+                            <span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem;"></span>
+                            Linking COL
+                          </span>
+                          {% else %}
+                          <span class="badge bg-secondary-lt text-secondary">{{ sync.get_status_display }}</span>
+                          {% endif %}
+                        </td>
+                        <td class="text-end">
+                          <span class="text-blue fw-bold">{{ sync.ncbi_fetched }}</span>
+                          <span class="text-secondary">/</span>
+                          <span class="fw-medium">{{ sync.ncbi_total }}</span>
+                        </td>
+                        <td class="text-end">
+                          <span class="text-green fw-bold">{{ sync.col_matched }}</span>
+                          <span class="text-secondary">/</span>
+                          <span class="fw-medium">{{ sync.col_total }}</span>
+                        </td>
+                        <td class="text-end">
+                          {{ sync.created_at|date:"d/m/Y H:i" }}
+                        </td>
+                      </tr>
+                      {% empty %}
+                      <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                          <i class="ti ti-database-off fs-1 d-block mb-2"></i>
+                          No previous syncs
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnStartSync = document.getElementById('btn-start-sync');
+    const btnCancelSync = document.getElementById('btn-cancel-sync');
+    const runningCard = document.getElementById('running-sync-card');
+    
+    let pollInterval = null;
+
+    // Start sync
+    if (btnStartSync && !btnStartSync.disabled) {
+        btnStartSync.addEventListener('click', async function() {
+            const kingdom = document.getElementById('kingdom-select').value;
+            const limit = parseInt(document.getElementById('limit-input').value) || 0;
+            const skipQuality = document.getElementById('skip-quality').checked;
+
+            btnStartSync.disabled = true;
+            btnStartSync.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Starting...';
+
+            try {
+                const response = await fetch('/api/v1/taxonomy/taxon-sync/start/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                    },
+                    body: JSON.stringify({ kingdom, limit, skip_quality: skipQuality }),
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Error starting synchronization');
+                    btnStartSync.disabled = false;
+                    btnStartSync.innerHTML = '<i class="ti ti-rocket me-2"></i> Start Synchronization';
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Connection error');
+                btnStartSync.disabled = false;
+                btnStartSync.innerHTML = '<i class="ti ti-rocket me-2"></i> Start Synchronization';
+            }
+        });
+    }
+
+    // Cancel sync
+    if (btnCancelSync) {
+        btnCancelSync.addEventListener('click', async function() {
+            if (!confirm('Are you sure you want to cancel this sync?')) return;
+            
+            const syncId = runningCard.dataset.syncId;
+            btnCancelSync.disabled = true;
+            
+            try {
+                const response = await fetch(`/api/v1/taxonomy/taxon-sync/${syncId}/cancel/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                }
+            } catch (e) {
+                console.error(e);
+                btnCancelSync.disabled = false;
+            }
+        });
+    }
+
+    // Poll for updates if sync is running
+    if (runningCard) {
+        const syncId = runningCard.dataset.syncId;
+        
+        pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/v1/taxonomy/taxon-sync/${syncId}/status/`);
+                
+                // Stop polling if sync not found (deleted/flushed)
+                if (response.status === 404) {
+                    console.warn('Sync not found, stopping polling');
+                    clearInterval(pollInterval);
+                    window.location.reload();
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                // Update progress
+                const progressText = document.getElementById('sync-progress-text');
+                const statusText = document.getElementById('sync-status-text');
+                const phaseBadge = document.getElementById('sync-phase-badge');
+                
+                progressText.textContent = Math.round(data.progress_percent) + '%';
+                
+                // Update steps based on status
+                const stepNcbi = document.getElementById('step-ncbi');
+                const stepTaxa = document.getElementById('step-taxa');
+                const stepCol = document.getElementById('step-col');
+                const stepCrosswalks = document.getElementById('step-crosswalks');
+                
+                // Reset all card borders
+                [stepNcbi, stepTaxa, stepCol, stepCrosswalks].forEach(s => {
+                    if (s) s.classList.remove('border-primary', 'border-success', 'border-warning', 'border-purple');
+                });
+                
+                // Get avatars
+                const avatarNcbi = stepNcbi?.querySelector('.avatar');
+                const avatarTaxa = stepTaxa?.querySelector('.avatar');
+                const avatarCol = stepCol?.querySelector('.avatar');
+                const avatarCrosswalks = stepCrosswalks?.querySelector('.avatar');
+                
+                if (data.status === 'fetching_ncbi') {
+                    stepNcbi.classList.add('border-primary');
+                    avatarNcbi?.classList.remove('opacity-50');
+                    if (data.taxa_created > 0) {
+                        stepTaxa.classList.add('border-success');
+                        avatarTaxa?.classList.remove('opacity-50');
+                    }
+                    statusText.innerHTML = '<strong>Step 1/4:</strong> Downloading genomes from NCBI...';
+                    phaseBadge.textContent = 'Downloading NCBI';
+                    phaseBadge.className = 'badge bg-blue-lt text-blue text-uppercase fs-5 me-2';
+                } else if (data.status === 'matching_col') {
+                    avatarNcbi?.classList.remove('opacity-50');
+                    avatarTaxa?.classList.remove('opacity-50');
+                    stepCol.classList.add('border-warning');
+                    avatarCol?.classList.remove('opacity-50');
+                    statusText.innerHTML = '<strong>Step 3/4:</strong> Linking taxa with Catalogue of Life...';
+                    phaseBadge.textContent = 'Linking COL';
+                    phaseBadge.className = 'badge bg-yellow-lt text-yellow text-uppercase fs-5 me-2';
+                } else if (data.status === 'completed') {
+                    avatarNcbi?.classList.remove('opacity-50');
+                    avatarTaxa?.classList.remove('opacity-50');
+                    avatarCol?.classList.remove('opacity-50');
+                    stepCrosswalks.classList.add('border-purple');
+                    avatarCrosswalks?.classList.remove('opacity-50');
+                    statusText.innerHTML = '<strong>Completed!</strong> All steps finished successfully.';
+                    phaseBadge.textContent = 'Completed';
+                    phaseBadge.className = 'badge bg-green-lt text-green text-uppercase fs-5 me-2';
+                }
+                
+                // Update stats
+                document.getElementById('stat-ncbi-fetched').textContent = data.ncbi_fetched;
+                document.getElementById('stat-taxa-created').textContent = data.taxa_created;
+                document.getElementById('stat-col-matched').textContent = data.col_matched;
+                document.getElementById('stat-crosswalks').textContent = data.crosswalks_created;
+
+                // Refresh if completed
+                if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+                    clearInterval(pollInterval);
+                    setTimeout(() => window.location.reload(), 1500);
+                }
+            } catch (e) {
+                console.error('Error polling status:', e);
+            }
+        }, 2000);
+    }
+
+    function getCsrfToken() {
+        const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+        return cookie ? cookie.split('=')[1] : '';
+    }
+
+    // Initialize popovers
+    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+    popoverTriggerList.forEach(el => new bootstrap.Popover(el));
+});
+</script>
+{% endblock %}

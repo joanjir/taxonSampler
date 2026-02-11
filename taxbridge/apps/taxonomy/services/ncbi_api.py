@@ -1,8 +1,8 @@
 # apps/taxonomy/services/ncbi_api.py
 """
-Cliente NCBI API para Django TaxaBridge.
-Adaptado desde traerNCBI/ para integrarse con el sistema de match COL.
-Obtiene información de genomas, métricas y proteomas desde NCBI Datasets API.
+NCBI API client for Django TaxaBridge.
+Adapted from traerNCBI/ for integration with COL matching system.
+Fetches genome information, metrics and proteomes from NCBI Datasets API.
 """
 from __future__ import annotations
 
@@ -21,24 +21,32 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# ===================== CONFIGURACIÓN =====================
+# ===================== CONFIGURATION =====================
 
 NCBI_BASE_URL = "https://api.ncbi.nlm.nih.gov/datasets/v2"
-NCBI_API_KEY = os.environ.get("NCBI_API_KEY", "").strip()
 USER_AGENT = "TaxaBridge/1.0 (Django taxonomy matching)"
 NET_TIMEOUT = 45
 MAX_PARALLEL_CALLS = 8
 
-# Semáforo para limitar concurrencia
+def _get_api_key() -> str:
+    """Get NCBI API key from Django settings or environment."""
+    try:
+        from django.conf import settings
+        return getattr(settings, 'NCBI_API_KEY', '') or os.environ.get("NCBI_API_KEY", "")
+    except Exception:
+        return os.environ.get("NCBI_API_KEY", "")
+
+# Semaphore to limit concurrency
 _sema = Semaphore(MAX_PARALLEL_CALLS)
 _last_request = [0.0]
+_client_warned = [False]  # Track if we've already warned about missing API key
 
 
 # ===================== DATACLASSES =====================
 
 @dataclass
 class GenomeMetrics:
-    """Métricas de un ensamblaje de genoma."""
+    """Genome assembly metrics."""
     accession: str
     organism_name: str
     taxid: int
@@ -54,7 +62,7 @@ class GenomeMetrics:
 
 @dataclass
 class NCBITaxonInfo:
-    """Información completa de un taxón desde NCBI."""
+    """Complete taxon information from NCBI."""
     taxid: int
     scientific_name: str
     has_genome: bool
@@ -70,12 +78,12 @@ class NCBIClient:
 
     def __init__(self, api_key: Optional[str] = None):
         self.base_url = NCBI_BASE_URL
-        self.api_key = api_key or NCBI_API_KEY
+        self.api_key = (api_key or _get_api_key()).strip()
         self.timeout = NET_TIMEOUT
         self.session = self._make_session()
 
     def _make_session(self) -> requests.Session:
-        """Crea sesión HTTP con reintentos automáticos."""
+        """Create HTTP session with automatic retries."""
         session = requests.Session()
 
         retries = Retry(
@@ -98,14 +106,18 @@ class NCBIClient:
 
         if self.api_key:
             session.headers.update({"X-API-Key": self.api_key})
-            logger.info("NCBI API client inicializado con API key")
+            if not _client_warned[0]:
+                logger.info("NCBI API client initialized with API key")
+                _client_warned[0] = True
         else:
-            logger.warning("NCBI API client sin API key (modo limitado: 3 req/s)")
+            if not _client_warned[0]:
+                logger.warning("NCBI API client without API key (limited mode: 3 req/s)")
+                _client_warned[0] = True
 
         return session
 
     def _respect_rate_limit(self):
-        """Pausa para no exceder límite de velocidad."""
+        """Pause to respect rate limit."""
         now = time.time()
         min_interval = 0.13 if self.api_key else 0.35
         delta = now - _last_request[0]
@@ -127,7 +139,7 @@ class NCBIClient:
             except requests.exceptions.HTTPError as e:
                 status = getattr(e.response, "status_code", None)
                 if status == 404:
-                    logger.debug(f"NCBI {path} -> 404 (no encontrado)")
+                    logger.debug(f"NCBI {path} -> 404 (not found)")
                     return None
                 logger.error(f"NCBI HTTP error: {path} status={status}")
                 raise
@@ -136,7 +148,7 @@ class NCBIClient:
                 raise
 
     def _get_binary(self, path: str, params: Optional[Dict] = None) -> bytes:
-        """Descarga contenido binario (ZIPs)."""
+        """Download binary content (ZIPs)."""
         url = f"{self.base_url}{path}"
 
         with _sema:
@@ -160,7 +172,7 @@ class NCBIClient:
 # ===================== GENOMAS =====================
 
 def _extract_metrics(report: Dict[str, Any]) -> GenomeMetrics:
-    """Extrae métricas de un reporte de ensamblaje."""
+    """Extract metrics from an assembly report."""
     info = report.get("assembly_info", {}) or {}
     stats = report.get("assembly_stats", {}) or {}
     org = report.get("organism", {}) or {}
@@ -311,27 +323,27 @@ def _check_proteome(client: NCBIClient, accession: str) -> Tuple[bool, str]:
         return True, "good"
 
     except Exception as e:
-        logger.warning(f"Error verificando proteoma {accession}: {e}")
+        logger.warning(f"Error checking proteome {accession}: {e}")
         return False, "error"
 
 
-# ===================== API PRINCIPAL =====================
+# ===================== MAIN API =====================
 
 def get_taxon_genomes(taxid: int, check_proteomes: bool = True) -> NCBITaxonInfo:
     """
-    Obtiene información completa de genomas para un taxid.
+    Get complete genome information for a taxid.
     
     Args:
         taxid: NCBI Taxonomy ID
-        check_proteomes: Si verificar proteomas (más lento pero completo)
+        check_proteomes: Whether to check proteomes (slower but complete)
     
     Returns:
-        NCBITaxonInfo con todos los datos del taxón
+        NCBITaxonInfo with all taxon data
     """
     client = NCBIClient()
     taxid_str = str(taxid)
     
-    # 1. Obtener información básica del taxón
+    # 1. Get basic taxon information
     scientific_name = ""
     try:
         r = client._get(f"/taxonomy/taxon/{taxid_str}/name_report")
@@ -345,19 +357,37 @@ def get_taxon_genomes(taxid: int, check_proteomes: bool = True) -> NCBITaxonInfo
                         scientific_name = n.get("name", "")
                         break
     except Exception as e:
-        logger.warning(f"Error obteniendo nombre para taxid {taxid}: {e}")
+        logger.warning(f"Error getting name for taxid {taxid}: {e}")
 
-    # 2. Verificar si tiene genomas
-    has_genome = False
+    # 2. Get genome reports directly (the /summary endpoint doesn't exist in v2)
+    genomes: List[GenomeMetrics] = []
     try:
-        r = client._get(f"/genome/taxon/{taxid_str}/summary")
-        if r and r.status_code == 200:
-            total = r.json().get("total_count", 0)
-            has_genome = total > 0
-    except Exception:
-        pass
+        r = client._get(f"/genome/taxon/{taxid_str}/dataset_report")
+        if r:
+            reports = r.json().get("reports", []) or []
+            logger.debug(f"Taxid {taxid}: found {len(reports)} genome reports")
+            
+            # Filter only reference/representative
+            filtered = []
+            for rep in reports:
+                info = rep.get("assembly_info", {}) or {}
+                refcat = str(info.get("refseq_category", "")).upper()
+                if "REFERENCE" in refcat or "REPRESENTATIVE" in refcat:
+                    filtered.append(rep)
+            
+            # If no reference/representative, use all
+            if not filtered:
+                filtered = reports[:10]  # Limit to 10
 
-    if not has_genome:
+            for rep in filtered:
+                metrics = _extract_metrics(rep)
+                genomes.append(metrics)
+
+    except Exception as e:
+        logger.error(f"Error getting genomes for taxid {taxid}: {e}")
+    
+    # 3. If no genomes found, return early
+    if not genomes:
         return NCBITaxonInfo(
             taxid=taxid,
             scientific_name=scientific_name,
@@ -367,40 +397,14 @@ def get_taxon_genomes(taxid: int, check_proteomes: bool = True) -> NCBITaxonInfo
             proteome_status={},
         )
 
-    # 3. Obtener reportes de genomas
-    genomes: List[GenomeMetrics] = []
-    try:
-        r = client._get(f"/genome/taxon/{taxid_str}/dataset_report")
-        if r:
-            reports = r.json().get("reports", []) or []
-            
-            # Filtrar solo reference/representative
-            filtered = []
-            for rep in reports:
-                info = rep.get("assembly_info", {}) or {}
-                refcat = str(info.get("refseq_category", "")).upper()
-                if "REFERENCE" in refcat or "REPRESENTATIVE" in refcat:
-                    filtered.append(rep)
-            
-            # Si no hay reference/representative, usar todos
-            if not filtered:
-                filtered = reports[:10]  # Limitar a 10
-
-            for rep in filtered:
-                metrics = _extract_metrics(rep)
-                genomes.append(metrics)
-
-    except Exception as e:
-        logger.error(f"Error obteniendo genomas para taxid {taxid}: {e}")
-
-    # 4. Ordenar por score y seleccionar el mejor
+    # 4. Sort by score and select the best
     genomes.sort(key=lambda g: g.quality_score, reverse=True)
     best_genome = genomes[0] if genomes else None
 
-    # 5. Verificar proteomas si se solicita
+    # 5. Check proteomes if requested
     proteome_status: Dict[str, bool] = {}
     if check_proteomes and genomes:
-        # Solo verificar los top 3 para no sobrecargar
+        # Only check top 3 to avoid overloading
         for genome in genomes[:3]:
             has_prot, quality = _check_proteome(client, genome.accession)
             proteome_status[genome.accession] = has_prot
@@ -417,13 +421,15 @@ def get_taxon_genomes(taxid: int, check_proteomes: bool = True) -> NCBITaxonInfo
 
 def has_any_genome(taxid: int) -> bool:
     """
-    Verificación rápida si un taxid tiene genomas (sin descargar detalles).
+    Quick check if a taxid has genomes (without downloading details).
+    Uses dataset_report with limit=1 for efficiency.
     """
     client = NCBIClient()
     try:
-        r = client._get(f"/genome/taxon/{taxid}/summary")
+        r = client._get(f"/genome/taxon/{taxid}/dataset_report", params={"page_size": 1})
         if r and r.status_code == 200:
-            return r.json().get("total_count", 0) > 0
+            reports = r.json().get("reports", [])
+            return len(reports) > 0
     except Exception:
         pass
     return False
@@ -431,21 +437,21 @@ def has_any_genome(taxid: int) -> bool:
 
 def fetch_and_save_genomes(taxon, check_proteomes: bool = True) -> int:
     """
-    Obtiene genomas de NCBI y los guarda en la base de datos.
+    Fetch genomes from NCBI and save them to the database.
     
     Args:
-        taxon: Instancia de Taxon (NCBI)
-        check_proteomes: Verificar proteomas
+        taxon: Taxon instance (NCBI)
+        check_proteomes: Check proteomes
     
     Returns:
-        Número de genomas guardados
+        Number of genomes saved
     """
     from apps.taxonomy.models import NCBIGenome
     
     info = get_taxon_genomes(taxon.taxid, check_proteomes=check_proteomes)
     
     if not info.has_genome or not info.genomes:
-        logger.info(f"Taxid {taxon.taxid} sin genomas disponibles")
+        logger.info(f"Taxid {taxon.taxid} has no available genomes")
         return 0
 
     saved = 0
@@ -477,9 +483,9 @@ def fetch_and_save_genomes(taxon, check_proteomes: bool = True) -> int:
             action = "created" if created else "updated"
             logger.debug(f"NCBIGenome {genome.accession} {action}")
         except Exception as e:
-            logger.error(f"Error guardando genoma {genome.accession}: {e}")
+            logger.error(f"Error saving genome {genome.accession}: {e}")
 
-    # Desmarcar otros genomas del mismo taxón como "best"
+    # Unmark other genomes from the same taxon as "best"
     if saved > 0:
         best_acc = info.genomes[0].accession
         NCBIGenome.objects.filter(taxon=taxon).exclude(accession=best_acc).update(is_best_for_taxon=False)

@@ -174,12 +174,13 @@ CELERY_TASK_TIME_LIMIT = 60 * 60  # 1 hora máximo por tarea
 CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_QUEUES = {
     "default": {},
-    "ncbi_sync": {},  # Cola dedicada para sincronización NCBI
+    "ncbi_sync": {},  # Dedicated queue for NCBI sync
 }
 
 # ======================
 # NCBI Sync Settings
 # ======================
+NCBI_API_KEY = env("NCBI_API_KEY", default="")
 NCBI_SYNC_BATCH_SIZE = env.int("NCBI_SYNC_BATCH_SIZE", default=100)
 NCBI_SYNC_CHECK_PROTEOMES = env.bool("NCBI_SYNC_CHECK_PROTEOMES", default=False)
 NCBI_SYNC_MAX_RETRIES = env.int("NCBI_SYNC_MAX_RETRIES", default=3)

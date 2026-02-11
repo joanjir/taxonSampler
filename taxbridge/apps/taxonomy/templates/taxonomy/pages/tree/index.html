@@ -79,114 +79,49 @@
 
 {% block content %}
   <div class="row g-3 align-items-start">
-    <!-- Tree -->
-    {% include 'taxonomy/pages/tree/tree.html' %}
-    <!-- Panel derleftecho: Filters -->
-    {% include 'taxonomy/pages/tree/filterSampling.html' %}
+    <!-- Main panel: Tabs (Tree + Selection) -->
+    <div class="col-12 col-lg-9">
+      <div class="card">
+        <!-- Tab navigation -->
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <ul class="nav nav-tabs card-header-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="treeTab" data-bs-toggle="tab" data-bs-target="#treePane" type="button" role="tab" aria-controls="treePane" aria-selected="true">
+                <i class="fa-solid fa-sitemap me-1"></i>Árbol
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="selectionTab" data-bs-toggle="tab" data-bs-target="#selectionPane" type="button" role="tab" aria-controls="selectionPane" aria-selected="false">
+                <i class="fa-solid fa-list-check me-1"></i>Selection
+                <span id="selBadge" class="badge rounded-pill bg-primary ms-2" style="display: none;"></span>
+              </button>
+            </li>
+          </ul>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-primary-lt text-primary" title="Total species in tree">
+              <i class="fa-solid fa-dna me-1"></i><span id="speciesCount">0</span> species
+            </span>
+          </div>
+        </div>
+
+        <!-- Tab content -->
+        <div class="tab-content">
+          <!-- Tree pane -->
+          <div class="tab-pane fade show active" id="treePane" role="tabpanel" aria-labelledby="treeTab">
+            {% include 'taxonomy/pages/tree/tree_content.html' %}
+          </div>
+
+          <!-- Selection pane -->
+          <div class="tab-pane fade" id="selectionPane" role="tabpanel" aria-labelledby="selectionTab">
+            {% include 'taxonomy/pages/tree/selection_content.html' %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel derecho: Filters -->
+    {% include 'taxonomy/pages/tree/filter_sampling.html' %}
     <!-- /col -->
-  </div>
-
-  <!-- Selection + Sampling Result -->
-  <div class="card" id="selCard">
-    <div class="card-header">
-      <div class="d-flex align-items-center justify-content-between w-100">
-        <div>
-          <div class="card-title mb-0">
-            <i class="fa-solid fa-list-check me-1"></i>
-            Selection
-            <span id="selModeBadge" class="badge bg-secondary-lt text-secondary ms-2">Manual</span>
-          </div>
-          <div id="selSubtitle" class="text-muted small">Taxa selected for sampling / export</div>
-        </div>
-
-        <div class="btn-group btn-group-sm" role="group" aria-label="Selection actions">
-          <!-- Export dropdown -->
-          <div class="btn-group btn-group-sm" role="group">
-            <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export">
-              <i class="fa-solid fa-file-export me-1"></i>
-              Export
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li>
-                <button id="exportSelJson" class="dropdown-item" type="button"><i class="fa-solid fa-code me-2"></i>JSON</button>
-              </li>
-              <li>
-                <button id="exportSelTxt" class="dropdown-item" type="button"><i class="fa-solid fa-file-lines me-2"></i>List (txt)</button>
-              </li>
-              <li>
-                <button id="exportSelNewick" class="dropdown-item" type="button"><i class="fa-solid fa-diagram-project me-2"></i>Newick (species)</button>
-              </li>
-              <li>
-                <hr class="dropdown-divider" />
-              </li>
-              <li>
-                <button id="copySel" class="dropdown-item" type="button"><i class="fa-solid fa-copy me-2"></i>Copy to clipboard</button>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Body -->
-    <div class="card-body p-0">
-      <div class="table-responsive" style="max-height: 360px;">
-        <table class="table table-sm table-hover align-middle mb-0">
-          <thead class="table-light position-sticky" style="top: 0; z-index: 1;">
-            <tr>
-              <th class="ps-3">
-                <span>Taxon</span>
-                <span id="selHint" class="text-muted small ms-2"></span>
-              </th>
-              <th class="text-end pe-3" style="width: 64px;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="selList">
-            <tr>
-              <td class="text-muted small ps-3" colspan="2">No selection.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Footer: metrics + state -->
-    <div class="card-footer bg-white">
-      <div class="row g-2">
-        <div class="col-4">
-          <div class="border rounded-3 px-2 py-1 d-flex align-items-center justify-content-between">
-            <span class="text-muted small"><i class="fa-solid fa-hashtag me-1"></i>Total</span>
-            <span id="selCount" class="fw-semibold">0</span>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="border rounded-3 px-2 py-1 d-flex align-items-center justify-content-between">
-            <span class="text-muted small"><i class="fa-solid fa-sitemap me-1"></i>Ranks</span>
-            <span id="selRanks" class="fw-semibold">–</span>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="border rounded-3 px-2 py-1 d-flex align-items-center justify-content-between">
-            <span class="text-muted small"><i class="fa-solid fa-bullseye me-1"></i>Target</span>
-            <span id="selTarget" class="fw-semibold">–</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Status bar (only when sampling result exists) -->
-      <div id="samplingStatus" class="mt-2 d-none">
-        <div class="d-flex align-items-center justify-content-between">
-          <div class="text-muted small">
-            <i class="fa-solid fa-seedling me-1"></i>
-            Sampling result currently active in the view
-          </div>
-          <div class="btn-group btn-group-sm">
-            <button id="applySamplingView" class="btn btn-outline-success" type="button" title="Apply view (expand to species)"><i class="fa-solid fa-eye me-1"></i>View in tree</button>
-            <button id="clearSamplingView" class="btn btn-outline-secondary" type="button" title="Restore full tree"><i class="fa-solid fa-rotate-left me-1"></i>Reset</button>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 {% endblock %}
 
@@ -198,6 +133,40 @@
     window.TREE_ENDPOINT = "{% url 'taxonomy_api:tree-data' %}";
     window.TREE_SEARCH_ENDPOINT = "{% url 'taxonomy_api:tree-search' %}";
     window.SAMPLING_ENDPOINT = "{% url 'taxonomy_api:sampling-run' %}";
+    window.SCOPE_INFO_ENDPOINT = "{% url 'taxonomy_api:sampling-scope-info' %}";
+    
+    // Inicializar dropdown manualmente con vanilla JS (Tabler no expone bootstrap global)
+    document.addEventListener("DOMContentLoaded", function() {
+      const vizRankBtn = document.getElementById("vizRankBtn");
+      const dropdownMenu = vizRankBtn ? vizRankBtn.nextElementSibling : null;
+      
+      if (vizRankBtn && dropdownMenu) {
+        // Toggle dropdown on button click
+        vizRankBtn.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const isOpen = dropdownMenu.classList.contains("show");
+          // Close all other dropdowns first
+          document.querySelectorAll(".dropdown-menu.show").forEach(m => m.classList.remove("show"));
+          if (!isOpen) {
+            dropdownMenu.classList.add("show");
+          }
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener("click", function(e) {
+          if (!vizRankBtn.contains(e.target) && !dropdownMenu.contains(e.target)) {
+            dropdownMenu.classList.remove("show");
+          }
+        });
+        
+        // Close dropdown when selecting an item
+        dropdownMenu.querySelectorAll(".dropdown-item").forEach(function(item) {
+          item.addEventListener("click", function() {
+            dropdownMenu.classList.remove("show");
+          });
+        });
+      }
+    });
   </script>
   <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}"></script>
 {% endblock %}

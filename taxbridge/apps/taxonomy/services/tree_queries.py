@@ -8,132 +8,18 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
 
 from apps.taxonomy.models import ExternalTaxon
-
-RANK_ORDER = [
-    "dataset",
-    "domain",
-    "kingdom",
-    "phylum",
-    "class",
-    "order",
-    "family",
-    "genus",
-    "species",
-]
-
-ROOT_RANKS = {"domain", "superkingdom", "kingdom"}
-
-
-def norm_rank(rank: Optional[str]) -> str:
-    """Normaliza un rank a lowercase."""
-    return (rank or "").strip().lower()
-
-
-def rank_index(rank: Optional[str]) -> int:
-    """Devuelve el índice del rank en RANK_ORDER, o -1 si no existe."""
-    r = norm_rank(rank)
-    try:
-        return RANK_ORDER.index(r)
-    except ValueError:
-        return -1
-
-
-# ============================================================
-# Utilidades de Keys
-# ============================================================
-
-def path_key_from_parts(parts: List[Dict[str, str]]) -> str:
-    """Construye un key path desde partes [{rank, name}, ...]."""
-    return "|".join(
-        f"{norm_rank(p.get('rank', '?'))}:{p.get('name', '')}"
-        for p in parts
-    )
-
-
-def parse_key_parts(key: str) -> List[Dict[str, str]]:
-    """Parsea un key path a lista de {rank, name}."""
-    s = (key or "").strip()
-    if not s:
-        return []
-    
-    parts = []
-    for seg in s.split("|"):
-        idx = seg.find(":")
-        if idx < 0:
-            parts.append({"rank": norm_rank(seg), "name": ""})
-        else:
-            parts.append({
-                "rank": norm_rank(seg[:idx]),
-                "name": seg[idx + 1:]
-            })
-    return parts
-
-
-def key_depth(key: str) -> int:
-    """Devuelve la profundidad del key (número de segmentos)."""
-    if not key:
-        return 0
-    return len(key.split("|"))
-
-
-def is_prefix_key(parent_key: str, child_key: str) -> bool:
-    """Verifica si parent_key es prefijo de child_key."""
-    if not parent_key or not child_key:
-        return False
-    if parent_key == child_key:
-        return True
-    return child_key.startswith(parent_key + "|")
-
-
-def get_parent_key(key: str) -> Optional[str]:
-    """Obtiene el key del padre."""
-    parts = key.rsplit("|", 1)
-    return parts[0] if len(parts) > 1 else None
-
-
-# ============================================================
-# Path Normalization (desde classification_path)
-# ============================================================
-
-def _is_leaf_to_root(path: List[Dict[str, Any]]) -> bool:
-    """Detecta si el path viene en orden leaf->root."""
-    if not path:
-        return False
-    last_rank = (path[-1].get("rank") or "").strip().lower()
-    return last_rank in ROOT_RANKS
-
-
-def normalize_classification_path(path: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
-    """
-    Normaliza un classification_path a lista de (rank, name).
-    Maneja paths en ambas direcciones y elimina duplicados.
-    """
-    if not isinstance(path, list):
-        return []
-    
-    clean: List[Tuple[str, str]] = []
-    for x in path:
-        if not isinstance(x, dict):
-            continue
-        rank = (x.get("rank") or "").strip()
-        name = (x.get("name") or "").strip()
-        if not rank or not name:
-            continue
-        clean.append((rank.lower(), name))
-    
-    # Invertir si viene leaf->root
-    if _is_leaf_to_root(path):
-        clean.reverse()
-    
-    # Quitar duplicados consecutivos
-    out: List[Tuple[str, str]] = []
-    prev = None
-    for item in clean:
-        if item != prev:
-            out.append(item)
-        prev = item
-    
-    return out
+from apps.taxonomy.services.taxonomy_core import (
+    RANK_ORDER,
+    ROOT_RANKS,
+    norm_rank,
+    rank_index,
+    path_key_from_parts,
+    parse_key_parts,
+    is_prefix_key,
+    key_depth,
+    get_parent_key,
+    normalize_classification_path,
+)
 
 
 # ============================================================

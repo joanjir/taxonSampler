@@ -25,7 +25,8 @@ export function countSpeciesUnderNode(node) {
       count += 1;
       return;
     }
-    const kids = Array.isArray(n.children) ? n.children : [];
+    // Buscar en children o _children
+    const kids = getKids(n);
     for (const c of kids) dfs(c);
   })(node);
 

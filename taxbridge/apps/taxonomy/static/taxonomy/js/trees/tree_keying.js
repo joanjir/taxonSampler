@@ -1,5 +1,34 @@
 // taxonomy/static/taxonomy/js/trees/tree_keying.js
-// Utilidades puras: parts/keys + recorridos DFS.
+// Utilidades puras: ranks, parts/keys + recorridos DFS.
+
+// ============================================================
+// Constantes y funciones de ranks
+// ============================================================
+
+export const RANK_ORDER = [
+  'dataset',
+  'domain',
+  'kingdom',
+  'phylum',
+  'class',
+  'order',
+  'family',
+  'genus',
+  'species'
+];
+
+export function normRank(rank) {
+  return String(rank || '').trim().toLowerCase();
+}
+
+export function rankIndex(rank) {
+  const r = normRank(rank);
+  return RANK_ORDER.indexOf(r); // -1 si desconocido
+}
+
+// ============================================================
+// Funciones de keys
+// ============================================================
 
 export function pushPart(parts, node) {
     return [...parts, { rank: node?.rank || "?", name: node?.name || "" }];

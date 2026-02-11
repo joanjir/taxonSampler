@@ -5,14 +5,8 @@ Only HTML page routes are defined here. API routes are in api/urls.py.
 """
 from django.urls import path
 
-from .views import (
-    home,
-    scroll_test,
-    export_sampling,
-    search_debug_page,
-    tree_cut_debug_page,
-)
-from .views_sync import sync_dashboard, sync_detail
+from .views import home, export_sampling
+from .views_taxon_sync import taxon_sync_dashboard
 from .tree.views import tree_page
 
 app_name = "taxonomy"
@@ -22,15 +16,9 @@ urlpatterns = [
     path("", home, name="home"),
     path("tree/", tree_page, name="tree"),
     
-    # NCBI Sync Dashboard
-    path("sync/", sync_dashboard, name="sync-dashboard"),
-    path("sync/<int:sync_id>/", sync_detail, name="sync-detail"),
+    # Taxon Sync Dashboard (NCBI + COL)
+    path("taxon-sync/", taxon_sync_dashboard, name="taxon-sync-dashboard"),
     
-    # Export endpoints (POST - special case, keeps here for now)
+    # Export endpoints (POST)
     path("sampling/export/<str:fmt>/", export_sampling, name="sampling-export"),
-    
-    # Debug/development pages
-    path("dev/scroll-test/", scroll_test, name="scroll-test"),
-    path("dev/search-debug/", search_debug_page, name="search-debug"),
-    path("dev/tree-cut-debug/", tree_cut_debug_page, name="tree-cut-debug"),
 ]

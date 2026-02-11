@@ -51,97 +51,107 @@
         <div id="samStep1">
           <!-- Scope -->
           <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Scope (root)</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Universe for sampling. If not selected, uses the entire tree. Root is set from the active node in the tree (checkbox selects active node).">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-
-            <!-- IMPORTANTE: sampling_filters.js usa este ID -->
-            <select id="samplingRoot" class="form-select form-select-sm">
-              <option value="">Entire tree</option>
-              <option value="node">Use active node</option>
-            </select>
-
-            <!-- botones como tu versión anterior -->
-            <div class="d-flex gap-2 mt-2">
-              <button id="scopeSetActive" type="button" class="btn btn-sm btn-outline-primary w-100">
-                <i class="fa-solid fa-crosshairs me-1"></i>Set scope to active
-              </button>
-              <button id="scopeClear" type="button" class="btn btn-sm btn-outline-secondary"
-                      title="Clear scope (also clears targets)">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="badge bg-success rounded-circle" style="width:22px;height:22px;line-height:18px;">1</span>
+              <span class="fw-semibold small">Select your sampling universe</span>
             </div>
-
-            <div class="form-text small">
-              <span class="badge bg-secondary-lt text-secondary" id="scopeBadge" style="display:none;">scope=—</span>
-            </div>
-
-            <!-- ====== NUEVO: Richness (species under scope/targets/active) ====== -->
-            <div class="mt-2 border rounded-3 p-2 bg-light">
-              <div class="d-flex align-items-center justify-content-between">
-                <div class="small fw-semibold">
-                  <i class="fa-solid fa-chart-simple me-1"></i>
-                  Richness
+            
+            <div class="border rounded-3 p-2 bg-white">
+              <!-- Hidden select for JS compatibility -->
+              <select id="samplingRoot" class="d-none">
+                <option value="">Entire tree</option>
+                <option value="node">Use active node</option>
+              </select>
+              
+              <!-- Scope display -->
+              <div id="scopeDisplay" class="d-flex align-items-center justify-content-between">
+                <div>
+                  <i class="fa-solid fa-globe text-success me-1"></i>
+                  <span id="scopeLabel" class="small fw-semibold">Click a node in the tree</span>
                 </div>
-                <span class="badge bg-secondary-lt text-secondary" id="richScopeBadge">scope=—</span>
+                <span class="badge bg-success-lt text-success" id="scopeSpeciesCount">— spp</span>
               </div>
-
-              <div class="small text-muted mt-1" id="richTargetsLine">targets=—</div>
-              <div class="small text-muted" id="richActiveLine">active=—</div>
+              
+              <!-- Scope actions -->
+              <div class="d-flex gap-2 mt-2">
+                <button id="scopeSetActive" type="button" class="btn btn-sm btn-success w-100" title="Use the clicked node as your sampling scope">
+                  <i class="fa-solid fa-check me-1"></i>Use selected node
+                </button>
+                <button id="scopeClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear scope">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
             </div>
-            <!-- ====== /NUEVO ====== -->
-          </div>
-
-          <!-- Target clades -->
-          <div class="mb-2">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Target clades (optional)</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Optional. Select one or more sub-clades under the scope. Use the active node in the tree and add it as a target. If empty, sampling uses the whole scope.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-
-            <div class="d-flex gap-2">
-              <button id="targetAddActive" type="button" class="btn btn-sm btn-outline-success w-100">
-                <i class="fa-solid fa-plus me-1"></i>Add active as target
-              </button>
-              <button id="targetsClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear targets">
-                <i class="fa-solid fa-broom"></i>
-              </button>
+            
+            <div class="form-text small mt-1">
+              <span class="badge bg-success-lt text-success" id="scopeBadge">scope=—</span>
             </div>
           </div>
 
-          <!-- Chips -->
-          <div class="border rounded-3 p-2" style="min-height: 44px;">
-            <div id="targetsChips" class="d-flex flex-wrap gap-1">
-              <span class="text-muted small" id="targetsEmptyHint">No targets selected (sampling will use entire scope).</span>
+          <!-- STEP 1.2: Add Targets (optional) -->
+          <div class="mb-3">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="badge bg-primary rounded-circle" style="width:22px;height:22px;line-height:18px;">2</span>
+              <span class="fw-semibold small">Focus on specific groups <span class="text-muted fw-normal">(optional)</span></span>
+            </div>
+            
+            <div class="border rounded-3 p-2 bg-white">
+              <div class="d-flex gap-2 mb-2">
+                <button id="targetAddActive" type="button" class="btn btn-sm btn-outline-primary w-100" title="Add the clicked node as a target group">
+                  <i class="fa-solid fa-plus me-1"></i>Add clicked node
+                </button>
+                <button id="targetsClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear all targets">
+                  <i class="fa-solid fa-broom"></i>
+                </button>
+              </div>
+              
+              <!-- Target chips -->
+              <div id="targetsChips" class="d-flex flex-wrap gap-1" style="min-height: 28px;">
+                <span class="text-muted small" id="targetsEmptyHint">No groups selected - sampling will use entire scope</span>
+              </div>
             </div>
           </div>
 
-          <div class="alert alert-warning py-2 px-2 mt-2 d-none" id="targetsWarn">
+          <!-- Stats panel -->
+          <div class="border rounded-3 p-2 bg-light mb-3">
+            <div class="fw-semibold mb-2">
+              <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
+              Species count
+            </div>
+            
+            <div class="row g-2 text-center">
+              <div class="col-6">
+                <div class="border rounded bg-white p-2">
+                  <div class="small text-muted">Scope</div>
+                  <div class="fw-bold text-success" id="richScopeBadge">-</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="border rounded bg-white p-2">
+                  <div class="small text-muted">Targets</div>
+                  <div class="fw-bold text-primary" id="richTargetsCount">-</div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-2 pt-2 border-top small" id="richActiveLine">
+              <i class="fa-solid fa-mouse-pointer me-1 text-muted"></i>
+              <span class="text-muted">Click a node to see its species count</span>
+            </div>
+          </div>
+
+          <div class="alert alert-warning py-2 px-2 d-none" id="targetsWarn">
             <div class="small">
               <i class="fa-solid fa-triangle-exclamation me-1"></i>
-              <span id="targetsWarnText">—</span>
+              <span id="targetsWarnText">-</span>
             </div>
           </div>
 
-          <div class="alert alert-info py-2 px-2 mt-2">
-            <div class="small">
-              <i class="fa-solid fa-circle-info me-1"></i>
-              Tip: click a node to make it active. Then use “Set scope to active” and optionally “Add active as target”.
+          <!-- Help tip -->
+          <div class="alert alert-light border py-2 px-2">
+            <div class="small text-muted">
+              <i class="fa-solid fa-lightbulb me-1 text-warning"></i>
+              <strong>How to use:</strong> Click nodes in the tree. First set your <span class="text-success fw-semibold">scope</span> (green border), then optionally add <span class="text-primary fw-semibold">target groups</span> (blue border) within it.
             </div>
           </div>
         </div>

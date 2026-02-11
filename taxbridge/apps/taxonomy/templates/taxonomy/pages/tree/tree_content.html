@@ -1,0 +1,32 @@
+<!-- Tree content (dentro de tab) -->
+<div class="card-body p-0 border-bottom">
+  <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light">
+    <div class="text-muted small">
+      Ruta activa: <span id="crumb" class="text-body">Root</span>
+    </div>
+    <div class="d-flex gap-2">
+      <button id="fitBtn" class="btn btn-sm btn-outline-secondary" type="button">Fit</button>
+      <button id="collapseAllBtn" class="btn btn-sm btn-outline-secondary" type="button">collapse all</button>
+    </div>
+  </div>
+</div>
+
+<div class="card-body p-0">
+  <div id="treeMount" class="position-relative overflow-hidden bg-white" style="height: 540px;">
+    <div id="tt" class="position-absolute" style="
+            z-index: 20; pointer-events: none;
+            background: rgba(17,24,39,.95); color: #fff; font-size: 12px;
+            padding: 6px 8px; border-radius: 8px; max-width: 420px;
+            white-space: pre-line; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+            opacity: 0; transform: translateY(4px);
+            transition: opacity 80ms linear, transform 80ms linear;
+          "></div>
+
+    <!-- BOTÓN FULLSCREEN -->
+    <button id="fsBtn" type="button" class="btn position-absolute" style="right:12px; bottom:12px; z-index:30; background:transparent; border:0;" aria-label="Pantalla completa"><i id="fsIcon" class="fa-solid fa-expand"></i></button>
+  </div>
+</div>
+
+<div class="card-footer small text-muted">
+  <span>Pan / Zoom: scroll and drag · Click: expand one level</span>
+</div>

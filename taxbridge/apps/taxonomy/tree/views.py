@@ -17,18 +17,16 @@ from apps.taxonomy.services.tree_builder import (
     find_node_by_key,
     count_species_under,
     list_clades_at_rank,
+)
+from apps.taxonomy.services.taxonomy_core import (
+    RANK_ORDER,
+    ROOT_RANKS,
+    norm_rank,
     path_key_from_parts,
     parse_key_parts,
-    norm_rank,
-    RANK_ORDER,
+    normalize_classification_path,
+    parts_to_label,
 )
-
-ROOT_RANKS = {"domain", "superkingdom", "kingdom"}
-
-
-def _parts_to_label(parts: List[Dict[str, str]]) -> str:
-    """Genera label legible desde partes."""
-    return " / ".join([f"{p.get('rank') or '?'}:{p.get('name') or ''}" for p in parts])
 
 
 def _parse_include(v: str) -> Set[str]:
@@ -37,36 +35,6 @@ def _parse_include(v: str) -> Set[str]:
     if not s:
         return {"species", "nodes"}
     return {x.strip() for x in s.split(",") if x.strip()}
-
-
-def _normalize_classification_path(path: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
-    """Normaliza classification_path de la BD a lista de (rank, name)."""
-    if not isinstance(path, list):
-        return []
-    
-    clean: List[Tuple[str, str]] = []
-    for x in path:
-        if not isinstance(x, dict):
-            continue
-        rank = (x.get("rank") or "").strip()
-        name = (x.get("name") or "").strip()
-        if not rank or not name:
-            continue
-        clean.append((rank.lower(), name))
-    
-    # Detectar y corregir orden leaf->root
-    if clean and clean[-1][0] in ROOT_RANKS:
-        clean.reverse()
-    
-    # Quitar duplicados consecutivos
-    out: List[Tuple[str, str]] = []
-    prev = None
-    for item in clean:
-        if item != prev:
-            out.append(item)
-        prev = item
-    
-    return out
 
 
 # ============================================================
@@ -166,7 +134,7 @@ def tree_search(request):
         )
 
         for rec in sp_qs:
-            path = _normalize_classification_path(rec.classification_path)
+            path = normalize_classification_path(rec.classification_path)
             parts = [{"rank": "dataset", "name": "Root"}] + [{"rank": r, "name": n} for r, n in path] + [
                 {"rank": "species", "name": rec.name}
             ]
@@ -180,7 +148,7 @@ def tree_search(request):
                 "rank": "species",
                 "id": rec.id,
                 "external_id": rec.external_id,
-                "label": _parts_to_label(parts),
+                "label": parts_to_label(parts),
                 "kind": "species",
             }
 
@@ -202,7 +170,7 @@ def tree_search(request):
         )
 
         for sp in scan_qs:
-            path = _normalize_classification_path(sp.classification_path)
+            path = normalize_classification_path(sp.classification_path)
             if not path:
                 continue
 
@@ -219,7 +187,7 @@ def tree_search(request):
                         "rank": r,
                         "id": None,
                         "external_id": None,
-                        "label": _parts_to_label(parts_prefix),
+                        "label": parts_to_label(parts_prefix),
                         "kind": "node",
                     }
 
@@ -259,4 +227,6 @@ def tree_search(request):
 
 
 def tree_page(request):
-    return render(request, "taxonomy/pages/tree/index.html", {})
+    return render(request, "taxonomy/pages/tree/index.html", {
+        "show_tree_controls": True,
+    })

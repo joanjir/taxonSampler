@@ -14,7 +14,10 @@ export function makeVisibleBuilder({ shouldExpandKey, leafByCut }) {
     const nextParts = pushPart(parts, node);
     const key = keyOf(nextParts);
 
-    const kids = Array.isArray(node.children) ? node.children : [];
+    // Buscar hijos en children O _children (nodos colapsados del backend)
+    const kids = Array.isArray(node.children) && node.children.length
+      ? node.children
+      : (Array.isArray(node._children) ? node._children : []);
     const out = { ...node, __key: key };
 
     if (leafByCut(node)) {
@@ -59,20 +62,35 @@ export function buildVisibleTree({
 
   const buildVisible = makeVisibleBuilder({ shouldExpandKey, leafByCut });
 
-  // Caso A
+  // Caso A: No hay scope seleccionado - mostrar árbol completo
   if (!(samplingMode === "node" && samplingRootKey)) {
+    console.log("[tree_visibility] Caso A: árbol completo (no scope)");
     return buildVisible(fullData, []);
   }
 
-  // Caso B
+  // Caso B: Hay scope - mostrar ruta + subárbol del scope
+  console.log("[tree_visibility] Caso B: scope activo:", samplingRootKey);
+  
   const hit = findByKey(fullData, samplingRootKey);
   if (!hit) {
+    console.log("[tree_visibility] Scope no encontrado, fallback a árbol completo");
     // fallback al árbol completo
     return buildVisible(fullData, []);
   }
+  
+  console.log("[tree_visibility] Scope encontrado:", hit.node?.name, "parts:", hit.parts?.length);
 
   const parts = hit.parts; // ROOT..clado
   const rootNode = fullData;
+
+  // Caso especial: si el scope es la raíz del árbol (parts.length === 1),
+  // simplemente construir el árbol visible normal marcando el root como activeRoot
+  if (parts.length === 1) {
+    console.log("[tree_visibility] Caso especial: scope es la raíz");
+    const visible = buildVisible(fullData, []);
+    visible.__activeRoot = true;
+    return visible;
+  }
 
   function buildRouteChain(fullNode, partsSoFar, idx) {
     const nextParts = pushPart(partsSoFar, fullNode);
@@ -91,7 +109,10 @@ export function buildVisibleTree({
       return out;
     }
 
-    const kids = Array.isArray(fullNode.children) ? fullNode.children : [];
+    // Buscar hijos en children O _children
+    const kids = Array.isArray(fullNode.children) && fullNode.children.length
+      ? fullNode.children
+      : (Array.isArray(fullNode._children) ? fullNode._children : []);
     out.__hasChildren = kids.length > 0;
 
     const wantNext = parts[idx + 1];

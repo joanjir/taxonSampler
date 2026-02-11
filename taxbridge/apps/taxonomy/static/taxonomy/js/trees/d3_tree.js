@@ -1,6 +1,6 @@
-// taxonomy/static/taxonomy/js/tree/d3_tree.js
+// taxonomy/static/taxonomy/js/trees/d3_tree.js
 import { VIS, AUTOFIT, rankStyle, isSciName } from "../tree/config.js";
- import { normRank, rankIndex } from "../tree/filtertax.js";
+import { normRank, rankIndex } from "./tree_keying.js";
 
 // Helpers (delegados a /trees/)
 import {
@@ -35,6 +35,14 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
   // samplingMode: "" (tree) | "node" (selected clade)
   let samplingMode = ""; // default: entire tree
   let samplingRootKey = null; // key del clado activo (cuando samplingMode === "node")
+  
+  // ---------------- Sampling Setup State ----------------
+  let samplingSetupEnabled = false;
+  let samplingSetupLocked = false;
+  const samplingTargetKeys = new Set();  // keys of target clades
+  
+  // Map to store node widths by key (preserved across tree rebuilds)
+  const nodeWidths = new Map();
 
   function expandPathByKeyPath(keyPath) {
     if (!keyPath) return;
@@ -50,10 +58,28 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     }
   }
 
+  function collapseDescendants(key) {
+    // Elimina del Set expandedKeys todas las keys que empiecen con este key
+    // Esto asegura que al colapsar un nodo, todos sus descendientes también colapsen
+    if (!key) return;
+    const prefix = key + "|";
+    for (const k of [...expandedKeys]) {
+      if (k.startsWith(prefix)) {
+        expandedKeys.delete(k);
+      }
+    }
+  }
+
   // ---------------- Reveal helpers (para "Ver en árbol") ----------------
   function revealKeys(keys, opts = {}) {
     if (!Array.isArray(keys) || !keys.length) return;
     if (!fullData) return;
+
+    // 0) Salir de modo rankCut si estuviera activo (para permitir navegación manual)
+    if (rankCut) {
+      seedExpandedKeysFromCurrentRoot();
+      rankCut = null;
+    }
 
     // 1) abrir todo el camino hasta cada key
     keys.forEach((key) => {
@@ -72,15 +98,14 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     // 3) reconstruir vista
     if (root) rebuildHierarchyAndUpdate(root);
 
-    // 4) centrar (primer key válida)
+    // 4) centrar o fit
     const firstKey = keys.find(Boolean);
-    if (firstKey) {
-      setTimeout(() => centerOnKeyAfterRebuild(firstKey), 0);
-    }
-
-    // 5) fit opcional
-    if (opts.fit !== false) {
-      setTimeout(fitToView, 0);
+    if (opts.fit) {
+      // Si se pide fit, ajustar todo a la vista
+      setTimeout(fitToView, 250);
+    } else if (firstKey) {
+      // Si no, centrar en el primer nodo encontrado
+      centerOnKeyAfterRebuild(firstKey, 250);
     }
   }
 
@@ -100,7 +125,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       // clear root when leaving clade mode
       setSamplingRootKey(null, { rebuild: false });
     }
-    if (root) update(root);
+    updateCheckboxVisibility();
   }
 
   function clearSamplingRoot() {
@@ -111,8 +136,111 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     return samplingRootKey;
   }
 
+  // ---------------- Sampling Setup API (for sampling_filters.js) ----------------
+  
+  function getSamplingScopeKey() {
+    return samplingRootKey;
+  }
+  
+  function setSamplingScopeKey(key) {
+    // Ensure samplingMode is "node" when setting a scope
+    if (key && samplingMode !== "node") {
+      samplingMode = "node";
+    }
+    
+    // If clearing scope, also clear targets
+    if (!key && samplingTargetKeys.size > 0) {
+      samplingTargetKeys.clear();
+      window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: [] } }));
+    }
+    
+    console.log("[d3_tree] setSamplingScopeKey:", key, "samplingMode:", samplingMode);
+    
+    setSamplingRootKey(key, { rebuild: true, center: true });
+    window.dispatchEvent(new CustomEvent("sampling:scope-changed", { detail: { key } }));
+  }
+  
+  function getSamplingTargetKeys() {
+    return Array.from(samplingTargetKeys);
+  }
+  
+  function toggleSamplingTargetKey(key) {
+    if (!key) return;
+    if (samplingTargetKeys.has(key)) {
+      samplingTargetKeys.delete(key);
+    } else {
+      samplingTargetKeys.add(key);
+    }
+    if (root) update(root);
+    window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: Array.from(samplingTargetKeys) } }));
+  }
+  
+  function updateCheckboxVisibility() {
+    // Force update checkbox visibility on all nodes when samplingMode changes
+    if (!gZoom) return;
+    gZoom.selectAll("g.node").each(function(d) {
+      const g = d3.select(this);
+      const ui = computeNodeUIState({ d, samplingMode, samplingRootKey, samplingTargetKeys, keyFromD3Node });
+      g.select("g.cb").style("display", ui.showCheckbox ? null : "none");
+      g.select("path.cb-tick").style("opacity", ui.showTick ? 1 : 0);
+      
+      if (ui.disable) {
+        g.style("opacity", 0.55);
+        g.select("g.cb").style("pointer-events", "none");
+      } else {
+        g.style("opacity", 1);
+        g.select("g.cb").style("pointer-events", null);
+      }
+      
+      // Scope: borde verde fuerte
+      if (ui.isScope) {
+        g.select("rect.node-box")
+          .attr("stroke", "#198754") // bootstrap success green
+          .attr("stroke-width", 3);
+      // Target: borde azul
+      } else if (ui.isTarget) {
+        g.select("rect.node-box")
+          .attr("stroke", "#0d6efd") // bootstrap primary blue
+          .attr("stroke-width", 2);
+      } else {
+        g.select("rect.node-box").attr("stroke-width", 1);
+      }
+    });
+  }
+  
+  function setSamplingSetupEnabled(enabled) {
+    samplingSetupEnabled = !!enabled;
+    // Also set samplingMode so checkboxes are visible
+    if (enabled) {
+      samplingMode = "node";
+    } else {
+      samplingMode = "";
+      samplingTargetKeys.clear();
+      samplingRootKey = null;
+    }
+    updateCheckboxVisibility();
+  }
+  
+  function setSamplingSetupLocked(locked) {
+    samplingSetupLocked = !!locked;
+  }
+  
+  function resetSamplingSetup() {
+    samplingMode = "";
+    samplingRootKey = null;
+    samplingTargetKeys.clear();
+    samplingSetupEnabled = false;
+    samplingSetupLocked = false;
+    if (root) update(root);
+    window.dispatchEvent(new CustomEvent("sampling:scope-changed", { detail: { key: null } }));
+    window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: [] } }));
+  }
+
   function isNodeCladeFull(node) {
-    const kids = Array.isArray(node?.children) ? node.children : [];
+    // Check both children and _children (collapsed nodes)
+    const kids = Array.isArray(node?.children) && node.children.length > 0
+      ? node.children
+      : (Array.isArray(node?._children) ? node._children : []);
     return kids.length > 0;
   }
 
@@ -157,11 +285,22 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     setCrumbText(pathLabel(nodePath(d)));
   }
 
+  // Draw link from right edge of parent to left edge of child
+  // parent is at (d.y, d.x), child is at (s.y, s.x)
+  // We use the actual computed width of the parent node from nodeWidths map
   function diagonal(s, d) {
-    return `M ${s.y} ${s.x}
-            C ${(s.y + d.y) / 2} ${s.x},
-              ${(s.y + d.y) / 2} ${d.x},
-              ${d.y} ${d.x}`;
+    if (!d) return '';
+    // Get saved width from map, fallback to MIN_W
+    const parentKey = d.data?.__key || '';
+    const parentWidth = nodeWidths.get(parentKey) || VIS.MIN_W;
+    const py = d.y + parentWidth;
+    const px = d.x;
+    const sy = s.y;
+    const sx = s.x;
+    return `M ${py} ${px}
+            C ${(py + sy) / 2} ${px},
+              ${(py + sy) / 2} ${sx},
+              ${sy} ${sx}`;
   }
 
   function findFirstSpecies(d) {
@@ -206,6 +345,36 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
   }
 
   // ---------------- helpers (salir de filtro sin "cerrar todo") ----------------
+  
+  // Count total nodes in tree
+  function countTotalNodes(node) {
+    if (!node) return 0;
+    let count = 1;
+    const kids = Array.isArray(node.children) ? node.children 
+               : (Array.isArray(node._children) ? node._children : []);
+    for (const c of kids) {
+      count += countTotalNodes(c);
+    }
+    return count;
+  }
+  
+  // Recorre fullData y agrega keys de nodos con children a expandedKeys
+  // maxDepth limits expansion for large trees
+  function seedExpandedKeysFromData(node, maxDepth = Infinity, currentDepth = 0) {
+    if (!node) return;
+    
+    // Stop if we're beyond max depth
+    if (currentDepth >= maxDepth) return;
+    
+    // Si tiene key y tiene children (expandido por el backend), agregar a expandedKeys
+    if (node.key && Array.isArray(node.children) && node.children.length) {
+      expandedKeys.add(node.key);
+      for (const c of node.children) {
+        seedExpandedKeysFromData(c, maxDepth, currentDepth + 1);
+      }
+    }
+  }
+  
   function seedExpandedKeysFromCurrentRoot() {
     expandedKeys.clear();
     if (!root) return;
@@ -244,7 +413,9 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
   // ---------------- construir árbol visible (delegado) ----------------
   function buildVisibleTree() {
-    return buildVisibleTreeHelper({
+    console.log("[d3_tree] buildVisibleTree:", { samplingMode, samplingRootKey, hasFullData: !!fullData });
+    
+    const result = buildVisibleTreeHelper({
       fullData,
       samplingMode,
       samplingRootKey,
@@ -252,6 +423,16 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       leafByCut: isLeafByCut,
       findByKey: (fd, k) => findInTreeByKey(fd, k),
     });
+    
+    console.log("[d3_tree] buildVisibleTree result:", { 
+      hasResult: !!result, 
+      rootName: result?.name,
+      rootPath: result?.__path,
+      rootActiveRoot: result?.__activeRoot,
+      childrenCount: result?.children?.length 
+    });
+    
+    return result;
   }
 
   // ---------------- zoom/fit (delegado) ----------------
@@ -295,17 +476,27 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     return root.descendants().find((x) => (x.data && x.data.__key) === k) || null;
   }
 
-  function centerOnKeyAfterRebuild(k) {
-    requestAnimationFrame(() => {
+  function centerOnKeyAfterRebuild(k, delay = 50) {
+    setTimeout(() => {
       const nd = findVisibleNodeByKey(k);
       if (nd) centerOn(nd);
-    });
+    }, delay);
   }
 
   // ---------------- update D3 ----------------
   function rebuildHierarchyAndUpdate(sourceForAnim) {
     const visible = buildVisibleTree();
     root = d3.hierarchy(visible, (d) => d.children);
+    
+    // Ensure root has initial positions for animation
+    if (root && (root.x0 === undefined || root.y0 === undefined)) {
+      // Use sourceForAnim's position if available, otherwise use current root or 0
+      const animX = sourceForAnim?.x0 ?? sourceForAnim?.x ?? 0;
+      const animY = sourceForAnim?.y0 ?? sourceForAnim?.y ?? 0;
+      root.x0 = animX;
+      root.y0 = animY;
+    }
+    
     update(sourceForAnim || root);
   }
 
@@ -370,39 +561,73 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
         ev.stopPropagation();
 
         const key = d.data.__key || keyFromD3Node(d);
+        const rank = (d.data.rank || "").toLowerCase();
+        const name = d.data.name || "";
+        
+        console.log("[d3_tree] Checkbox clicked, key:", key, "rank:", rank, "samplingMode:", samplingMode, "currentScope:", samplingRootKey);
 
-        // En modo Selected clade: el checkbox define / quita la raíz
+        // Always dispatch active node changed so sampling panel stays in sync
+        window.dispatchEvent(new CustomEvent("tree:active-changed", {
+          detail: { key, rank, name }
+        }));
+
+        // En modo sampling "node"
         if (samplingMode === "node") {
-          // ancestros de la ruta (muted) no se pueden usar
-          if (d.data.__path && d.data.__muted) return;
-
-          // Validación: el nodo debe existir en fullData y tener hijos reales
-          const hit = findInFullDataByKey(key);
-          if (!hit) return;
-          if (!isNodeCladeFull(hit.node)) return;
-
-          // TOGGLE:
-          // - si clicas el mismo root => deselecciona (vuelve a árbol completo)
-          // - si clicas otro => cambia root a ese clado
-          if (samplingRootKey && key === samplingRootKey) {
-            // al quitar root, conviene mantener expansión manual previa
-            setSamplingRootKey(null, { source: d, center: false, fitOnClear: true });
-            smartFitIfNeeded();
-
-            // DEBUG
-            console.log("[sampling] root cleared");
+          // No permitir species
+          if (rank === "species") {
+            console.log("[d3_tree] Blocked: species cannot be selected");
             return;
           }
 
-          setSamplingRootKey(key, { source: d, center: true, fitOnClear: false });
-          smartFitIfNeeded();
+          // Ancestros de la ruta (muted) no se pueden usar
+          if (d.data.__path && d.data.__muted) {
+            console.log("[d3_tree] Blocked: muted path node");
+            return;
+          }
 
-          // DEBUG
-          console.log("[sampling] root set:", samplingRootKey);
+          // Validación: el nodo debe existir en fullData
+          const hit = findInFullDataByKey(key);
+          if (!hit) {
+            console.log("[d3_tree] Blocked: node not found in fullData");
+            return;
+          }
+
+          // CASO 1: No hay scope establecido → este nodo se convierte en scope
+          if (!samplingRootKey) {
+            if (!isNodeCladeFull(hit.node)) {
+              console.log("[d3_tree] Blocked: node has no children, cannot be scope");
+              return;
+            }
+            setSamplingRootKey(key, { source: d, center: true, fitOnClear: false });
+            smartFitIfNeeded();
+            console.log("[sampling] scope set:", key);
+            return;
+          }
+
+          // CASO 2: Click en el scope actual → limpiar scope
+          if (key === samplingRootKey) {
+            // También limpiar targets
+            samplingTargetKeys.clear();
+            setSamplingRootKey(null, { source: d, center: false, fitOnClear: true });
+            smartFitIfNeeded();
+            console.log("[sampling] scope cleared");
+            window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: [] } }));
+            return;
+          }
+
+          // CASO 3: Ya hay scope y click en otro nodo → toggle como target
+          // El nodo debe estar dentro del scope (no ser path/muted)
+          if (d.data.__activeRoot) {
+            // No debería llegar aquí, pero por si acaso
+            return;
+          }
+
+          toggleSamplingTargetKey(key);
+          console.log("[sampling] target toggled:", key, "targets:", Array.from(samplingTargetKeys));
           return;
         }
 
-        // modo normal (selección) - usando selId estable
+        // modo normal (selección de especies) - usando selId estable
         const selId = d.data.__key || keyFromD3Node(d);
 
         if (selected.has(selId)) {
@@ -464,8 +689,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       .attr("height", VIS.NODE_H)
       .attr("width", VIS.MIN_W);
 
-    // medir/truncar
-    nodeEnter.each(function () {
+    // medir/truncar y guardar ancho para links
+    nodeEnter.each(function (d) {
       const g = d3.select(this);
       const t = g.select("text");
 
@@ -475,6 +700,10 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       const bbox = t.node().getBBox();
       const wBox = Math.max(VIS.MIN_W, Math.min(VIS.MAX_W, bbox.width + bbox.x + VIS.PAD_X + reserve));
       g.select("rect.node-box").attr("width", wBox);
+      
+      // Save width in map for link drawing (persists across rebuilds)
+      const key = d.data?.__key || '';
+      if (key) nodeWidths.set(key, wBox);
     });
 
     const nodeUpdate = nodeEnter.merge(node);
@@ -484,39 +713,57 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       .classed("has-children-collapsed", (d) => !!d.data.__hasChildren && !d.children)
       .classed("clade-path", (d) => !!d.data.__path && !!d.data.__muted)
       .classed("clade-root", (d) => !!d.data.__activeRoot && (d.data.__key === samplingRootKey))
+      .classed("sampling-target", (d) => samplingTargetKeys.has(d.data.__key || keyFromD3Node(d)))
       .on("click", function (d) {
+        console.log("[d3_tree] Node clicked:", d.data?.name, "key:", d.data?.__key);
         setCrumbFromNode(d);
 
         // ruta muted deshabilitada
         if (samplingMode === "node" && samplingRootKey && d.data.__path && d.data.__muted) {
+          console.log("[d3_tree] Click blocked - muted path node");
           return;
         }
 
         userHasInteracted = true;
 
         const key = d.data.__key || keyFromD3Node(d);
+        const rank = (d.data.rank || "").toLowerCase();
+        const name = d.data.name || "";
+        
+        console.log("[d3_tree] Dispatching tree:active-changed", { key, rank, name });
+        // Dispatch active node changed event for sampling panel
+        window.dispatchEvent(new CustomEvent("tree:active-changed", {
+          detail: { key, rank, name }
+        }));
 
         // Si estabas en filtro rankCut: sales a manual y togglás el nodo tocado
         if (rankCut) {
           rankCut = null;
           seedExpandedKeysFromCurrentRoot();
 
-          if (expandedKeys.has(key)) expandedKeys.delete(key);
-          else expandedKeys.add(key);
+          if (expandedKeys.has(key)) {
+            expandedKeys.delete(key);
+            collapseDescendants(key);
+          } else {
+            expandedKeys.add(key);
+          }
 
           rebuildHierarchyAndUpdate(d);
-          smartFitIfNeeded();
-          centerOnKeyAfterRebuild(key);
+          centerOnKeyAfterRebuild(key, 250);
           return;
         }
 
         // Manual toggle (solo dentro del view actual)
-        if (expandedKeys.has(key)) expandedKeys.delete(key);
-        else expandedKeys.add(key);
+        if (expandedKeys.has(key)) {
+          expandedKeys.delete(key);
+          collapseDescendants(key);
+        } else {
+          expandedKeys.add(key);
+        }
 
         rebuildHierarchyAndUpdate(d);
-        smartFitIfNeeded();
-        centerOnKeyAfterRebuild(key);
+        // Solo centrar el nodo, sin smartFit que puede interferir
+        centerOnKeyAfterRebuild(key, 250);
       });
 
     nodeUpdate.each(function (d) {
@@ -526,9 +773,9 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       // estilos base
       g.select("rect.node-box").attr("fill", st.fill).attr("stroke", st.stroke);
 
-      const ui = computeNodeUIState({ d, samplingMode, samplingRootKey, keyFromD3Node });
+      const ui = computeNodeUIState({ d, samplingMode, samplingRootKey, samplingTargetKeys, keyFromD3Node });
 
-      // checkbox visibility: solo cuando samplingMode === "node"
+      // checkbox visibility: solo cuando samplingMode === "node" y no es species
       g.select("g.cb").style("display", ui.showCheckbox ? null : "none");
 
       // tick
@@ -543,10 +790,15 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
         g.select("g.cb").style("pointer-events", null);
       }
 
-      // raíz activa: borde verde fuerte
-      if (ui.isActive) {
+      // Scope: borde verde fuerte
+      if (ui.isScope) {
         g.select("rect.node-box")
-          .attr("stroke", "#198754") // bootstrap success
+          .attr("stroke", "#198754") // bootstrap success green
+          .attr("stroke-width", 3);
+      // Target: borde azul
+      } else if (ui.isTarget) {
+        g.select("rect.node-box")
+          .attr("stroke", "#0d6efd") // bootstrap primary blue
           .attr("stroke-width", 2);
       } else {
         g.select("rect.node-box").attr("stroke-width", 1);
@@ -572,26 +824,17 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       .attr("transform", (d) => `translate(${d.y},${d.x}) scale(0.96)`)
       .remove();
 
-    const link = gZoom
+    // Links: remove all and redraw to avoid stale references
+    gZoom.selectAll("path.link").remove();
+    
+    gZoom
       .selectAll("path.link")
-      .data(links, (d) => (d.data && d.data.__key) ? d.data.__key : keyFromD3Node(d));
-
-    link
+      .data(links)
       .enter()
       .insert("path", "g")
       .attr("class", "link")
-      .attr("d", () => {
-        const o = { x: source.x0 || 0, y: source.y0 || 0 };
-        return diagonal(o, o);
-      })
-      .style("opacity", 0)
-      .merge(link)
-      .transition()
-      .duration(VIS.DUR)
-      .style("opacity", 1)
-      .attr("d", (d) => diagonal(d, d.parent));
-
-    link.exit().transition().duration(VIS.DUR).style("opacity", 0).remove();
+      .attr("d", (d) => diagonal(d, d.parent))
+      .style("opacity", 1);
 
     nodes.forEach((d) => {
       d.x0 = d.x;
@@ -613,6 +856,14 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     expandedKeys.clear();
     selected.clear();
     selectedSpecies.clear();
+    nodeWidths.clear();  // Clear cached widths for new tree
+
+    // Count nodes and limit initial expansion for large trees
+    const totalNodes = countTotalNodes(fullData);
+    const maxDepth = totalNodes > 2000 ? VIS.MAX_INITIAL_DEPTH : Infinity;
+    
+    // Poblar expandedKeys con nodos que vienen expandidos del backend (tienen children)
+    seedExpandedKeysFromData(fullData, maxDepth);
 
     // sampling
     samplingMode = "";
@@ -685,7 +936,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
     rebuildHierarchyAndUpdate(root);
     setCrumbFromNode(null);
-    setTimeout(fitToView, 0);
+    // Delay para esperar animación D3 y luego centrar
+    setTimeout(fitToView, 250);
   }
 
   function resizeToMount() {
@@ -709,7 +961,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       userHasInteracted = false;
       lastAutoFitAt = 0;
       rebuildHierarchyAndUpdate(root);
-      setTimeout(fitToView, 0);
+      setTimeout(fitToView, 250);
       return;
     }
 
@@ -719,7 +971,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     lastAutoFitAt = 0;
 
     rebuildHierarchyAndUpdate(root);
-    setTimeout(fitToView, 0);
+    setTimeout(fitToView, 250);
   }
 
   function countSpeciesUnderKey(rootKey = null) {
@@ -830,7 +1082,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     setRankCut,
     collapseAll,
 
-    // Sampling API
+    // Sampling API (legacy)
     setSamplingMode,
     setSamplingRootKey,
     clearSamplingRoot,
@@ -838,6 +1090,15 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     countSpeciesUnderKey,
     listImmediateChildClades,
     listCladesAtRank,
+    
+    // Sampling Setup API (for sampling_filters.js wizard)
+    getSamplingScopeKey,
+    setSamplingScopeKey,
+    getSamplingTargetKeys,
+    toggleSamplingTargetKey,
+    setSamplingSetupEnabled,
+    setSamplingSetupLocked,
+    resetSamplingSetup,
     
     loadData,
     openToRank,
