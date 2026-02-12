@@ -225,7 +225,7 @@
         <td>${g.genes || '-'}</td>
         <td>
           ${g.has_proteome 
-            ? `<span class="badge bg-green-lt text-green"><i class="ti ti-check me-1"></i>${g.proteome_quality || 'Yes'}</span>`
+            ? `<span class="badge bg-green-lt text-green"><i class="ti ti-check me-1"></i>${g.protein_coding ? g.protein_coding.toLocaleString() : 'Yes'}</span>`
             : '<span class="badge bg-secondary-lt text-secondary">No</span>'
           }
         </td>
@@ -650,11 +650,10 @@
         
         <div class="col-md-6">
           <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">Proteome</h4></div>
+            <div class="card-header"><h4 class="card-title">Protein Coding</h4></div>
             <div class="card-body">
               ${g.has_proteome 
-                ? `<span class="badge bg-green-lt text-green"><i class="ti ti-check me-1"></i>Available</span>
-                   <span class="ms-2">${g.proteome_quality || ''}</span>`
+                ? `<span class="badge bg-green-lt text-green"><i class="ti ti-check me-1"></i>${g.protein_coding ? g.protein_coding.toLocaleString() : 'Available'}</span>`
                 : '<span class="badge bg-secondary-lt">Not available</span>'
               }
             </div>

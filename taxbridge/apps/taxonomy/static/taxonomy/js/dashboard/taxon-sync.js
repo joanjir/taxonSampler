@@ -9,6 +9,24 @@
     return cookie ? cookie.split('=')[1] : '';
   }
 
+  function clearSyncForm() {
+    // Reset form to default values
+    const kingdomSelect = document.getElementById('kingdom-select');
+    const limitInput = document.getElementById('limit-input');
+    const skipQuality = document.getElementById('skip-quality');
+    const btnStartSync = document.getElementById('btn-start-sync');
+    
+    if (kingdomSelect) kingdomSelect.value = 'metazoa';
+    if (limitInput) limitInput.value = '0';
+    if (skipQuality) skipQuality.checked = false;
+    
+    // Reset button state
+    if (btnStartSync) {
+      btnStartSync.disabled = false;
+      btnStartSync.innerHTML = '<i class="ti ti-rocket me-1"></i> Start Sync';
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     const btnStartSync = document.getElementById('btn-start-sync');
     const btnCancelSync = document.getElementById('btn-cancel-sync');
@@ -158,6 +176,12 @@
           // Refresh if completed
           if (['completed', 'failed', 'cancelled'].includes(data.status)) {
             clearInterval(pollInterval);
+            
+            // Clear form when completed successfully
+            if (data.status === 'completed') {
+              clearSyncForm();
+            }
+            
             setTimeout(() => window.location.reload(), 1500);
           }
         } catch (e) {

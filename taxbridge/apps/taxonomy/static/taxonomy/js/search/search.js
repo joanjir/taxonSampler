@@ -70,6 +70,31 @@ export function createSearchController({ renderer, searchEndpoint }) {
     renderer.fitToView?.();
   }
 
+  function updateSearchStatus() {
+    const statusEl = document.getElementById("searchStatus");
+    if (!statusEl) return;
+
+    if (searchState.hits.length === 0) {
+      statusEl.textContent = searchState.q ? `No results for "${searchState.q}"` : "";
+      statusEl.className = "text-muted small";
+    } else {
+      const current = searchState.idx + 1;
+      const total = searchState.hits.length;
+      const currentHit = searchState.hits[searchState.idx];
+      const statusText = `${current}/${total}: ${currentHit?.name || "Unknown"}`;
+      
+      statusEl.textContent = statusText;
+      statusEl.className = currentHit?.is_existing 
+        ? "text-warning small" 
+        : "text-success small";
+        
+      // Add existing species indicator
+      if (currentHit?.is_existing) {
+        statusEl.textContent += " (already in database)";
+      }
+    }
+  }
+
   // ------------------------------------------------------------------
   // Backend search
   // ------------------------------------------------------------------
@@ -136,82 +161,29 @@ export function createSearchController({ renderer, searchEndpoint }) {
     }
   }
 
-  function updateSearchStatus() {
-    const statusEl = document.getElementById("searchStatus");
-    if (!statusEl) return;
-
-    if (searchState.hits.length === 0) {
-      statusEl.textContent = searchState.q ? `No results for "${searchState.q}"` : "";
-      statusEl.className = "text-muted small";
-    } else {
-      const current = searchState.idx + 1;
-      const total = searchState.hits.length;
-      const currentHit = searchState.hits[searchState.idx];
-      const statusText = `${current}/${total}: ${currentHit?.name || "Unknown"}`;
-      
-      statusEl.textContent = statusText;
-      statusEl.className = currentHit?.is_existing 
-        ? "text-warning small" 
-        : "text-success small";
-        
-      // Add existing species indicator
-      if (currentHit?.is_existing) {
-        statusEl.textContent += " (already in database)";
-      }
-    }
-  }
-
-    try {
-      const data = await apiSearchTree({
-        endpoint: searchEndpoint,
-        q,
-        limit,
-        offset,
-        include: searchState.include,
-      });
-
-      const hits = Array.isArray(data?.hits) ? data.hits : [];
-      searchState.hits = hits;
-      searchState.total = Number(data?.total || hits.length || 0);
-      searchState.idx = hits.length ? 0 : -1;
-
-      setControlsState();
-
-      if (searchState.idx >= 0) {
-        revealActiveHit({ fit: false });
-      }
-    } catch (err) {
-      console.error("[SEARCH] error:", err);
-      setControlsState();
-    }
-  }
-
   // ------------------------------------------------------------------
-  // Hit navigation (circular)
+  // Hit navigation
   // ------------------------------------------------------------------
   function moveHit(delta) {
-    const n = searchState.hits.length;
-    if (!n) return;
-
-    let next = searchState.idx + delta;
-    if (next < 0) next = n - 1;
-    if (next >= n) next = 0;
-
-    searchState.idx = next;
+    if (searchState.hits.length === 0) return;
+    
+    searchState.idx = Math.max(0, Math.min(
+      searchState.hits.length - 1,
+      searchState.idx + delta
+    ));
+    
     setControlsState();
+    updateSearchStatus();
     revealActiveHit({ fit: false });
   }
 
   // ------------------------------------------------------------------
-  // Clear
+  // Clear search
   // ------------------------------------------------------------------
-  function clearSearch({ focus = true } = {}) {
+  function clearSearch() {
     const inp = document.getElementById("taxSearch");
-    if (inp) {
-      inp.value = "";
-      if (focus) inp.focus();
-    }
-
+    if (inp) inp.value = "";
+    
     searchState = {
       q: "",
       hits: [],
@@ -220,9 +192,24 @@ export function createSearchController({ renderer, searchEndpoint }) {
       limit: 50,
       offset: 0,
       include: "species,nodes",
+      hideExisting: searchState.hideExisting, // Preserve filter state
     };
-
+    
     setControlsState();
+    updateSearchStatus();
+  }
+
+  // ------------------------------------------------------------------
+  // Toggle hide existing
+  // ------------------------------------------------------------------
+  function toggleHideExisting() {
+    searchState.hideExisting = !searchState.hideExisting;
+    setControlsState();
+    
+    // Re-run search if there's an active query
+    if (searchState.q && searchState.q.length >= 2) {
+      runSearch();
+    }
   }
 
   // ------------------------------------------------------------------
@@ -243,48 +230,6 @@ export function createSearchController({ renderer, searchEndpoint }) {
     
     // Toggle hide existing species
     document.getElementById("taxSearchHideExisting")?.addEventListener("click", toggleHideExisting);
-  }
-  
-  function toggleHideExisting() {
-    searchState.hideExisting = !searchState.hideExisting;
-    setControlsState();
-    
-    // Re-run search if there's an active query
-    if (searchState.q && searchState.q.length >= 2) {
-      runSearch();
-    }
-  }
-  
-  function clearSearch() {
-    const inp = document.getElementById("taxSearch");
-    if (inp) inp.value = "";
-    
-    searchState = {
-      q: "",
-      hits: [],
-      idx: -1,
-      total: 0,
-      limit: 50,
-      offset: 0,
-      include: "species,nodes",
-      hideExisting: searchState.hideExisting, // Preserve filter state
-    };
-    
-    setControlsState();
-    updateSearchStatus();
-  }
-  
-  function moveHit(delta) {
-    if (searchState.hits.length === 0) return;
-    
-    searchState.idx = Math.max(0, Math.min(
-      searchState.hits.length - 1,
-      searchState.idx + delta
-    ));
-    
-    setControlsState();
-    updateSearchStatus();
-    revealActiveHit({ fit: false });
   }
 
   // ------------------------------------------------------------------

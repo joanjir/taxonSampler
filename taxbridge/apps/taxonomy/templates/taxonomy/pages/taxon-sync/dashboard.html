@@ -116,36 +116,33 @@
           </div>
           <div class="card-body">
             <form id="sync-form">
-              <div class="mb-3">
-                <label class="form-label required">Taxonomic Kingdom</label>
-                <select class="form-select form-select-lg" name="kingdom" id="kingdom-select" {% if running_sync %}disabled{% endif %}>
-                  <option value="metazoa" selected>🦁 Metazoa (Animals)</option>
+              <div class="mb-2">
+                <label class="form-label required">Kingdom</label>
+                <select class="form-select form-select-sm" name="kingdom" id="kingdom-select" {% if running_sync %}disabled{% endif %}>
+                  <option value="metazoa" selected>🦁 Metazoa</option>
                   <option value="fungi">🍄 Fungi</option>
-                  <option value="viridiplantae">🌿 Viridiplantae (Plants)</option>
+                  <option value="viridiplantae">🌿 Viridiplantae</option>
                   <option value="bacteria">🦠 Bacteria</option>
                   <option value="archaea">🧬 Archaea</option>
                 </select>
-                <small class="form-hint">Select the kingdom to sync from NCBI</small>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Limit</label>
+                <input type="number" class="form-control form-control-sm" name="limit" id="limit-input" 
+                       value="0" min="0" placeholder="0 = all" {% if running_sync %}disabled{% endif %}>
               </div>
               <div class="mb-3">
-                <label class="form-label">Genome Limit</label>
-                <input type="number" class="form-control form-control-lg" name="limit" id="limit-input" 
-                       value="0" min="0" placeholder="0 = no limit" {% if running_sync %}disabled{% endif %}>
-                <small class="form-hint">Use 0 to download all available genomes</small>
-              </div>
-              <div class="mb-4">
-                <label class="form-check form-switch">
+                <label class="form-check form-switch form-check-sm">
                   <input class="form-check-input" type="checkbox" name="skip_quality" id="skip-quality" {% if running_sync %}disabled{% endif %}>
-                  <span class="form-check-label">Skip quality filters</span>
+                  <span class="form-check-label">Skip filters</span>
                 </label>
-                <small class="form-hint d-block mt-1">Coverage and N50 filters are applied by default</small>
               </div>
-              <button type="button" class="btn btn-primary btn-lg w-100" id="btn-start-sync" {% if running_sync %}disabled{% endif %}>
+              <button type="button" class="btn btn-primary btn-sm w-100" id="btn-start-sync" {% if running_sync %}disabled{% endif %}>
                 {% if running_sync %}
-                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                Synchronization in progress...
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                Syncing...
                 {% else %}
-                <i class="ti ti-rocket me-2"></i> Start Synchronization
+                <i class="ti ti-rocket me-1"></i> Start Sync
                 {% endif %}
               </button>
             </form>
@@ -432,7 +429,7 @@
                         <th>Organism</th>
                         <th>Level</th>
                         <th>Genes</th>
-                        <th>Proteome</th>
+                        <th>Protein Coding</th>
                         <th>Match</th>
                         <th>COL Status</th>
                         <th>Actions</th>
