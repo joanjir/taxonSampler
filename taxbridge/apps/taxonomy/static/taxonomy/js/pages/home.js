@@ -340,11 +340,18 @@
   let editModal = null;
 
   function initModals() {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+      console.warn('[home.js] Bootstrap Modal not available');
+      return;
+    }
+    
     const viewEl = document.getElementById('viewGenomeModal');
     const editEl = document.getElementById('editGenomeModal');
     
     if (viewEl) viewModal = new bootstrap.Modal(viewEl);
     if (editEl) editModal = new bootstrap.Modal(editEl);
+    
+    console.log('[home.js] Modals initialized successfully');
     
     // View to Edit button
     const viewToEditBtn = document.getElementById('viewToEditBtn');
@@ -410,6 +417,13 @@
     if (!body) return;
     
     body.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"></div></div>';
+    
+    // Ensure modal is initialized
+    if (!viewModal && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+      const viewEl = document.getElementById('viewGenomeModal');
+      if (viewEl) viewModal = new bootstrap.Modal(viewEl);
+    }
+    
     if (viewModal) viewModal.show();
     
     try {
@@ -660,6 +674,12 @@
     document.getElementById('selectedColSection').style.display = 'none';
     document.getElementById('selectedColId').value = '';
     
+    // Ensure modal is initialized
+    if (!editModal && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+      const editEl = document.getElementById('editGenomeModal');
+      if (editEl) editModal = new bootstrap.Modal(editEl);
+    }
+    
     if (editModal) editModal.show();
     
     try {
@@ -752,6 +772,15 @@
   // ============================================
   function initTabEvents() {
     let speciesListLoaded = false;
+    
+    // Load if tab is already active on page load
+    const activeTab = document.querySelector('#tab-species.active, #tab-species.show');
+    if (activeTab) {
+      loadGenomes();
+      speciesListLoaded = true;
+    }
+    
+    // Load when tab becomes visible
     document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
       tab.addEventListener('shown.bs.tab', function(e) {
         if (e.target.getAttribute('href') === '#tab-species' && !speciesListLoaded) {
@@ -769,8 +798,8 @@
     initAssemblyProgressBar();
     initPhylaChart();
     initTableEvents();
-    initModals();
     initTabEvents();
+    initModals();
   });
 
   // Export for external access

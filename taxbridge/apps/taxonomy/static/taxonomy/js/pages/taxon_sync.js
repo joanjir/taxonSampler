@@ -166,9 +166,11 @@
       }, 2000);
     }
 
-    // Initialize popovers
-    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
-    popoverTriggerList.forEach(el => new bootstrap.Popover(el));
+    // Initialize popovers (only if bootstrap is available)
+    if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+      const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+      popoverTriggerList.forEach(el => new bootstrap.Popover(el));
+    }
   });
 
 })();

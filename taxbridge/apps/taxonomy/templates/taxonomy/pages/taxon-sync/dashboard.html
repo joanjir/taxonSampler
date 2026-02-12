@@ -168,10 +168,16 @@
                 </a>
               </li>
               <li class="nav-item" role="presentation">
-                <a href="#tab-history" class="nav-link {% if not running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if not running_sync %}aria-selected="true"{% endif %}>
+                <a href="#tab-history" class="nav-link" data-bs-toggle="tab" role="tab">
                   <i class="ti ti-history me-2"></i>
                   History
                   <span class="badge bg-blue-lt text-blue ms-2">{{ recent_syncs|length }}</span>
+                </a>
+              </li>
+              <li class="nav-item" role="presentation">
+                <a href="#tab-species" class="nav-link {% if not running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if not running_sync %}aria-selected="true"{% endif %}>
+                  <i class="ti ti-list me-2"></i>
+                  Species List
                 </a>
               </li>
             </ul>
@@ -319,7 +325,7 @@
               </div>
 
               <!-- Tab: History -->
-              <div class="tab-pane {% if not running_sync %}active show{% endif %}" id="tab-history" role="tabpanel">
+              <div class="tab-pane" id="tab-history" role="tabpanel">
                 <div class="table-responsive">
                   <table class="table table-vcenter table-hover">
                     <thead>
@@ -395,9 +401,175 @@
                   </table>
                 </div>
               </div>
+
+              <!-- Tab: Species List -->
+              <div class="tab-pane {% if not running_sync %}active show{% endif %}" id="tab-species" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h3 class="mb-0">
+                    <i class="ti ti-dna me-2"></i>Species List
+                  </h3>
+                  <div class="d-flex gap-2">
+                    <select id="statusFilter" class="form-select form-select-sm" style="width: auto;">
+                      <option value="">All Match Status</option>
+                      <option value="matched">Linked</option>
+                      <option value="unmatched">Unlinked</option>
+                      <option value="needs_review">Needs review</option>
+                    </select>
+                    <select id="colStatusFilter" class="form-select form-select-sm" style="width: auto;">
+                      <option value="">All COL Status</option>
+                      <option value="accepted">Accepted</option>
+                      <option value="synonym">Synonym</option>
+                      <option value="no_match">Not in COL</option>
+                    </select>
+                    <input type="search" id="searchInput" class="form-control form-select-sm" placeholder="Search organism..." style="width: 200px;">
+                  </div>
+                </div>
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                  <table class="table table-vcenter card-table table-striped table-hover" id="genomesTable">
+                    <thead class="sticky-top bg-white">
+                      <tr>
+                        <th>Accession</th>
+                        <th>Organism</th>
+                        <th>Level</th>
+                        <th>Genes</th>
+                        <th>Proteome</th>
+                        <th>Match</th>
+                        <th>COL Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="genomesTableBody">
+                      <!-- Loaded via AJAX -->
+                    </tbody>
+                  </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                  <span id="tableInfo" class="text-muted">Loading...</span>
+                  <nav>
+                    <ul class="pagination pagination-sm mb-0" id="pagination">
+                    </ul>
+                  </nav>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- View Genome Modal -->
+<div class="modal modal-blur fade" id="viewGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="ti ti-dna me-2"></i>Species Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="viewGenomeBody">
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="viewToEditBtn">
+          <i class="ti ti-edit me-2"></i>Edit COL Match
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Genome Modal -->
+<div class="modal modal-blur fade" id="editGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="ti ti-edit me-2"></i>Edit COL Match</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {% csrf_token %}
+        <input type="hidden" id="editAccession">
+        
+        <!-- Current species info -->
+        <div class="mb-4">
+          <div class="subheader mb-2">Current Species</div>
+          <div class="card bg-light">
+            <div class="card-body py-2">
+              <div class="row">
+                <div class="col-6">
+                  <div class="text-muted small">Organism</div>
+                  <div class="fw-bold" id="editOrganismName">-</div>
+                </div>
+                <div class="col-6">
+                  <div class="text-muted small">Accession</div>
+                  <div><code id="editAccessionDisplay">-</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Current COL match -->
+        <div class="mb-4" id="currentMatchSection">
+          <div class="subheader mb-2">Current COL Match</div>
+          <div id="currentMatchInfo" class="alert alert-light">
+            <span class="text-muted">No COL match</span>
+          </div>
+        </div>
+        
+        <!-- Search COL -->
+        <div class="mb-4">
+          <div class="subheader mb-2">Search COL Taxon</div>
+          <div class="input-group mb-2">
+            <span class="input-group-text"><i class="ti ti-search"></i></span>
+            <input type="text" class="form-control" id="colSearchInput" placeholder="Search by species name...">
+          </div>
+          <div id="colSearchResults" class="list-group" style="max-height: 200px; overflow-y: auto;">
+            <!-- Results will be populated here -->
+          </div>
+        </div>
+        
+        <!-- Selected COL taxon -->
+        <div class="mb-4" id="selectedColSection" style="display: none;">
+          <div class="subheader mb-2">Selected COL Taxon</div>
+          <div class="alert alert-success d-flex align-items-center" id="selectedColInfo">
+            <div class="flex-grow-1">
+              <div class="fw-bold" id="selectedColName">-</div>
+              <div class="small text-muted" id="selectedColClassification">-</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-ghost-danger" onclick="clearColSelection()">
+              <i class="ti ti-x"></i>
+            </button>
+          </div>
+          <input type="hidden" id="selectedColId">
+        </div>
+        
+        <!-- Match status -->
+        <div class="mb-4">
+          <div class="subheader mb-2">Match Status</div>
+          <select id="editMatchStatus" class="form-select">
+            <option value="matched">Linked</option>
+            <option value="unmatched">Unlinked</option>
+            <option value="needs_review">Needs Review</option>
+            <option value="no_match">Not in COL</option>
+          </select>
+        </div>
+        
+        <!-- Notes -->
+        <div class="mb-3">
+          <div class="subheader mb-2">Notes</div>
+          <textarea id="editMatchNotes" class="form-control" rows="3" placeholder="Add notes about this COL match..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveGenomeMatch()">
+          <i class="ti ti-check me-2"></i>Save Changes
+        </button>
       </div>
     </div>
   </div>
@@ -406,5 +578,19 @@
 
 {% block extra_js %}
 {% load static %}
+<script>
+  // Server-side data passed to JavaScript for species list
+  window.HOME_DATA = {
+    genomeLevels: [],
+    phylaStats: [],
+    endpoints: {
+      genomesList: "{% url 'taxonomy_api:genomes-list' %}",
+      genomeDetail: "/api/v1/taxonomy/genomes/",
+      genomeUpdate: "/api/v1/taxonomy/genomes/",
+      colSearch: "/api/v1/taxonomy/col/search/"
+    }
+  };
+</script>
+<script src="{% static 'taxonomy/js/pages/home.js' %}"></script>
 <script src="{% static 'taxonomy/js/pages/taxon_sync.js' %}"></script>
 {% endblock %}
