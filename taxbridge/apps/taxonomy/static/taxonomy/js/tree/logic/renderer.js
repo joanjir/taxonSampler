@@ -1,8 +1,8 @@
-﻿// taxonomy/static/taxonomy/js/trees/d3_tree.js
-import { VIS, AUTOFIT, rankStyle, isSciName } from "../tree/config.js";
+﻿// taxonomy/static/taxonomy/js/tree/logic/renderer.js
+import { VIS, AUTOFIT, rankStyle, isSciName } from "../../shared/config.js";
 import { normRank, rankIndex } from "./tree_keying.js";
 
-// Helpers (delegados a /trees/)
+// Helpers (delegate a /trees/)
 import {
   findInTreeByKey,
   countSpeciesUnderKey as countSpeciesUnderKeySvc,
@@ -178,7 +178,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
   }
 
   function notifySamplingRootChanged() {
-    // Consumers (e.g., sampling_filters.js) listen to this to recompute quotas/clamps.
+    // Consumers (e.g., sampling/filters.js) listen to this to recompute quotas/clamps.
     window.dispatchEvent(
       new CustomEvent("sampling:root-changed", {
         detail: { samplingRootKey },
@@ -196,15 +196,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     updateCheckboxVisibility();
   }
 
-  function clearSamplingRoot() {
-    setSamplingRootKey(null);
-  }
-
   function getSamplingRootKey() {
     return samplingRootKey;
   }
 
-  // ---------------- Sampling Setup API (for sampling_filters.js) ----------------
+  // ---------------- Sampling Setup API (for sampling/filters.js) ----------------
   
   function getSamplingScopeKey() {
     return samplingRootKey;
@@ -780,7 +776,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
         const rank = (d.data.rank || "").toLowerCase();
         const name = d.data.name || "";
         
-        console.log("[d3_tree] Dispatching tree:active-changed", { key, rank, name });
         // Dispatch active node changed event for sampling panel
         window.dispatchEvent(new CustomEvent("tree:active-changed", {
           detail: { key, rank, name }
@@ -1025,9 +1020,6 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     return countSpeciesUnderKeySvc(fullData, rootKey, { findByKey: (fd, k) => findInTreeByKey(fd, k) });
   }
 
-  console.log("D3 Tree Renderer initialized.");
-  console.log(countSpeciesUnderKey());
-
   // Set/clear samplingRootKey. Dispatches an event so other modules can react.
   // opts:
   //  - rebuild: boolean (default true) => rebuild visible tree
@@ -1204,13 +1196,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     // Sampling API (legacy)
     setSamplingMode,
     setSamplingRootKey,
-    clearSamplingRoot,
     getSamplingRootKey,
     countSpeciesUnderKey,
     listImmediateChildClades,
     listCladesAtRank,
-    
-    // Sampling Setup API (for sampling_filters.js wizard)
+    // Sampling Setup API (for sampling/filters.js)
     getSamplingScopeKey,
     setSamplingScopeKey,
     getSamplingTargetKeys,
@@ -1218,18 +1208,15 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     setSamplingSetupEnabled,
     setSamplingSetupLocked,
     resetSamplingSetup,
-    
     loadData,
     openToRank,
     revealKeys,
     showOnlyKeys,
     clearKeyFilter,
-    
     // Rank-based navigation
     getChildrenOf,
     getRootInfo,
     getNodesByRank,
-
     removeSelectedBySelId,
     getSelectedSpecies: () => selectedSpecies,
   };

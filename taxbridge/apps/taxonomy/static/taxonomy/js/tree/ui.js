@@ -1,5 +1,5 @@
 // taxonomy/static/taxonomy/js/tree/ui.js
-import { escapeHtml } from "./config.js";
+import { escapeHtml } from "../shared/config.js";
 
 /**
  * UI utilities (DOM-only).

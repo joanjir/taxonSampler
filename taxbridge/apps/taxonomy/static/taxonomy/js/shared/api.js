@@ -1,4 +1,6 @@
-// taxonomy/static/taxonomy/js/tree/api.js
+// taxonomy/static/taxonomy/js/shared/api.js
+
+import { getCookie } from "./helpers.js";
 
 function assertEndpoint(endpoint, name) {
   const url = String(endpoint || "").trim();
@@ -83,12 +85,7 @@ export const apiLoadTree = apiGetTree;
 export async function apiRunSampling({ endpoint, config } = {}) {
   const base = assertEndpoint(endpoint ?? window.SAMPLING_ENDPOINT, "window.SAMPLING_ENDPOINT");
 
-  const csrf = (() => {
-    const v = `; ${document.cookie}`;
-    const parts = v.split("; csrftoken=");
-    if (parts.length === 2) return parts.pop().split(";").shift();
-    return null;
-  })();
+  const csrf = getCookie("csrftoken");
 
   const res = await fetch(base, {
     method: "POST",

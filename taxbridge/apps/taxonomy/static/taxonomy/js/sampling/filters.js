@@ -9,8 +9,8 @@
 //
 // Backend service: apps/taxonomy/sampling/service.py
 
-import { apiRunSampling, apiGetScopeInfo } from "./api.js";
-import { normRank } from "../trees/tree_keying.js";
+import { apiRunSampling, apiGetScopeInfo } from "../shared/api.js";
+import { normRank } from "../tree/logic/tree_keying.js";
 
 function parseKeyParts(key) {
   const s = (key || "").trim();
