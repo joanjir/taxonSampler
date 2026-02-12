@@ -64,7 +64,7 @@ export async function apiGetTree({ endpoint, limit = 5000, rankCut = null } = {}
 }
 
 
-export async function apiSearchTree({ endpoint, q, limit = 50, nodes_scan_limit = null, offset = 0, include = "species,nodes" } = {}) {
+export async function apiSearchTree({ endpoint, q, limit = 50, nodes_scan_limit = null, offset = 0, include = "species,nodes", hide_existing = false } = {}) {
   const base = assertEndpoint(endpoint ?? window.TREE_SEARCH_ENDPOINT, "window.TREE_SEARCH_ENDPOINT");
   const u = new URL(base, window.location.origin);
 
@@ -73,6 +73,7 @@ export async function apiSearchTree({ endpoint, q, limit = 50, nodes_scan_limit 
   if (limit != null) u.searchParams.set("limit", String(limit));
   if (nodes_scan_limit != null) u.searchParams.set("nodes_scan_limit", String(nodes_scan_limit));
   if (include) u.searchParams.set("include", include);
+  if (hide_existing) u.searchParams.set("hide_existing", "true");
 
   return fetchJson(u.toString());
 }

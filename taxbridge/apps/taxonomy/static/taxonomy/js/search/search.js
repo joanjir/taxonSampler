@@ -1,4 +1,4 @@
-// taxonomy/static/taxonomy/js/tree/search.js
+// taxonomy/static/taxonomy/js/search/search.js
 /**
  * Search controller for the taxonomic tree page.
  *
@@ -21,6 +21,7 @@ export function createSearchController({ renderer, searchEndpoint }) {
     limit: 50,
     offset: 0,
     include: "species,nodes",
+    hideExisting: false, // New: filter existing species
   };
 
   // ------------------------------------------------------------------
@@ -30,6 +31,7 @@ export function createSearchController({ renderer, searchEndpoint }) {
     const prevBtn = document.getElementById("taxSearchPrev");
     const nextBtn = document.getElementById("taxSearchNext");
     const clrBtn = document.getElementById("taxSearchClear");
+    const hideExistingBtn = document.getElementById("taxSearchHideExisting");
 
     const count = searchState.hits.length;
     const hasMany = count > 1;
@@ -38,6 +40,14 @@ export function createSearchController({ renderer, searchEndpoint }) {
     if (prevBtn) prevBtn.disabled = !hasMany;
     if (nextBtn) nextBtn.disabled = !hasMany;
     if (clrBtn) clrBtn.disabled = !hasAny;
+    
+    // Update hide existing button state
+    if (hideExistingBtn) {
+      hideExistingBtn.classList.toggle("active", searchState.hideExisting);
+      hideExistingBtn.title = searchState.hideExisting 
+        ? "Show existing species in results" 
+        : "Hide existing species from results";
+    }
   }
 
   function revealActiveHit({ fit = false } = {}) {
@@ -78,6 +88,7 @@ export function createSearchController({ renderer, searchEndpoint }) {
     const limit = 50;
     const offset = 0;
 
+    // Reset search state with current filter
     searchState = {
       q,
       hits: [],
@@ -86,7 +97,69 @@ export function createSearchController({ renderer, searchEndpoint }) {
       limit,
       offset,
       include: "species,nodes",
+      hideExisting: searchState.hideExisting, // Preserve filter state
     };
+
+    try {
+      // Call API with hide_existing parameter
+      const resp = await apiSearchTree({
+        endpoint: searchEndpoint,
+        q,
+        limit,
+        offset,
+        hide_existing: searchState.hideExisting,
+      });
+
+      if (resp?.hits?.length > 0) {
+        searchState.hits = resp.hits;
+        searchState.total = resp.total;
+        searchState.idx = 0;
+      } else {
+        searchState.hits = [];
+        searchState.total = 0;
+        searchState.idx = -1;
+      }
+
+      setControlsState();
+      updateSearchStatus();
+
+      if (searchState.hits.length > 0) {
+        revealActiveHit({ fit: true });
+      }
+    } catch (err) {
+      console.error("Search error:", err);
+      searchState.hits = [];
+      searchState.total = 0;
+      searchState.idx = -1;
+      setControlsState();
+      updateSearchStatus();
+    }
+  }
+
+  function updateSearchStatus() {
+    const statusEl = document.getElementById("searchStatus");
+    if (!statusEl) return;
+
+    if (searchState.hits.length === 0) {
+      statusEl.textContent = searchState.q ? `No results for "${searchState.q}"` : "";
+      statusEl.className = "text-muted small";
+    } else {
+      const current = searchState.idx + 1;
+      const total = searchState.hits.length;
+      const currentHit = searchState.hits[searchState.idx];
+      const statusText = `${current}/${total}: ${currentHit?.name || "Unknown"}`;
+      
+      statusEl.textContent = statusText;
+      statusEl.className = currentHit?.is_existing 
+        ? "text-warning small" 
+        : "text-success small";
+        
+      // Add existing species indicator
+      if (currentHit?.is_existing) {
+        statusEl.textContent += " (already in database)";
+      }
+    }
+  }
 
     try {
       const data = await apiSearchTree({
@@ -164,9 +237,54 @@ export function createSearchController({ renderer, searchEndpoint }) {
       }
     });
 
-    document.getElementById("taxSearchNext")?.addEventListener("click", () => moveHit(-1));
-    document.getElementById("taxSearchPrev")?.addEventListener("click", () => moveHit(+1));
+    document.getElementById("taxSearchNext")?.addEventListener("click", () => moveHit(1));
+    document.getElementById("taxSearchPrev")?.addEventListener("click", () => moveHit(-1));
     document.getElementById("taxSearchClear")?.addEventListener("click", () => clearSearch());
+    
+    // Toggle hide existing species
+    document.getElementById("taxSearchHideExisting")?.addEventListener("click", toggleHideExisting);
+  }
+  
+  function toggleHideExisting() {
+    searchState.hideExisting = !searchState.hideExisting;
+    setControlsState();
+    
+    // Re-run search if there's an active query
+    if (searchState.q && searchState.q.length >= 2) {
+      runSearch();
+    }
+  }
+  
+  function clearSearch() {
+    const inp = document.getElementById("taxSearch");
+    if (inp) inp.value = "";
+    
+    searchState = {
+      q: "",
+      hits: [],
+      idx: -1,
+      total: 0,
+      limit: 50,
+      offset: 0,
+      include: "species,nodes",
+      hideExisting: searchState.hideExisting, // Preserve filter state
+    };
+    
+    setControlsState();
+    updateSearchStatus();
+  }
+  
+  function moveHit(delta) {
+    if (searchState.hits.length === 0) return;
+    
+    searchState.idx = Math.max(0, Math.min(
+      searchState.hits.length - 1,
+      searchState.idx + delta
+    ));
+    
+    setControlsState();
+    updateSearchStatus();
+    revealActiveHit({ fit: false });
   }
 
   // ------------------------------------------------------------------

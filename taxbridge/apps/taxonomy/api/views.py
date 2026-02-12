@@ -111,17 +111,22 @@ def tree_search(request):
     Query params:
         - q: Search query (min 2 characters)
         - limit: Max results (default: 50, max: 200)
+        - hide_existing: If true, hide species that already exist locally (default: false)
     """
     query = request.GET.get("q", "").strip()
     limit = min(int(request.GET.get("limit", 50)), 200)
+    hide_existing = request.GET.get("hide_existing", "").lower() == "true"
     
     if len(query) < 2:
         return JsonResponse({"hits": [], "query": query, "total": 0})
-    
+
     q_lower = query.lower()
     hits = []
     seen_keys: set = set()
     
+    # Get all NCBI species names to check for existing local species
+    existing_species = set(Taxon.objects.filter(rank="species").values_list("scientific_name", flat=True))
+
     # 1) Direct name match on ExternalTaxon records (species)
     species_qs = (
         ExternalTaxon.objects
@@ -133,8 +138,15 @@ def tree_search(request):
         .only("id", "external_id", "name", "rank", "classification_path")
         [:limit]
     )
-    
+
     for ext in species_qs:
+        # Check if this species already exists locally
+        is_existing = ext.name in existing_species
+        
+        # Skip if user wants to hide existing species and this one exists
+        if hide_existing and is_existing:
+            continue
+            
         path = _normalize_path_for_key(ext.classification_path or [])
         if ext.rank == "species":
             path = list(path) + [{"rank": "species", "name": ext.name}]
@@ -148,8 +160,9 @@ def tree_search(request):
                 "name": ext.name,
                 "rank": ext.rank,
                 "key": key,
+                "is_existing": is_existing,
             })
-    
+
     # 2) Search higher-level clades inside classification_path
     #    (these taxa don't have their own ExternalTaxon record)
     if len(hits) < limit:
@@ -181,16 +194,18 @@ def tree_search(request):
                             "name": node_name,
                             "rank": norm_rank(node.get("rank", "")),
                             "key": key,
+                            "is_existing": False,  # Higher-level clades are not considered "existing species"
                         })
                         if len(hits) >= limit:
                             break
             if len(hits) >= limit:
                 break
-    
+
     return JsonResponse({
         "hits": hits,
         "query": query,
         "total": len(hits),
+        "hide_existing": hide_existing,
     })
 
 
@@ -1110,22 +1125,38 @@ def col_search(request):
     Query params:
         - q: Search term (min 2 characters)
         - limit: Max results (default: 20)
+        - hide_existing: If true, hide species that already exist locally (default: false)
     """
     query = request.GET.get("q", "").strip()
     limit = min(int(request.GET.get("limit", 20)), 100)
+    hide_existing = request.GET.get("hide_existing", "").lower() == "true"
     
     if len(query) < 2:
         return JsonResponse({"results": []})
+    
+    # Get all NCBI species names to check for existing local species
+    existing_species = set(Taxon.objects.filter(rank="species").values_list("scientific_name", flat=True))
     
     # Search in local ExternalTaxon database
     results = ExternalTaxon.objects.filter(
         Q(name__icontains=query) | Q(external_id__icontains=query),
         system="col",
         rank="species"
-    ).select_related("accepted")[:limit]
+    ).select_related("accepted")[:limit * 2]  # Get more to filter existing ones
     
     data = []
     for ext in results:
+        # Check if this species already exists locally
+        is_existing = ext.name in existing_species
+        
+        # Skip if user wants to hide existing species and this one exists
+        if hide_existing and is_existing:
+            continue
+        
+        # Stop adding if we already have enough results
+        if len(data) >= limit:
+            break
+            
         # Build classification string
         classification_str = ""
         if ext.classification:
@@ -1143,6 +1174,10 @@ def col_search(request):
             "status": ext.status,
             "classification": classification_str,
             "accepted_name": ext.accepted.name if ext.accepted else None,
+            "is_existing": is_existing,
         })
     
-    return JsonResponse({"results": data})
+    return JsonResponse({
+        "results": data,
+        "hide_existing": hide_existing,
+    })

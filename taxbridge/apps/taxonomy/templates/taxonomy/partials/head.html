@@ -52,12 +52,17 @@
             <!-- Next -->
             <button id="taxSearchNext" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Next match" disabled><i class="fa-solid fa-chevron-right fa-xs"></i></button>
 
+            <!-- Hide Existing -->
+            <button id="taxSearchHideExisting" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Hide existing species from results"><i class="fa-solid fa-eye-slash fa-xs"></i></button>
+
             <!-- Clear -->
             <button id="taxSearchClear" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Clear search" disabled><i class="fa-solid fa-xmark fa-xs"></i></button>
 
             <!-- Search -->
             <button id="taxSearchGo" class="btn btn-sm btn-primary px-2" type="button" title="Search"><i class="fa-solid fa-magnifying-glass fa-xs"></i></button>
           </div>
+          <!-- Search status -->
+          <div id="searchStatus" class="text-muted small ms-2 align-self-center"></div>
         </form>
       {% endif %}
     </div>
