@@ -9,8 +9,11 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Tuple
 
+
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponseBadRequest
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.taxonomy.models import ExternalTaxon, Taxon
@@ -59,11 +62,11 @@ def tree_data(request):
     Returns tree JSON for D3 visualization.
     
     Query params:
-        - limit: Max species to include (default: 5000)
+        - limit: Max species to include (default: 15000)
         - max_rank or rankCut: Maximum rank to show (default: species = no cut)
         - expand_keys: Comma-separated keys to expand
     """
-    limit = request.GET.get("limit", "5000")
+    limit = request.GET.get("limit", "15000")
     # Accept both 'max_rank' (backend standard) and 'rankCut' (frontend legacy)
     # None = fully expanded tree; "" = collapsed root; "genus" = cut at genus
     raw_rank = request.GET.get("max_rank") or request.GET.get("rankCut")
@@ -73,7 +76,7 @@ def tree_data(request):
     try:
         limit = int(limit)
     except ValueError:
-        limit = 5000
+        limit = 15000
     
     expand_keys = [k.strip() for k in expand_keys_str.split(",") if k.strip()]
     
@@ -772,7 +775,7 @@ def sampling_run(request):
             "min_one_per_clade": true,
             "outgroup_rank": "",
             "outgroup_n": 2,
-            "limit": 5000,
+            "limit": 15000,
             "max_rank": "class"
         }
     """
@@ -1060,14 +1063,10 @@ def genome_detail(request, accession: str):
 def genome_update(request, accession: str):
     """
     POST /api/v1/taxonomy/genomes/<accession>/update/
-    
-    Update a genome, primarily for linking with COL.
-    
-    Body JSON:
-        - col_match_status: "matched" | "unmatched" | "needs_review" | "no_match"
-        - external_taxon_id: ExternalTaxon ID to link (or null to unlink)
-        - col_match_notes: notes about the matching
+    Admin only - update a genome's COL match.
     """
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
     from apps.taxonomy.models import NCBIGenome
     
     try:
@@ -1180,4 +1179,462 @@ def col_search(request):
     return JsonResponse({
         "results": data,
         "hide_existing": hide_existing,
+    })
+
+
+# ============================================================
+# DB Sampling API — Step 2
+# ============================================================
+
+@require_GET
+def sampling_stats(request):
+    """
+    Returns statistics about available species for sampling config UI.
+    Query params:
+        - kingdom: Filter by kingdom (optional)
+        - phylum: Filter by phylum (optional)
+        - scope_filters: JSON-encoded dict of rank→taxon filters (optional)
+        - species_names: JSON-encoded list of organism names (optional)
+    """
+    from apps.taxonomy.sampling.db_engine import get_sampling_stats
+
+    kingdom = request.GET.get("kingdom", "")
+    phylum = request.GET.get("phylum", "")
+
+    # Parse scope_filters from query param (JSON string)
+    scope_filters = None
+    sf_raw = request.GET.get("scope_filters", "")
+    if sf_raw:
+        try:
+            scope_filters = json.loads(sf_raw)
+        except json.JSONDecodeError:
+            pass
+
+    # Parse species_names from query param (JSON string)
+    species_names = None
+    sn_raw = request.GET.get("species_names", "")
+    if sn_raw:
+        try:
+            species_names = json.loads(sn_raw)
+        except json.JSONDecodeError:
+            pass
+
+    stats = get_sampling_stats(
+        scope_kingdom=kingdom,
+        scope_phylum=phylum,
+        scope_filters=scope_filters,
+        species_names=species_names,
+    )
+
+    return JsonResponse(stats)
+
+
+@csrf_exempt
+@require_POST
+def sampling_execute(request):
+    """
+    Execute a DB-based sampling with the given configuration.
+    POST body (JSON):
+        - max_sample_size: int (required)
+        - start_rank: str (default: phylum)
+        - end_rank: str (default: species)
+        - strategy: none | random | proportional | balanced (default: proportional)
+        - kingdom: str (optional scope filter)
+        - phylum: str (optional scope filter)
+        - save: bool (if true, saves a SamplingConfiguration record)
+        - name: str (optional name for saved config)
+    """
+    from apps.taxonomy.sampling.db_engine import run_db_sampling
+    from apps.taxonomy.models import SamplingConfiguration
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    # Validate max_sample_size
+    max_sample_size = data.get("max_sample_size")
+    if not max_sample_size or not isinstance(max_sample_size, int) or max_sample_size < 1:
+        return JsonResponse({"error": "max_sample_size must be a positive integer"}, status=400)
+
+    start_rank = data.get("start_rank", "phylum").lower()
+    end_rank = data.get("end_rank", "species").lower()
+    strategy = data.get("strategy", "proportional").lower()
+    kingdom = data.get("scope_kingdom") or data.get("kingdom", "")
+    phylum = data.get("scope_phylum") or data.get("phylum", "")
+    scope_filters = data.get("scope_filters") or None
+    species_names = data.get("species_names") or None
+    save_config = data.get("save", False)
+    config_name = data.get("name", "")
+
+    valid_ranks = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    valid_strategies = ["none", "random", "proportional", "balanced"]
+
+    if start_rank not in valid_ranks:
+        return JsonResponse({"error": f"Invalid start_rank: {start_rank}"}, status=400)
+    if end_rank not in valid_ranks:
+        return JsonResponse({"error": f"Invalid end_rank: {end_rank}"}, status=400)
+    if strategy not in valid_strategies:
+        return JsonResponse({"error": f"Invalid strategy: {strategy}"}, status=400)
+
+    # Validate rank order: start_rank must be higher (smaller index) than end_rank
+    if valid_ranks.index(start_rank) >= valid_ranks.index(end_rank):
+        return JsonResponse(
+            {"error": f"start_rank ({start_rank}) must be higher than end_rank ({end_rank})"},
+            status=400,
+        )
+
+    # Save config if requested
+    config_id = None
+    if save_config:
+        config_obj = SamplingConfiguration.objects.create(
+            name=config_name,
+            max_sample_size=max_sample_size,
+            start_rank=start_rank,
+            end_rank=end_rank,
+            strategy=strategy,
+            scope_kingdom=kingdom,
+            scope_phylum=phylum,
+        )
+        config_id = config_obj.pk
+
+    # Execute sampling
+    try:
+        result = run_db_sampling(
+            max_sample_size=max_sample_size,
+            start_rank=start_rank,
+            end_rank=end_rank,
+            strategy=strategy,
+            scope_kingdom=kingdom,
+            scope_phylum=phylum,
+            scope_filters=scope_filters,
+            species_names=species_names,
+            config_id=config_id,
+        )
+    except Exception as e:
+        if config_id:
+            SamplingConfiguration.objects.filter(pk=config_id).update(
+                status="failed", error=str(e)
+            )
+        return JsonResponse({"error": str(e)}, status=500)
+
+    # Update config with results
+    if config_id:
+        SamplingConfiguration.objects.filter(pk=config_id).update(
+            status="executed",
+            executed_at=timezone.now(),
+            result={
+                "total_available": result.total_available,
+                "total_selected": result.total_selected,
+                "strategy": result.strategy,
+                "clades_count": len(result.clades),
+                "warnings": result.warnings,
+            },
+        )
+
+    return JsonResponse({
+        "success": True,
+        "config_id": config_id,
+        "strategy": result.strategy,
+        "max_sample_size": result.max_sample_size,
+        "start_rank": result.start_rank,
+        "end_rank": result.end_rank,
+        "total_available": result.total_available,
+        "total_selected": result.total_selected,
+        "warnings": result.warnings,
+        "clades": result.clades,
+        "species": result.species,
+    })
+
+
+@require_GET
+def sampling_configs(request):
+    """List saved sampling configurations."""
+    from apps.taxonomy.models import SamplingConfiguration
+
+    configs = SamplingConfiguration.objects.all()[:20]
+    data = []
+    for c in configs:
+        data.append({
+            "id": c.pk,
+            "name": c.name,
+            "max_sample_size": c.max_sample_size,
+            "start_rank": c.start_rank,
+            "end_rank": c.end_rank,
+            "strategy": c.strategy,
+            "scope_kingdom": c.scope_kingdom,
+            "scope_phylum": c.scope_phylum,
+            "status": c.status,
+            "result": c.result,
+            "created_at": c.created_at.isoformat(),
+            "executed_at": c.executed_at.isoformat() if c.executed_at else None,
+        })
+
+    return JsonResponse({"configs": data})
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Newick / Phylo Tree generation from DB Sampling results
+# ═══════════════════════════════════════════════════════════════════════
+
+@csrf_exempt
+@require_POST
+def sampling_newick(request):
+    """
+    Generate a Newick string (and optionally an SVG tree) from
+    a DB sampling result.
+
+    POST body: DB sampling result JSON containing species[] with
+    taxonomy fields (kingdom, phylum, class, order, family, genus,
+    organism_name).
+
+    Query params:
+      - format: "newick" (default) | "svg"
+
+    Returns:
+      - newick: text/plain Newick file download
+      - svg: JSON with {"svg": "<svg>...", "newick": "..."}
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    species = payload.get("species", [])
+    if not species:
+        return JsonResponse({"error": "No species in payload"}, status=400)
+
+    fmt = request.GET.get("format", "newick")
+
+    try:
+        from ete3 import Tree
+
+        # Build ETE3 tree from taxonomy hierarchy
+        root = Tree()
+        root.name = "Root"
+        root.dist = 0.0
+
+        # Taxonomy levels to traverse
+        tax_ranks = ["kingdom", "phylum", "class", "order", "family", "genus"]
+        node_index = {"": root}
+        used_leaves = {}
+
+        for sp in species:
+            parent = root
+            acc_parts = []
+
+            for rank in tax_ranks:
+                taxon_name = (sp.get(rank) or "").strip()
+                if not taxon_name:
+                    continue
+
+                acc_parts.append(f"{rank}:{taxon_name}")
+                acc_key = "|".join(acc_parts)
+
+                if acc_key in node_index:
+                    parent = node_index[acc_key]
+                    continue
+
+                # Create internal node
+                safe_name = taxon_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
+                internal_name = safe_name
+                n = parent.add_child(name=internal_name)
+                n.add_feature("rank", rank)
+                n.dist = 1.0
+                node_index[acc_key] = n
+                parent = n
+
+            # Add species leaf
+            org_name = sp.get("organism_name") or sp.get("scientific_name") or "Unknown"
+            safe_leaf = org_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
+
+            # Deduplicate leaf names
+            if safe_leaf in used_leaves:
+                used_leaves[safe_leaf] += 1
+                safe_leaf = f"{safe_leaf}_{used_leaves[safe_leaf]}"
+            else:
+                used_leaves[safe_leaf] = 1
+
+            leaf = parent.add_child(name=safe_leaf)
+            leaf.add_feature("rank", "species")
+            leaf.dist = 1.0
+
+        # ── Collapse single-child chain from root ──────────────────
+        # If the root has only one child chain (e.g., Root→Animalia→…)
+        # move root down to the first node with >1 child or a leaf.
+        while len(root.children) == 1 and root.children[0].children:
+            child = root.children[0]
+            root = child
+            root.up = None          # detach from phantom parent
+            root.dist = 0.0         # root has no branch length
+
+        newick_str = root.write(format=1)
+
+        if fmt == "svg":
+            # Try to render SVG using ETE3
+            try:
+                from ete3 import TreeStyle, TextFace, NodeStyle
+                import tempfile
+                import os
+
+                ts = TreeStyle()
+                ts.show_leaf_name = True
+                ts.show_branch_length = False
+                ts.show_branch_support = False
+                ts.mode = "r"  # rectangular mode
+                ts.branch_vertical_margin = 4
+                ts.scale = 40
+                ts.title.add_face(TextFace(f"Sampling result ({len(species)} species)", fsize=14), column=0)
+
+                # Style internal nodes with rank labels
+                for node in root.traverse():
+                    ns = NodeStyle()
+                    if node.is_leaf():
+                        ns["fgcolor"] = "#2d8a4e"
+                        ns["size"] = 4
+                    else:
+                        ns["fgcolor"] = "#555"
+                        ns["size"] = 3
+                    node.set_style(ns)
+
+                # Render to SVG file
+                with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w") as f:
+                    tmp_path = f.name
+
+                root.render(tmp_path, tree_style=ts, w=800, units="px")
+
+                with open(tmp_path, "r", encoding="utf-8") as f:
+                    svg_content = f.read()
+
+                os.unlink(tmp_path)
+
+                return JsonResponse({
+                    "svg": svg_content,
+                    "newick": newick_str,
+                    "species_count": len(species),
+                })
+
+            except Exception as svg_err:
+                # If SVG rendering fails (e.g., no display), return Newick only
+                return JsonResponse({
+                    "svg": None,
+                    "newick": newick_str,
+                    "species_count": len(species),
+                    "svg_error": str(svg_err),
+                })
+
+        # Default: return Newick file download
+        from django.http import HttpResponse
+        resp = HttpResponse(newick_str, content_type="text/plain; charset=utf-8")
+        resp["Content-Disposition"] = 'attachment; filename="sampling_taxonomic.newick"'
+        return resp
+
+    except ImportError:
+        return JsonResponse({"error": "ete3 is not installed"}, status=500)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Assembly Filtering (Step 3)
+# ═══════════════════════════════════════════════════════════════════════
+
+@require_GET
+def assembly_fields(request):
+    """
+    Return the field registry for assembly filtering UI.
+    Includes field names, types, ranges, choices, and default weights.
+    """
+    from apps.taxonomy.sampling.assembly_engine import get_filter_fields
+    return JsonResponse(get_filter_fields())
+
+
+@csrf_exempt
+@require_POST
+def assembly_stats(request):
+    """
+    Get aggregate assembly statistics for a set of species accessions.
+
+    POST body JSON:
+      { "accessions": ["GCF_...", ...] }
+
+    Returns min/max/avg for numeric fields and distributions for
+    categorical fields.
+    """
+    from apps.taxonomy.sampling.assembly_engine import get_assembly_stats
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    accessions = data.get("accessions", [])
+    if not accessions:
+        return JsonResponse({"error": "No accessions provided"}, status=400)
+
+    try:
+        stats = get_assembly_stats(accessions)
+        return JsonResponse(stats)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_POST
+def assembly_filter(request):
+    """
+    Apply assembly filtering/scoring to the sampling result.
+
+    POST body JSON:
+      {
+        "accessions": ["GCF_...", ...],
+        "mode": "hard" | "scoring",
+        "hard_filters": { "genome_coverage": {"min": 30}, ... },
+        "categorical_filters": { "genome_level": ["Chromosome", "Complete Genome"], ... },
+        "scoring_weights": { "genome_coverage": 0.3, "contig_n50_kb": 0.3, ... },
+        "best_per_species": true
+      }
+
+    Returns filtered/scored species list with full assembly metadata.
+    """
+    from apps.taxonomy.sampling.assembly_engine import (
+        run_assembly_filter,
+        AssemblyFilterConfig,
+    )
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    accessions = data.get("accessions", [])
+    if not accessions:
+        return JsonResponse({"error": "No accessions provided"}, status=400)
+
+    mode = data.get("mode", "scoring")
+    if mode not in ("hard", "scoring"):
+        return JsonResponse({"error": f"Invalid mode: {mode}"}, status=400)
+
+    config = AssemblyFilterConfig(
+        mode=mode,
+        hard_filters=data.get("hard_filters") or {},
+        categorical_filters=data.get("categorical_filters") or {},
+        scoring_weights=data.get("scoring_weights") or {},
+        best_per_species=data.get("best_per_species", True),
+    )
+
+    try:
+        result = run_assembly_filter(accessions, config)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({
+        "success": True,
+        "mode": result.mode,
+        "input_species": result.input_species,
+        "output_species": result.output_species,
+        "filtered_out": result.filtered_out,
+        "stats": result.stats,
+        "warnings": result.warnings,
+        "species": result.species,
     })

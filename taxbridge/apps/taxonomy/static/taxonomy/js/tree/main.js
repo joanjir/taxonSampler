@@ -41,6 +41,9 @@ import { createSearchController } from "../search/search.js";
 import { initSamplingWizard } from "../sampling/wizard.js";
 import { initRankNav } from "../navigation/rank-nav.js";
 import { initExportHandlers } from "../sampling/exports.js";
+import { initDbSampling } from "../sampling/db_sampling.js";
+import { initPhyloTree } from "../sampling/phylo_tree.js";
+import { initAssemblyFilter } from "../sampling/assembly_filter.js";
 
 // =========================================================================
 // Init (ES module scope = no IIFE needed)
@@ -97,13 +100,87 @@ $(document).ready(function () {
 // ---- 7) Sampling wizard ----
 const wizard = initSamplingWizard({ renderer });
 
-// ---- 8) Search controller ----
+// ---- 8) DB Sampling (Step 2) ----
+const dbSampling = initDbSampling();
+
+// ---- 9) Phylo Tree tab ----
+const phyloTree = initPhyloTree();
+
+// ---- 10) Assembly Filter (Step 3) ----
+const assemblyFilter = initAssemblyFilter();
+
+// ---- 11) Search controller ----
 const searchCtl = createSearchController({ renderer, searchEndpoint });
 searchCtl.bindUI();
 
 // =========================================================================
 // Sampling result (global event from samplingCtl)
 // =========================================================================
+// DB Sampling result → auto-advance to Step 3 (Assembly Filtering)
+window.addEventListener("db-sampling:final", (ev) => {
+  const result = ev.detail || null;
+  if (!result) return;
+
+  // Store as "pre-assembly" result (Step 2 output)
+  selMgr.setLastSampling(result);
+  selMgr.setBadgeMode("DB Sampling", true);
+
+  const sub = document.getElementById("selSubtitle");
+  if (sub) sub.textContent = "Species selected by DB sampling";
+
+  selMgr.repaintSelection();
+
+  const st = document.getElementById("samplingStatus");
+  if (st) st.classList.remove("d-none");
+
+  // Auto-advance wizard to Step 3
+  if (window.__samplingWizard?.setStep) {
+    window.__samplingWizard.setStep(3);
+  }
+});
+
+// Assembly Filter result → Selection tab + Phylo tree
+function handleAssemblyResult(result, label) {
+  if (!result?.species?.length) return;
+
+  selMgr.setLastSampling(result);
+  selMgr.setBadgeMode(label, true);
+
+  const sub = document.getElementById("selSubtitle");
+  if (sub) sub.textContent = `Species after assembly filtering (${result.species.length})`;
+
+  selMgr.repaintSelection();
+
+  const st = document.getElementById("samplingStatus");
+  if (st) st.classList.remove("d-none");
+
+  // Auto-switch to Selection tab
+  const selTab = document.getElementById("selectionTab");
+  if (selTab) {
+    const bsTab = bootstrap?.Tab ? new bootstrap.Tab(selTab) : null;
+    if (bsTab) bsTab.show();
+    else selTab.click();
+  }
+
+  // Generate phylo tree
+  if (phyloTree) {
+    phyloTree.generate(result);
+  }
+}
+
+window.addEventListener("assembly-filter:final", (ev) => {
+  handleAssemblyResult(ev.detail, "Assembly Filtered");
+});
+
+window.addEventListener("assembly-filter:skipped", (ev) => {
+  // Skipped assembly filter — use Step 2 result directly
+  const result = selMgr.getLastSampling();
+  if (result?.species?.length) {
+    handleAssemblyResult(result, "DB Sampling");
+  }
+});
+
+// Tree-based sampling result → Selection tab
 window.addEventListener("sampling:final", (ev) => {
   const result = ev.detail || null;
   selMgr.setLastSampling(result);
@@ -127,6 +204,30 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
   const result = selMgr.getLastSampling();
   if (!result) return;
 
+  // DB sampling: result has a species array, not ingroup/outgroupPicked
+  if (Array.isArray(result.species)) {
+    const names = result.species
+      .map(s => s.organism_name || s.scientific_name || s.name || "")
+      .filter(Boolean);
+
+    // Try to find these species in the tree by name match
+    if (typeof renderer.revealByNames === "function" && names.length) {
+      renderer.revealByNames(names, { fit: true });
+      return;
+    }
+
+    // Fallback: just expand to species level
+    if (typeof renderer.openToRank === "function") {
+      renderer.openToRank("species", { fit: true });
+      return;
+    }
+
+    renderer.setRankCut?.("species");
+    renderer.fitToView?.();
+    return;
+  }
+
+  // Tree-based sampling: use keys
   const keys = []
     .concat(result?.ingroup?.picked || [])
     .concat(result?.outgroupPicked || [])
@@ -166,6 +267,9 @@ document.getElementById("clearSamplingView")?.addEventListener("click", () => {
   renderer.fitToView?.();
 
   if (window.__samplingWizard?.reset) window.__samplingWizard.reset();
+
+  // Clear phylo tree
+  if (phyloTree) phyloTree.clear();
 
   selMgr.repaintSelection();
 });
@@ -236,7 +340,12 @@ async function load() {
     samplingCtl.resetDefaults?.();
     samplingCtl.emitSamplingConfigChanged?.();
 
-    if (window.__samplingWizard?.reset) window.__samplingWizard.reset();
+    // Only reset wizard if user hasn't navigated beyond Step 1
+    // (prevents race condition where async tree load resets wizard
+    //  while user is on Step 2 or Step 3)
+    if (window.__samplingWizard?.state?.step <= 1) {
+      window.__samplingWizard.reset?.();
+    }
 
     selMgr.repaintSelection();
   } catch (err) {
@@ -365,6 +474,21 @@ if (treeTabEl) {
       renderer.resizeToMount?.();
       renderer.fitToView?.();
     }, 100);
+  });
+}
+
+// Phylo tab: generate tree on first show if we have results
+const phyloTabEl = document.getElementById("phyloTab");
+if (phyloTabEl) {
+  phyloTabEl.addEventListener("shown.bs.tab", () => {
+    // If phylo tree hasn't been generated yet but we have sampling results, trigger it
+    const lastResult = selMgr.getLastSampling();
+    if (phyloTree && lastResult?.species?.length) {
+      const container = document.getElementById("phyloSvgContainer");
+      if (container && !container.querySelector("svg")) {
+        phyloTree.generate(lastResult);
+      }
+    }
   });
 }
 

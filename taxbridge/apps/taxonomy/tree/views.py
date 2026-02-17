@@ -46,15 +46,22 @@ def tree_data(request):
     Main endpoint: returns the taxonomic tree.
     
     Params:
-        - limit: maximum species count (default: 5000)
+        - limit: maximum species count (default: 15000)
         - rankCut: rank to expand down to (default: None = fully expanded)
         - expand: keys to expand, comma-separated
     """
-    try:
-        limit = int(request.GET.get("limit", "5000"))
-    except ValueError:
-        limit = 5000
-    limit = max(1, min(limit, 200000))
+    # If limit param is not provided, request entire DB (no slicing) up to safety max.
+    raw_limit = request.GET.get("limit")
+    if raw_limit is None:
+        limit = None
+    else:
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            limit = None
+
+    if limit is not None:
+        limit = max(1, min(limit, 200000))
 
     rank_cut = request.GET.get("rankCut") or request.GET.get("rank_cut")
     expand_keys = request.GET.get("expand", "")
@@ -129,7 +136,7 @@ def tree_search(request):
             .filter(system="col", rank="species", status="accepted")
             .filter(name__icontains=q)
             .only("id", "external_id", "name", "classification_path")
-            .order_by("name")[:5000]
+            .order_by("name")[:15000]
         )
 
         for rec in sp_qs:

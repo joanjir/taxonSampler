@@ -97,6 +97,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.taxonomy.context_processors.user_role",
             ],
         },
     },
@@ -134,6 +135,13 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ======================
+# Authentication
+# ======================
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/taxonomy/"
+LOGOUT_REDIRECT_URL = "/taxonomy/"
 
 # ======================
 # External APIs (centralizado)

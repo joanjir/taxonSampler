@@ -56,6 +56,8 @@ NCBI_API = "https://api.ncbi.nlm.nih.gov/datasets/v2"
 @require_GET
 def taxon_sync_dashboard(request):
     """Main page for Taxon Sync."""
+    from apps.taxonomy.models import DiscoveredSpecies
+
     recent_syncs = TaxonSyncRun.objects.all()[:10]
     running_sync = TaxonSyncRun.objects.filter(
         status__in=["pending", "fetching_ncbi", "matching_col"]
@@ -97,6 +99,11 @@ def taxon_sync_dashboard(request):
         ).distinct().count()  # Simplified, improve with a real filter
         kingdom_stats.append({"name": kingdom, "taxid": taxid, "count": count})
 
+    # Pending discoveries count
+    pending_discoveries = DiscoveredSpecies.objects.filter(
+        is_imported=False, is_dismissed=False
+    ).count()
+
     context = {
         "recent_syncs": recent_syncs,
         "running_sync": running_sync,
@@ -104,6 +111,7 @@ def taxon_sync_dashboard(request):
         "sync_status_counts": sync_status_counts,
         "kingdoms": KINGDOMS,
         "kingdom_stats": kingdom_stats,
+        "pending_discoveries": pending_discoveries,
     }
 
     return render(request, "taxonomy/pages/taxon-sync/dashboard.html", context)
@@ -116,18 +124,9 @@ def taxon_sync_dashboard(request):
 @csrf_exempt
 @require_POST
 def api_start_taxon_sync(request):
-    """
-    Start a new taxon sync via Celery.
-    
-    POST /api/v1/taxonomy/taxon-sync/start/
-    Body (JSON):
-        {
-            "kingdom": "metazoa",
-            "limit": 100,           // optional
-            "skip_quality": false,  // optional
-            "skip_existing": true   // optional - skip genomes already in DB (default: true)
-        }
-    """
+    """Start a new taxon sync via Celery. Admin only."""
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
     try:
         data = json.loads(request.body) if request.body else {}
     except json.JSONDecodeError:
@@ -237,7 +236,9 @@ def api_taxon_sync_status(request, sync_id: int):
 @csrf_exempt
 @require_POST
 def api_cancel_taxon_sync(request, sync_id: int):
-    """Cancel a running sync."""
+    """Cancel a running sync. Admin only."""
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
     try:
         run = TaxonSyncRun.objects.get(pk=sync_id)
     except TaxonSyncRun.DoesNotExist:
@@ -313,15 +314,16 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         )
         sync_run.add_log("INFO", f"Skipping {len(existing_accessions)} existing genomes")
     
-    count = 0
+    new_count = 0  # Only counts genuinely NEW genomes created
     skipped_existing = 0
     for genome_data in _fetch_ncbi_genomes_paged(taxid):
         sync_run.ncbi_total += 1
         
         # Refresh to check for cancellation
-        sync_run.refresh_from_db(fields=["status"])
-        if sync_run.status == "cancelled":
-            return
+        if sync_run.ncbi_total % 50 == 0:
+            sync_run.refresh_from_db(fields=["status"])
+            if sync_run.status == "cancelled":
+                return
 
         # Skip already synced genomes
         accession = genome_data.get("accession", "")
@@ -348,17 +350,22 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         taxonomy = _get_taxonomy(org_taxid, taxonomy_cache) if org_taxid else {}
         
         # Save to DB
+        prev_genomes = sync_run.genomes_created
         _save_genome_to_db(genome_data, taxonomy, sync_run)
         
-        count += 1
-        if count % 50 == 0:
+        # Only count toward limit if a NEW genome was actually created
+        if sync_run.genomes_created > prev_genomes:
+            new_count += 1
+        
+        if new_count % 50 == 0 and new_count > 0:
             sync_run.save(update_fields=[
                 "ncbi_total", "ncbi_fetched", "ncbi_filtered",
                 "taxa_created", "genomes_created",
             ])
-            sync_run.add_log("INFO", f"NCBI progress: {count} valid genomes (skipped {skipped_existing} existing)")
+            sync_run.add_log("INFO", f"NCBI progress: {new_count} new genomes (skipped {skipped_existing} existing)")
         
-        if limit and count >= limit:
+        # limit applies to NEW genomes only
+        if limit and new_count >= limit:
             break
 
     # Final save
@@ -367,7 +374,7 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         "taxa_created", "genomes_created",
     ])
     sync_run.add_log("INFO", f"Skipped {skipped_existing} genomes that already exist in DB")
-    sync_run.add_log("INFO", f"NCBI phase complete: {sync_run.ncbi_fetched} genomes")
+    sync_run.add_log("INFO", f"NCBI phase complete: {new_count} new genomes ({sync_run.ncbi_fetched} processed, {skipped_existing} skipped)")
 
 
 def _phase_match_col(sync_run: TaxonSyncRun):
@@ -421,6 +428,29 @@ def _phase_match_col(sync_run: TaxonSyncRun):
         "external_taxa_created", "crosswalks_created",
     ])
     sync_run.add_log("INFO", f"COL phase complete: {sync_run.col_matched} matched")
+
+    # Cleanup: ensure all genomes with a matched crosswalk have external_taxon set
+    unlinked_genomes = NCBIGenome.objects.filter(
+        external_taxon__isnull=True,
+        taxon__crosswalks__is_active=True,
+        taxon__crosswalks__external_taxon__system="col",
+    ).select_related("taxon").distinct()
+
+    fixed_count = 0
+    for genome in unlinked_genomes:
+        active_cw = TaxonCrosswalk.objects.filter(
+            ncbi_taxon=genome.taxon,
+            is_active=True,
+            external_taxon__system="col",
+        ).select_related("external_taxon").first()
+        if active_cw:
+            genome.external_taxon = active_cw.external_taxon
+            genome.col_match_status = "matched"
+            genome.save(update_fields=["external_taxon", "col_match_status"])
+            fixed_count += 1
+
+    if fixed_count:
+        sync_run.add_log("INFO", f"Fixed {fixed_count} unlinked genomes with existing COL crosswalks")
 
 
 def _create_col_crosswalk(taxon: Taxon, result, sync_run: TaxonSyncRun):
@@ -653,12 +683,34 @@ def _save_genome_to_db(genome_data: dict, taxonomy: dict, sync_run: TaxonSyncRun
         # Remove None values
         genome_defaults = {k: v for k, v in genome_defaults.items() if v is not None}
 
+        # Truncate string values to respect CharField max_length
+        for key, val in genome_defaults.items():
+            if isinstance(val, str):
+                try:
+                    field = NCBIGenome._meta.get_field(key)
+                    if hasattr(field, 'max_length') and field.max_length and len(val) > field.max_length:
+                        genome_defaults[key] = val[:field.max_length]
+                except Exception:
+                    pass
+
         genome, gen_created = NCBIGenome.objects.update_or_create(
             accession=accession,
             defaults=genome_defaults,
         )
         if gen_created:
             sync_run.genomes_created += 1
+
+        # If this taxon already has a COL crosswalk, link the genome to it
+        if not genome.external_taxon:
+            active_cw = TaxonCrosswalk.objects.filter(
+                ncbi_taxon=taxon,
+                is_active=True,
+                external_taxon__system="col",
+            ).select_related("external_taxon").first()
+            if active_cw:
+                genome.external_taxon = active_cw.external_taxon
+                genome.col_match_status = "matched"
+                genome.save(update_fields=["external_taxon", "col_match_status"])
 
 
 def _safe_int(val, default: int = 0) -> int:
@@ -668,3 +720,184 @@ def _safe_int(val, default: int = 0) -> int:
         return int(val)
     except (ValueError, TypeError):
         return default
+
+
+# ============================================================
+# Discovery API Endpoints
+# ============================================================
+
+@csrf_exempt
+@require_POST
+def api_start_discovery(request):
+    """Start a manual species discovery scan. Admin only."""
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    kingdoms = data.get("kingdoms", ["metazoa", "fungi", "viridiplantae"])
+    valid_kingdoms = list(KINGDOMS.keys())
+    invalid = [k for k in kingdoms if k.lower() not in valid_kingdoms]
+    if invalid:
+        return JsonResponse({"error": f"Unknown kingdoms: {invalid}"}, status=400)
+
+    from apps.taxonomy.ncbi.tasks import discover_new_species
+    from apps.taxonomy.models import DiscoveryRun
+
+    # Check if already running
+    running = DiscoveryRun.objects.filter(status="running").exists()
+    if running:
+        return JsonResponse({"success": False, "error": "A discovery is already in progress"}, status=409)
+
+    result = discover_new_species.delay(kingdoms=kingdoms, trigger="manual")
+    return JsonResponse({
+        "success": True,
+        "task_id": result.id,
+        "message": f"Discovery started for: {', '.join(kingdoms)}",
+    })
+
+
+@require_GET
+def api_discovery_list(request):
+    """List recent discovery runs with their results."""
+    from apps.taxonomy.models import DiscoveredSpecies, DiscoveryRun
+
+    runs = DiscoveryRun.objects.all()[:10]
+    data = []
+    for run in runs:
+        data.append({
+            "id": run.pk,
+            "status": run.status,
+            "trigger": run.trigger,
+            "kingdoms": run.kingdoms_searched,
+            "total_scanned": run.total_scanned,
+            "new_species_found": run.new_species_found,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "duration_seconds": run.duration_seconds,
+        })
+    return JsonResponse({"runs": data})
+
+
+@require_GET
+def api_discovered_species(request):
+    """
+    List discovered species (paginated).
+    Query params: run_id, page, page_size, status (all|pending|imported|dismissed)
+    """
+    from apps.taxonomy.models import DiscoveredSpecies
+
+    run_id = request.GET.get("run_id")
+    page = int(request.GET.get("page", 1))
+    page_size = int(request.GET.get("page_size", 20))
+    status_filter = request.GET.get("status", "pending")
+
+    qs = DiscoveredSpecies.objects.select_related("discovery_run")
+
+    if run_id:
+        qs = qs.filter(discovery_run_id=run_id)
+
+    if status_filter == "pending":
+        qs = qs.filter(is_imported=False, is_dismissed=False)
+    elif status_filter == "imported":
+        qs = qs.filter(is_imported=True)
+    elif status_filter == "dismissed":
+        qs = qs.filter(is_dismissed=True)
+    # "all" = no filter
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    species_list = qs[start : start + page_size]
+
+    results = []
+    for sp in species_list:
+        results.append({
+            "id": sp.pk,
+            "taxid": sp.taxid,
+            "scientific_name": sp.scientific_name,
+            "common_name": sp.common_name,
+            "kingdom": sp.kingdom,
+            "accession": sp.accession,
+            "quality_score": sp.quality_score,
+            "genome_level": sp.genome_level,
+            "refseq_category": sp.refseq_category,
+            "protein_coding": sp.protein_coding,
+            "scaffold_n50_kb": sp.scaffold_n50_kb,
+            "genome_coverage": sp.genome_coverage,
+            "total_sequence_length": sp.total_sequence_length,
+            "is_imported": sp.is_imported,
+            "is_dismissed": sp.is_dismissed,
+            "run_id": sp.discovery_run_id,
+            "created_at": sp.created_at.isoformat() if sp.created_at else None,
+        })
+
+    return JsonResponse({
+        "results": results,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if page_size else 1,
+    })
+
+
+@csrf_exempt
+@require_POST
+def api_import_discovered(request, species_id: int):
+    """Import a discovered species into the main database. Admin only."""
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    from apps.taxonomy.models import DiscoveredSpecies, Taxon
+
+    try:
+        sp = DiscoveredSpecies.objects.get(pk=species_id)
+    except DiscoveredSpecies.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    if sp.is_imported:
+        return JsonResponse({"success": False, "error": "Already imported"})
+
+    # Create Taxon + trigger genome fetch
+    taxon, created = Taxon.objects.get_or_create(
+        taxid=sp.taxid,
+        defaults={
+            "scientific_name": sp.scientific_name,
+            "rank": "species",
+        },
+    )
+
+    # Trigger single taxon sync to fetch full genome data
+    from apps.taxonomy.ncbi.tasks import sync_single_taxon
+    sync_single_taxon.delay(taxid=sp.taxid, check_proteomes=True)
+
+    sp.is_imported = True
+    sp.save(update_fields=["is_imported"])
+
+    return JsonResponse({
+        "success": True,
+        "taxid": sp.taxid,
+        "scientific_name": sp.scientific_name,
+        "created": created,
+    })
+
+
+@csrf_exempt
+@require_POST
+def api_dismiss_discovered(request, species_id: int):
+    """Dismiss a discovered species (not interesting). Admin only."""
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    from apps.taxonomy.models import DiscoveredSpecies
+
+    try:
+        sp = DiscoveredSpecies.objects.get(pk=species_id)
+    except DiscoveredSpecies.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    sp.is_dismissed = True
+    sp.save(update_fields=["is_dismissed"])
+
+    return JsonResponse({"success": True, "taxid": sp.taxid})

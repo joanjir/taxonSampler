@@ -53,7 +53,7 @@ async function fetchJson(url) {
 }
 
 
-export async function apiGetTree({ endpoint, limit = 5000, rankCut = null } = {}) {
+export async function apiGetTree({ endpoint, limit = null, rankCut = null } = {}) {
   const base = assertEndpoint(endpoint ?? window.TREE_ENDPOINT, "window.TREE_ENDPOINT");
   const u = new URL(base, window.location.origin);
 
@@ -141,4 +141,167 @@ export async function apiGetScopeInfo({ endpoint, scopeKey, targetKeys, activeKe
   if (activeKey) u.searchParams.set("active_key", activeKey);
   
   return fetchJson(u.toString());
+}
+
+
+// ── DB Sampling API (Step 2) ──────────────────────────────────────
+
+/**
+ * Fetch stats about available genomes for DB sampling.
+ * @param {Object} opts
+ * @param {string}  [opts.endpoint]
+ * @param {Object}  [opts.scopeFilters]   - {rank: taxonName} from Step 1
+ * @param {string[]} [opts.speciesNames]  - specific organism names from Step 1 targets
+ */
+export async function apiDbSamplingStats({ endpoint, scopeFilters, speciesNames } = {}) {
+  const base = assertEndpoint(endpoint ?? window.DB_SAMPLING_STATS_ENDPOINT, "window.DB_SAMPLING_STATS_ENDPOINT");
+
+  // Build query params for scope_filters and species_names
+  const params = new URLSearchParams();
+  if (scopeFilters && Object.keys(scopeFilters).length) {
+    params.set("scope_filters", JSON.stringify(scopeFilters));
+  }
+  if (speciesNames && speciesNames.length) {
+    params.set("species_names", JSON.stringify(speciesNames));
+  }
+
+  const qs = params.toString();
+  const url = qs ? `${base}?${qs}` : base;
+  return fetchJson(url);
+}
+
+/**
+ * Execute DB sampling with the given configuration.
+ */
+export async function apiDbSamplingExecute({ endpoint, config } = {}) {
+  const base = assertEndpoint(endpoint ?? window.DB_SAMPLING_EXECUTE_ENDPOINT, "window.DB_SAMPLING_EXECUTE_ENDPOINT");
+  const csrf = getCookie("csrftoken");
+
+  const res = await fetch(base, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-CSRFToken": csrf || "",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(config),
+  });
+
+  if (!res.ok) {
+    const body = await readBodySafe(res);
+    const err = new Error(`[API] DB Sampling ${res.status} ${res.statusText}\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) return await res.json();
+
+  const body = await readBodySafe(res);
+  try {
+    return JSON.parse(body);
+  } catch {
+    const err = new Error(`[API] DB Sampling non-JSON response\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+}
+
+/**
+ * Request a Newick tree + SVG from the sampling result.
+ */
+export async function apiSamplingNewick({ endpoint, payload, format = "svg" } = {}) {
+  const base = assertEndpoint(endpoint ?? window.NEWICK_ENDPOINT, "window.NEWICK_ENDPOINT");
+  const csrf = getCookie("csrftoken");
+  const url = `${base}?format=${encodeURIComponent(format)}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-CSRFToken": csrf || "",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await readBodySafe(res);
+    const err = new Error(`[API] Newick ${res.status} ${res.statusText}\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+
+  return await res.json();
+}
+
+
+// ── Assembly Filtering API (Step 3) ───────────────────────────────
+
+/**
+ * Fetch assembly statistics for a set of species accessions.
+ * @param {Object} opts
+ * @param {string}   [opts.endpoint]
+ * @param {string[]} opts.accessions - genome accessions from Step 2
+ */
+export async function apiAssemblyStats({ endpoint, accessions } = {}) {
+  const base = assertEndpoint(endpoint ?? window.ASSEMBLY_STATS_ENDPOINT, "window.ASSEMBLY_STATS_ENDPOINT");
+  const csrf = getCookie("csrftoken");
+
+  const res = await fetch(base, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-CSRFToken": csrf || "",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify({ accessions }),
+  });
+
+  if (!res.ok) {
+    const body = await readBodySafe(res);
+    const err = new Error(`[API] Assembly Stats ${res.status} ${res.statusText}\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+
+  return await res.json();
+}
+
+/**
+ * Apply assembly filtering/scoring to species accessions.
+ * @param {Object} config - { accessions, mode, hard_filters, categorical_filters, scoring_weights, best_per_species }
+ * @param {string} [endpoint]
+ */
+export async function apiAssemblyFilter(config, endpoint) {
+  const base = assertEndpoint(endpoint ?? window.ASSEMBLY_FILTER_ENDPOINT, "window.ASSEMBLY_FILTER_ENDPOINT");
+  const csrf = getCookie("csrftoken");
+
+  const res = await fetch(base, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-CSRFToken": csrf || "",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(config),
+  });
+
+  if (!res.ok) {
+    const body = await readBodySafe(res);
+    const err = new Error(`[API] Assembly Filter ${res.status} ${res.statusText}\n${body}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+
+  return await res.json();
 }

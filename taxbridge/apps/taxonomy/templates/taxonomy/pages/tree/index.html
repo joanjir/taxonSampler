@@ -28,6 +28,11 @@
                 <span id="selBadge" class="badge rounded-pill bg-primary ms-2" style="display: none;"></span>
               </button>
             </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="phyloTab" data-bs-toggle="tab" data-bs-target="#phyloPane" type="button" role="tab" aria-controls="phyloPane" aria-selected="false">
+                <i class="fa-solid fa-project-diagram me-1"></i>Phylo Tree
+              </button>
+            </li>
           </ul>
           <div class="d-flex align-items-center gap-2">
             <span class="badge bg-primary-lt text-primary" title="Total species in tree">
@@ -47,6 +52,38 @@
           <div class="tab-pane fade" id="selectionPane" role="tabpanel" aria-labelledby="selectionTab">
             {% include 'taxonomy/pages/tree/selection_content.html' %}
           </div>
+
+          <!-- Phylo Tree pane -->
+          <div class="tab-pane fade" id="phyloPane" role="tabpanel" aria-labelledby="phyloTab">
+            <div class="card-body" id="phyloContent">
+              <div class="text-center text-muted py-5" id="phyloEmpty">
+                <i class="fa-solid fa-project-diagram fa-3x mb-3 opacity-25"></i>
+                <p>Run a sampling first to generate a taxonomic  tree.</p>
+              </div>
+              <div id="phyloLoading" class="text-center py-5 d-none">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Generating tree with ETE3...</p>
+              </div>
+              <div id="phyloTreeWrap" class="d-none">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="small fw-semibold">
+                    <i class="fa-solid fa-project-diagram me-1 text-success"></i>
+                    Taxonomic tree
+                    <span id="phyloSpeciesCount" class="badge bg-success-lt text-success ms-1"></span>
+                  </div>
+                  <div class="btn-group btn-group-sm">
+                    <button id="phyloDownloadSvg" class="btn btn-outline-secondary" type="button" title="Download SVG">
+                      <i class="fa-solid fa-image me-1"></i>SVG
+                    </button>
+                    <button id="phyloDownloadNewick" class="btn btn-outline-secondary" type="button" title="Download Newick">
+                      <i class="fa-solid fa-file-code me-1"></i>Newick
+                    </button>
+                  </div>
+                </div>
+                <div id="phyloSvgContainer" style="overflow: auto; max-height: 600px; border: 1px solid #dee2e6; border-radius: .375rem; background: #fff;"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -65,6 +102,12 @@
     window.TREE_SEARCH_ENDPOINT = "{% url 'taxonomy_api:tree-search' %}";
     window.SAMPLING_ENDPOINT = "{% url 'taxonomy_api:sampling-run' %}";
     window.SCOPE_INFO_ENDPOINT = "{% url 'taxonomy_api:sampling-scope-info' %}";
+    window.DB_SAMPLING_STATS_ENDPOINT = "{% url 'taxonomy_api:sampling-stats' %}";
+    window.DB_SAMPLING_EXECUTE_ENDPOINT = "{% url 'taxonomy_api:sampling-execute' %}";
+    window.NEWICK_ENDPOINT = "{% url 'taxonomy_api:sampling-newick' %}";
+    window.ASSEMBLY_FIELDS_ENDPOINT = "{% url 'taxonomy_api:assembly-fields' %}";
+    window.ASSEMBLY_STATS_ENDPOINT = "{% url 'taxonomy_api:assembly-stats' %}";
+    window.ASSEMBLY_FILTER_ENDPOINT = "{% url 'taxonomy_api:assembly-filter' %}";
   </script>
   <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}"></script>
 {% endblock %}

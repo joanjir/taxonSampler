@@ -34,6 +34,30 @@
   </div>
 </div>
 
+<!-- Clades breakdown (shown only after DB sampling) -->
+<div id="selCladesWrap" class="card-body p-0 border-bottom d-none">
+  <div class="px-3 py-2">
+    <div class="fw-semibold small mb-1">
+      <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
+      Clades allocation
+      <span id="selCladesHint" class="text-muted ms-2 fw-normal"></span>
+    </div>
+    <div style="max-height: 180px; overflow-y: auto;">
+      <table class="table table-sm table-striped mb-0" style="font-size: .8rem;">
+        <thead class="sticky-top bg-white">
+          <tr>
+            <th>Clade</th>
+            <th class="text-end">Available</th>
+            <th class="text-end">Quota</th>
+            <th class="text-end">Sampled</th>
+          </tr>
+        </thead>
+        <tbody id="selCladesBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Body: selection table -->
 <div class="card-body p-0">
   <div class="table-responsive" style="max-height: 420px;">

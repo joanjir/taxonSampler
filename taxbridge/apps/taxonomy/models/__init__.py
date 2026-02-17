@@ -13,8 +13,8 @@ from .core import (
     RunEvent,
 )
 from .genome import NCBIGenome
-from .sync import NCBISyncRun, TaxonSyncRun
-from .sampling import ResolutionRun, ResolutionItem, SamplingRun
+from .sync import NCBISyncRun, TaxonSyncRun, DiscoveryRun, DiscoveredSpecies
+from .sampling import ResolutionRun, ResolutionItem, SamplingRun, SamplingConfiguration
 
 __all__ = [
     "Taxon",
@@ -25,7 +25,10 @@ __all__ = [
     "NCBIGenome",
     "NCBISyncRun",
     "TaxonSyncRun",
+    "DiscoveryRun",
+    "DiscoveredSpecies",
     "ResolutionRun",
     "ResolutionItem",
     "SamplingRun",
+    "SamplingConfiguration",
 ]

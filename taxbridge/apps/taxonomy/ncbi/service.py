@@ -620,11 +620,31 @@ def save_genome_to_db(genome: GenomeData, sync_run=None) -> tuple:
         valid_fields = {f.name for f in NCBIGenome._meta.get_fields()}
         genome_defaults = {k: v for k, v in genome_defaults.items() if k in valid_fields and v is not None}
         
+        # Truncate string values to respect CharField max_length
+        for key, val in genome_defaults.items():
+            if isinstance(val, str):
+                field = NCBIGenome._meta.get_field(key)
+                if hasattr(field, 'max_length') and field.max_length and len(val) > field.max_length:
+                    genome_defaults[key] = val[:field.max_length]
+        
         # Create/update NCBIGenome
-        _, genome_created = NCBIGenome.objects.update_or_create(
+        genome_obj, genome_created = NCBIGenome.objects.update_or_create(
             accession=genome.accession,
             defaults=genome_defaults,
         )
+
+        # If this taxon already has a COL crosswalk, link the genome to it
+        if not genome_obj.external_taxon:
+            from apps.taxonomy.models import TaxonCrosswalk
+            active_cw = TaxonCrosswalk.objects.filter(
+                ncbi_taxon=taxon,
+                is_active=True,
+                external_taxon__system="col",
+            ).select_related("external_taxon").first()
+            if active_cw:
+                genome_obj.external_taxon = active_cw.external_taxon
+                genome_obj.col_match_status = "matched"
+                genome_obj.save(update_fields=["external_taxon", "col_match_status"])
     
     return taxon_created, genome_created
 

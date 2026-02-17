@@ -25,8 +25,8 @@ app = Celery("taxbridge")
 # Use string to avoid serialization issues
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-# Autodiscover tasks in all installed apps
-app.autodiscover_tasks()
+# Autodiscover tasks in all installed apps (including sub-modules)
+app.autodiscover_tasks(["apps.taxonomy.ncbi"])
 
 # ======================
 # Scheduled tasks
@@ -43,11 +43,18 @@ app.conf.beat_schedule = {
         "task": "apps.taxonomy.tasks.cleanup_old_sync_runs",
         "schedule": crontab(hour=4, minute=0, day_of_week=0),  # Sundays 4 AM
     },
+    # Discover new species in NCBI (every Monday at 5:00 AM)
+    "discover-new-species-weekly": {
+        "task": "apps.taxonomy.tasks.discover_new_species",
+        "schedule": crontab(hour=5, minute=0, day_of_week=1),  # Mondays 5 AM
+        "options": {"queue": "ncbi_sync"},
+    },
 }
 
 app.conf.task_routes = {
     "apps.taxonomy.tasks.sync_ncbi_genomes": {"queue": "ncbi_sync"},
     "apps.taxonomy.tasks.sync_single_taxon": {"queue": "ncbi_sync"},
+    "apps.taxonomy.tasks.discover_new_species": {"queue": "ncbi_sync"},
 }
 
 

@@ -123,3 +123,105 @@ class SamplingRun(models.Model):
 
     def __str__(self):
         return f"SamplingRun#{self.pk}"
+
+
+# ============================================================
+# SamplingConfiguration — DB-based sampling config (Step 2)
+# ============================================================
+class SamplingConfiguration(models.Model):
+    """
+    Stores a sampling configuration and its results.
+    Works on the local NCBIGenome database, grouping species
+    by their COL classification hierarchy.
+    """
+
+    STRATEGY_CHOICES = [
+        ("none", "None (natural order)"),
+        ("random", "Random"),
+        ("proportional", "Proportional"),
+        ("balanced", "Balanced"),
+    ]
+
+    RANK_CHOICES = [
+        ("kingdom", "Kingdom"),
+        ("phylum", "Phylum"),
+        ("class", "Class"),
+        ("order", "Order"),
+        ("family", "Family"),
+        ("genus", "Genus"),
+        ("species", "Species"),
+    ]
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("executed", "Executed"),
+        ("failed", "Failed"),
+    ]
+
+    name = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Optional name for this configuration",
+    )
+
+    # Sampling parameters
+    max_sample_size = models.PositiveIntegerField(
+        help_text="Maximum number of species to select",
+    )
+    start_rank = models.CharField(
+        max_length=32,
+        choices=RANK_CHOICES,
+        default="phylum",
+        help_text="Start rank for taxonomic grouping (how species are grouped)",
+    )
+    end_rank = models.CharField(
+        max_length=32,
+        choices=RANK_CHOICES,
+        default="species",
+        help_text="End rank — distribution resolves down to this level before selecting species",
+    )
+    strategy = models.CharField(
+        max_length=32,
+        choices=STRATEGY_CHOICES,
+        default="proportional",
+        help_text="Sampling strategy",
+    )
+
+    # Optional scope filter
+    scope_kingdom = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Restrict to a specific kingdom (e.g. Animalia)",
+    )
+    scope_phylum = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Restrict to a specific phylum (e.g. Chordata)",
+    )
+
+    # Execution state
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default="draft",
+        db_index=True,
+    )
+    result = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Sampling result payload",
+    )
+    error = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "taxonomy"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"SamplingConfig#{self.pk} ({self.strategy}, K={self.max_sample_size})"

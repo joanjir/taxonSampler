@@ -106,15 +106,16 @@
     </div>
 
     <div class="row row-deck row-cards">
-      <!-- Start Sync Panel -->
-      <div class="col-lg-4">
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">
-              <i class="ti ti-player-play me-2"></i> New Synchronization
+      <!-- Start Sync Panel (admin only) -->
+      {% if is_admin %}
+      <div class="col-lg-2">
+        <div class="card" style="height: auto;">
+          <div class="card-header py-2">
+            <h3 class="card-title mb-0" style="font-size: 0.85rem;">
+              <i class="ti ti-player-play me-1"></i> New Sync
             </h3>
           </div>
-          <div class="card-body">
+          <div class="card-body py-2">
             <form id="sync-form">
               <div class="mb-2">
                 <label class="form-label required">Kingdom</label>
@@ -149,12 +150,14 @@
           </div>
         </div>
       </div>
+      {% endif %}
 
-      <!-- Tabs: Current Task / History -->
-      <div class="col-lg-8">
+      <!-- Tabs: Current Task / History / Species List -->
+      <div class="col-lg-{% if is_admin %}10{% else %}12{% endif %}">
         <div class="card">
           <div class="card-header">
             <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs" role="tablist">
+              {% if is_admin %}
               <li class="nav-item" role="presentation">
                 <a href="#tab-current" class="nav-link {% if running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if running_sync %}aria-selected="true"{% endif %}>
                   <i class="ti ti-player-play me-2"></i>
@@ -172,7 +175,17 @@
                 </a>
               </li>
               <li class="nav-item" role="presentation">
-                <a href="#tab-species" class="nav-link {% if not running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if not running_sync %}aria-selected="true"{% endif %}>
+                <a href="#tab-discoveries" class="nav-link" data-bs-toggle="tab" role="tab">
+                  <i class="ti ti-sparkles me-2"></i>
+                  Discoveries
+                  {% if pending_discoveries > 0 %}
+                  <span class="badge bg-lime-lt text-lime ms-2">{{ pending_discoveries }}</span>
+                  {% endif %}
+                </a>
+              </li>
+              {% endif %}
+              <li class="nav-item" role="presentation">
+                <a href="#tab-species" class="nav-link {% if not running_sync or not is_admin %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if not running_sync or not is_admin %}aria-selected="true"{% endif %}>
                   <i class="ti ti-list me-2"></i>
                   Species List
                 </a>
@@ -181,7 +194,8 @@
           </div>
           <div class="card-body">
             <div class="tab-content">
-              <!-- Tab: Current Task -->
+              <!-- Tab: Current Task (admin only) -->
+              {% if is_admin %}
               <div class="tab-pane {% if running_sync %}active show{% endif %}" id="tab-current" role="tabpanel">
                 {% if running_sync %}
                 <div id="running-sync-card" data-sync-id="{{ running_sync.pk }}">
@@ -398,9 +412,71 @@
                   </table>
                 </div>
               </div>
+              {% endif %}
+
+              <!-- Tab: Discoveries -->
+              <div class="tab-pane" id="tab-discoveries" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h3 class="mb-0">
+                    <i class="ti ti-sparkles me-2"></i>New Species Discovered
+                  </h3>
+                  <div class="d-flex gap-2">
+                    {% if is_admin %}
+                    <button class="btn btn-primary btn-sm" id="btn-start-discovery">
+                      <i class="ti ti-radar me-1"></i> Scan Now
+                    </button>
+                    {% endif %}
+                    <select id="discoveryStatusFilter" class="form-select form-select-sm" style="width: auto;">
+                      <option value="pending" selected>Pending</option>
+                      <option value="imported">Imported</option>
+                      <option value="dismissed">Dismissed</option>
+                      <option value="all">All</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Discovery Info Banner -->
+                <div class="alert alert-info d-none" id="discovery-running-alert">
+                  <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2"></div>
+                    <span>Scanning NCBI for new species...</span>
+                  </div>
+                </div>
+
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                  <table class="table table-vcenter card-table table-striped table-hover" id="discoveriesTable">
+                    <thead class="sticky-top bg-white">
+                      <tr>
+                        <th>Species</th>
+                        <th>Kingdom</th>
+                        <th>Accession</th>
+                        <th>Level</th>
+                        <th class="text-end">Quality</th>
+                        <th class="text-end">Protein Coding</th>
+                        <th class="text-end">Coverage</th>
+                        <th>Status</th>
+                        {% if is_admin %}<th>Actions</th>{% endif %}
+                      </tr>
+                    </thead>
+                    <tbody id="discoveriesTableBody">
+                      <tr>
+                        <td colspan="{% if is_admin %}9{% else %}8{% endif %}" class="text-center text-muted py-4">
+                          <div class="spinner-border spinner-border-sm me-2"></div> Loading...
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                  <span id="discoveryTableInfo" class="text-muted"></span>
+                  <nav>
+                    <ul class="pagination pagination-sm mb-0" id="discoveryPagination"></ul>
+                  </nav>
+                </div>
+              </div>
 
               <!-- Tab: Species List -->
-              <div class="tab-pane {% if not running_sync %}active show{% endif %}" id="tab-species" role="tabpanel">
+              <div class="tab-pane {% if not running_sync or not is_admin %}active show{% endif %}" id="tab-species" role="tabpanel">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                   <h3 class="mb-0">
                     <i class="ti ti-dna me-2"></i>Species List
@@ -432,7 +508,7 @@
                         <th>Protein Coding</th>
                         <th>Match</th>
                         <th>COL Status</th>
-                        <th>Actions</th>
+                        <th>{% if is_admin %}Actions{% else %}View{% endif %}</th>
                       </tr>
                     </thead>
                     <tbody id="genomesTableBody">
@@ -471,15 +547,18 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
+        {% if is_admin %}
         <button type="button" class="btn btn-primary" id="viewToEditBtn">
           <i class="ti ti-edit me-2"></i>Edit COL Match
         </button>
+        {% endif %}
       </div>
     </div>
   </div>
 </div>
 
-<!-- Edit Genome Modal -->
+<!-- Edit Genome Modal (admin only) -->
+{% if is_admin %}
 <div class="modal modal-blur fade" id="editGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
     <div class="modal-content">
@@ -571,6 +650,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -580,6 +660,7 @@
   window.HOME_DATA = {
     genomeLevels: [],
     phylaStats: [],
+    isAdmin: {% if is_admin %}true{% else %}false{% endif %},
     endpoints: {
       genomesList: "{% url 'taxonomy_api:genomes-list' %}",
       genomeDetail: "/api/v1/taxonomy/genomes/",
@@ -588,6 +669,7 @@
     }
   };
 </script>
-<script src="{% static 'taxonomy/js/dashboard/home.js' %}"></script>
+<script src="{% static 'taxonomy/js/dashboard/species-table.js' %}"></script>
+<script src="{% static 'taxonomy/js/dashboard/discoveries.js' %}"></script>
 <script src="{% static 'taxonomy/js/dashboard/taxon-sync.js' %}"></script>
 {% endblock %}

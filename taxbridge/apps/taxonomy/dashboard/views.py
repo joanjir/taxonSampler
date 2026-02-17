@@ -3,7 +3,7 @@ import json
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import render
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 
 from apps.taxonomy.models import NCBIGenome, Taxon, ExternalTaxon, TaxonCrosswalk
 from apps.taxonomy.utils import sampling_to_tree_artifacts
@@ -29,15 +29,48 @@ def home(request):
         .order_by("-count")
     )
     
-    # Statistics by phylum (all phyla, not just top 10)
-    phylum_stats = list(
+    # Statistics by kingdom (via classification JSON on linked ExternalTaxon)
+    kingdom_stats = list(
         NCBIGenome.objects
-        .exclude(phylum="")
-        .exclude(phylum__isnull=True)
-        .values("phylum")
+        .filter(external_taxon__isnull=False)
+        .exclude(external_taxon__classification__kingdom__isnull=True)
+        .exclude(external_taxon__classification__kingdom="")
+        .values(
+            kingdom=F("external_taxon__classification__kingdom"),
+            superkingdom=F("external_taxon__classification__superkingdom")
+        )
         .annotate(count=Count("id"))
         .order_by("-count")
     )
+
+    # Some classification records don't include 'superkingdom' (domain). Try to fill
+    # missing values by looking up any ExternalTaxon that contains the kingdom and
+    # reading its classification, or use a small heuristic fallback.
+    if kingdom_stats:
+        for entry in kingdom_stats:
+            if entry.get("superkingdom"):
+                continue
+            kname = entry.get("kingdom")
+            sk = None
+            try:
+                ext = ExternalTaxon.objects.filter(classification__kingdom=kname).first()
+                if ext:
+                    sk = ext.classification.get("superkingdom") or ext.classification.get("domain")
+            except Exception:
+                sk = None
+
+            # Heuristic fallback for common kingdoms
+            if not sk and kname:
+                lname = kname.lower()
+                if lname in ("animalia", "plantae", "fungi", "protozoa"):
+                    sk = "Eukarya"
+                elif "archaea" in lname or "thermoprote" in lname or "methan" in lname:
+                    sk = "Archaea"
+                else:
+                    # default to Bacteria for most unknown microbial kingdoms
+                    sk = "Bacteria"
+
+            entry["superkingdom"] = sk
     
     # Taxonomy statistics
     total_ncbi_taxa = Taxon.objects.count()
@@ -52,7 +85,7 @@ def home(request):
         "unmatched_genomes": unmatched_genomes,
         "needs_review": needs_review_count,
         "genome_levels": genome_levels,
-        "phylum_stats": phylum_stats,
+        "kingdom_stats": kingdom_stats,
         # Taxonomy
         "total_ncbi_taxa": total_ncbi_taxa,
         "total_col_taxa": total_col_taxa,

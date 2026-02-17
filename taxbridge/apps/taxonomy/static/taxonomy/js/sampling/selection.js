@@ -66,6 +66,10 @@ export function createSelectionManager({ renderer }) {
   function renderSelectionManualTbody(selectedMap) {
     const items = asArraySelected(selectedMap);
 
+    // Hide clades section in manual mode
+    const cladesWrap = document.getElementById("selCladesWrap");
+    if (cladesWrap) cladesWrap.classList.add("d-none");
+
     setText("selCount", String(items.length));
     setText("selRanks", "–");
     setText("selTarget", "–");
@@ -109,7 +113,104 @@ export function createSelectionManager({ renderer }) {
   }
 
   // ------------------------------------------------------------------
-  // Sampling rows normalizer
+  // DB Sampling result rendering
+  // ------------------------------------------------------------------
+  function renderDbSamplingClades(result) {
+    const cladesWrap = document.getElementById("selCladesWrap");
+    const cladesBody = document.getElementById("selCladesBody");
+    const cladesHint = document.getElementById("selCladesHint");
+
+    const clades = Array.isArray(result?.clades) ? result.clades : [];
+
+    if (!cladesWrap || !cladesBody) return;
+
+    if (!clades.length) {
+      cladesWrap.classList.add("d-none");
+      return;
+    }
+
+    cladesWrap.classList.remove("d-none");
+
+    if (cladesHint) {
+      const total = clades.reduce((s, c) => s + (c.selected || 0), 0);
+      cladesHint.textContent = `${clades.length} clades · ${total} species selected`;
+    }
+
+    cladesBody.innerHTML = clades.map(c => {
+      const name = c.name || "Unknown";
+      const avail = c.species_available ?? "—";
+      const quota = c.quota ?? "—";
+      const sel = c.selected ?? "—";
+      return `<tr>
+        <td title="${escapeHtml(name)}">${escapeHtml(name)}</td>
+        <td class="text-end">${avail}</td>
+        <td class="text-end">${quota}</td>
+        <td class="text-end fw-bold">${sel}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderDbSamplingTbody(result) {
+    const species = Array.isArray(result?.species) ? result.species : [];
+
+    // Render the clades breakdown table
+    renderDbSamplingClades(result);
+
+    if (!species.length) {
+      setText("selCount", "0");
+      renderSelListTbody("", "No species selected.");
+      return;
+    }
+
+    const html = species.map((s, i) => {
+      const name = s.organism_name || s.name || "";
+      const clade = s.clade_group || s.clade || "";
+      const hasAsm = s.assembly_score !== undefined;
+      const scoreHtml = hasAsm
+        ? `<span class="badge bg-${s.assembly_score >= 0.6 ? 'success' : s.assembly_score >= 0.3 ? 'warning' : 'danger'}-lt small ms-1" title="Assembly score">${s.assembly_score.toFixed(2)}</span>`
+        : "";
+      const levelHtml = s.genome_level
+        ? `<span class="badge bg-light text-muted small ms-1" title="Assembly level">${escapeHtml(s.genome_level)}</span>`
+        : "";
+      return `
+        <tr>
+          <td class="ps-3">
+            <i class="fa-solid fa-dna text-success me-2" title="DB Sampling"></i>
+            <span class="small text-muted me-2">${escapeHtml(clade)}</span>
+            <span>${escapeHtml(name)}</span>
+            ${scoreHtml}${levelHtml}
+          </td>
+          <td class="text-end pe-3">
+            <button class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    data-copy-key="${escapeHtml(name)}"
+                    title="Copy name">
+              <i class="fa-solid fa-copy"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    renderSelListTbody(html);
+
+    setText("selCount", String(species.length));
+
+    // Compute distinct clades
+    const cladeSet = new Set(species.map(s => s.clade_group || s.clade).filter(Boolean));
+    setText("selRanks", String(cladeSet.size) + " clades");
+    setText("selTarget", result.end_rank || result.strategy || "species");
+
+    const hint = document.getElementById("selHint");
+    if (hint) {
+      const hasAssembly = species.some(s => s.assembly_score !== undefined);
+      const asmNote = hasAssembly ? " | Assembly filtered" : "";
+      hint.textContent = `Strategy: ${result.strategy || "—"} | ${species.length} species from ${cladeSet.size} clades${asmNote}`;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Sampling rows normalizer (tree-based sampling)
   // ------------------------------------------------------------------
   function buildSamplingRows(result) {
     const ing = Array.isArray(result?.ingroup?.picked) ? result.ingroup.picked : [];
@@ -151,6 +252,10 @@ export function createSelectionManager({ renderer }) {
   // ------------------------------------------------------------------
   function renderSelectionSamplingTbody(result) {
     const rows = buildSamplingRows(result);
+
+    // Hide clades section in tree-based sampling mode
+    const cladesWrap = document.getElementById("selCladesWrap");
+    if (cladesWrap) cladesWrap.classList.add("d-none");
 
     if (!rows.length) {
       setText("selCount", "0");
@@ -230,10 +335,16 @@ export function createSelectionManager({ renderer }) {
   function repaintSelection() {
     let count = 0;
     if (lastSamplingResult) {
-      renderSelectionSamplingTbody(lastSamplingResult);
-      count = Array.isArray(lastSamplingResult.rows)
-        ? lastSamplingResult.rows.length
-        : 0;
+      // DB sampling results have a 'species' array
+      if (Array.isArray(lastSamplingResult.species)) {
+        renderDbSamplingTbody(lastSamplingResult);
+        count = lastSamplingResult.species.length;
+      } else {
+        renderSelectionSamplingTbody(lastSamplingResult);
+        count = Array.isArray(lastSamplingResult.rows)
+          ? lastSamplingResult.rows.length
+          : 0;
+      }
     } else {
       const selectedMap = renderer.getSelectedSpecies?.();
       renderSelectionManualTbody(selectedMap);
@@ -255,7 +366,19 @@ export function createSelectionManager({ renderer }) {
   }
 
   function getExportPayload({ allowManualFallback = true } = {}) {
-    if (lastSamplingResult) return lastSamplingResult;
+    if (lastSamplingResult) {
+      // DB sampling result: transform to exportable format
+      if (Array.isArray(lastSamplingResult.species)) {
+        return lastSamplingResult.species.map(s => ({
+          name: s.organism_name || "",
+          taxid: s.taxid || "",
+          accession: s.accession || "",
+          rank: "species",
+          clade: s.clade_group || s.clade || "",
+        }));
+      }
+      return lastSamplingResult;
+    }
     if (!allowManualFallback) return null;
     return selectionToPayload(renderer.getSelectedSpecies?.());
   }

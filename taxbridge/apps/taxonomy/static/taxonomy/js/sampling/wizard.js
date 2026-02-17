@@ -17,11 +17,12 @@ import { escapeHtml } from "../shared/config.js";
 export function initSamplingWizard({ renderer }) {
   const step1 = document.getElementById("samStep1");
   const step2 = document.getElementById("samStep2");
+  const step3 = document.getElementById("samStep3");
   const stepLabel = document.getElementById("samStepLabel");
   const prevBtn = document.getElementById("samPrev");
   const nextBtn = document.getElementById("samNext");
 
-  const scopeSel = document.getElementById("samplingScope");
+  const scopeSel = document.getElementById("samplingRoot");
   const scopeBadge = document.getElementById("scopeBadge");
   const scopeSetActive = document.getElementById("scopeSetActive");
   const scopeClear = document.getElementById("scopeClear");
@@ -46,10 +47,21 @@ export function initSamplingWizard({ renderer }) {
     targetLabels: new Map(),
   };
 
+  // Track the last clicked tree node so the wizard can use it as scope.
+  // The renderer dispatches "tree:active-changed" on every node click.
+  let _lastActiveNode = null;
+  window.addEventListener("tree:active-changed", (ev) => {
+    const d = ev.detail;
+    if (d?.key) {
+      _lastActiveNode = { key: d.key, rank: d.rank || "", name: d.name || "" };
+    }
+  });
+
   // ------------------------------------------------------------------
   // Helpers
   // ------------------------------------------------------------------
   function tryGetActiveNodeInfo() {
+    // 1. Direct renderer API (if it exists)
     if (typeof renderer.getActiveNodeInfo === "function") {
       const a = renderer.getActiveNodeInfo();
       if (a?.key) return a;
@@ -58,6 +70,9 @@ export function initSamplingWizard({ renderer }) {
       const a = renderer.getActiveNode();
       if (a?.key) return a;
     }
+    // 2. Tracked from tree:active-changed event
+    if (_lastActiveNode?.key) return _lastActiveNode;
+    // 3. Global fallback
     if (window.__activeNodeInfo?.key) return window.__activeNodeInfo;
     return null;
   }
@@ -81,11 +96,19 @@ export function initSamplingWizard({ renderer }) {
   // ------------------------------------------------------------------
   function setStep(n) {
     state.step = n;
-    if (stepLabel) stepLabel.textContent = `${n}/2`;
+    if (stepLabel) stepLabel.textContent = `${n}/3`;
     if (prevBtn) prevBtn.disabled = n === 1;
-    if (nextBtn) nextBtn.classList.toggle("d-none", n !== 1);
-    if (step1) step1.classList.toggle("d-none", n !== 1);
-    if (step2) step2.classList.toggle("d-none", n !== 2);
+    if (nextBtn) nextBtn.classList.toggle("d-none", n >= 3);
+
+    // Use BOTH class and inline style for reliable show/hide
+    // (inline style works even if Bootstrap CSS hasn't loaded yet)
+    [step1, step2, step3].forEach((el, i) => {
+      if (!el) return;
+      const show = (i + 1) === n;
+      el.classList.toggle("d-none", !show);
+      el.style.display = show ? "block" : "none";
+    });
+
     showWarn("");
   }
 
@@ -172,8 +195,12 @@ export function initSamplingWizard({ renderer }) {
   // ------------------------------------------------------------------
   // Event bindings
   // ------------------------------------------------------------------
-  prevBtn?.addEventListener("click", () => setStep(1));
-  nextBtn?.addEventListener("click", () => setStep(2));
+  prevBtn?.addEventListener("click", () => {
+    if (state.step > 1) setStep(state.step - 1);
+  });
+  nextBtn?.addEventListener("click", () => {
+    if (state.step < 3) setStep(state.step + 1);
+  });
 
   scopeSel.addEventListener("change", () => {
     const v = scopeSel.value || "";

@@ -87,7 +87,7 @@ class ExternalTaxonManager(models.Manager):
     
     def build_tree(
         self,
-        limit: int = 5000,
+        limit: Optional[int] = None,
         system: str = "col",
         rank_cut: Optional[str] = None,
         with_keys: bool = True,
@@ -107,27 +107,49 @@ class ExternalTaxonManager(models.Manager):
         qs = (
             self.filter(system=system, rank="species", status="accepted")
             .only("id", "external_id", "name", "rank", "classification_path")
-            .order_by("id")[:limit]
+            .order_by("id")
         )
+        if limit is not None:
+            qs = qs[:limit]
         
         root = TrieNode(name="Root", rank="dataset")
         
         for sp in qs:
             path = normalize_classification_path(sp.classification_path)
-            
+            # find superkingdom/domain name if present in the path
+            sk_name = None
+            for r, n in path:
+                if (r or "").lower() in ("superkingdom", "domain"):
+                    sk_name = n
+                    break
+
+            # increment root species count
+            root.meta["species_count"] = root.meta.get("species_count", 0) + 1
+            if sk_name:
+                root.meta.setdefault("superkingdom", sk_name)
+
             cur = root
             for rank, name in path:
                 key = (rank, name)
                 if key not in cur.children:
-                    cur.children[key] = TrieNode(name=name, rank=rank)
+                    cur.children[key] = TrieNode(name=name, rank=rank, meta={})
+                    if sk_name:
+                        cur.children[key].meta.setdefault("superkingdom", sk_name)
                 cur = cur.children[key]
+                # increment species count for this node (this species passes through)
+                cur.meta["species_count"] = cur.meta.get("species_count", 0) + 1
+                if sk_name:
+                    cur.meta.setdefault("superkingdom", sk_name)
             
             sp_key = ("species", sp.name)
             if sp_key not in cur.children:
+                meta = {"id": sp.id, "external_id": sp.external_id, "species_count": 1}
+                if sk_name:
+                    meta["superkingdom"] = sk_name
                 cur.children[sp_key] = TrieNode(
                     name=sp.name,
                     rank="species",
-                    meta={"id": sp.id, "external_id": sp.external_id},
+                    meta=meta,
                 )
         
         tree = root.to_d3()

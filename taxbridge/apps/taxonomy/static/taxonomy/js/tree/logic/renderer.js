@@ -718,7 +718,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       .attr("width", VIS.CB_SIZE + 8)
       .attr("height", VIS.CB_SIZE + 12);
 
-    // text
+    // text (name only; species count will be shown as a badge inside the node)
     const textEnter = nodeEnter
       .append("text")
       .attr("class", (d) => (isSciName(d.data.name) ? "sciname" : ""))
@@ -726,7 +726,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       .attr("y", 0)
       .text((d) => d.data.name);
 
-    textEnter.append("title").text((d) => d.data.name);
+    textEnter.append("title").text((d) => {
+      const name = d.data.name || "";
+      const cnt = d.data.species_count || d.data.speciesCount || d.data.count || 0;
+      return cnt ? `${name} (${cnt} species)` : name;
+    });
 
     // box
     nodeEnter
@@ -815,8 +819,99 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       const st = rankStyle(d.data.rank);
       const g = d3.select(this);
 
+      // --- species count badge inside node box (modern pill style) ---
+      try {
+        const key = d.data?.__key || '';
+        const wBox = nodeWidths.get(key) || VIS.MIN_W;
+        const cnt = d.data.species_count || d.data.speciesCount || d.data.count || 0;
+
+        const badgeGroupSel = g.select("g.count-badge");
+        if (cnt) {
+          let bg = badgeGroupSel.empty() ? g.append("g").attr("class", "count-badge") : badgeGroupSel;
+          
+          // Ensure elements exist
+          let textEl = bg.select("text.badge-text");
+          if (textEl.empty()) {
+            textEl = bg.append("text").attr("class", "badge-text");
+          }
+          let rectEl = bg.select("rect.badge-rect");
+          if (rectEl.empty()) {
+            rectEl = bg.insert("rect", ":first-child").attr("class", "badge-rect");
+          }
+
+          // Exact count (show full number)
+          const fmt = String(cnt);
+
+          // Domain-based color palette (soft pastel tones)
+          // Detect root node and force neutral badge colors for it
+          const isRoot = ((d.data.rank || "").toLowerCase() === "dataset") && ((d.data.name || "").toLowerCase() === "root");
+          const domain = isRoot ? "" : (d.data.superkingdom || d.data.domain || "").toLowerCase();
+          let bgColor, textColor;
+          if (domain.includes("bacteria") || domain === "bacteria") {
+            bgColor = "#d1f2eb"; textColor = "#0b5345";  // soft teal
+          } else if (domain.includes("eukarya") || domain === "eukarya" || domain.includes("euk")) {
+            bgColor = "#e8daef"; textColor = "#5b2c6f";  // soft purple
+          } else if (domain.includes("archaea") || domain === "archaea") {
+            bgColor = "#fdebd0"; textColor = "#9c640c";  // soft amber
+          } else {
+            // neutral badge color
+            bgColor = "#f8f9fa"; textColor = "#495057";  // light neutral
+          }
+
+          // Set text first to measure
+          textEl.text(fmt)
+            .style("font-size", "9px")
+            .style("font-weight", "500")
+            .style("font-family", "system-ui, -apple-system, sans-serif")
+            .style("letter-spacing", "0.02em")
+            .style("fill", textColor);
+
+          // Measure text width
+          const textBBox = textEl.node().getBBox();
+          const padX = 5, padY = 2;
+          const rectW = Math.max(16, textBBox.width + padX * 2);
+          const rectH = 14;
+          const rectX = wBox - rectW - 4;
+          const rectY = -rectH / 2;
+
+          // Position group
+          bg.attr("transform", `translate(${rectX}, 0)`);
+
+          // Style rect (pill shape, no border, subtle shadow via filter)
+          rectEl
+            .attr("x", 0).attr("y", rectY)
+            .attr("width", rectW).attr("height", rectH)
+            .attr("rx", rectH / 2).attr("ry", rectH / 2)
+            .style("fill", bgColor)
+            .style("stroke", "none")
+            .style("filter", "drop-shadow(0 1px 1px rgba(0,0,0,0.08))");
+
+          // Center text
+          textEl
+            .attr("x", rectW / 2)
+            .attr("y", rectY + rectH / 2)
+            .attr("dy", "0.35em")
+            .attr("text-anchor", "middle");
+
+        } else {
+          if (!badgeGroupSel.empty()) badgeGroupSel.remove();
+        }
+      } catch (err) {
+        console.warn("badge render error", err);
+      }
+
       // base styles
       g.select("rect.node-box").attr("fill", st.fill).attr("stroke", st.stroke);
+
+      // If this is the tree root, render node box neutral (no color) so only the badge stands out
+      try {
+        const isRoot = ((d.data.rank || "").toLowerCase() === "dataset") && ((d.data.name || "").toLowerCase() === "root");
+        if (isRoot) {
+          g.select("rect.node-box").attr("fill", "#ffffff").attr("stroke", "#ced4da");
+        }
+      } catch (e) {
+        // ignore
+      }
 
       const ui = computeNodeUIState({ d, samplingMode, samplingRootKey, samplingTargetKeys, keyFromD3Node });
 

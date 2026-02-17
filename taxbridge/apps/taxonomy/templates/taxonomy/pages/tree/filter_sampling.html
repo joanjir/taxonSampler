@@ -32,7 +32,7 @@
         <div class="d-flex align-items-center justify-content-between mb-2">
           <div class="small">
             <span class="badge bg-primary-lt text-primary me-1">Step</span>
-            <span id="samStepLabel" class="fw-semibold">1/2</span>
+            <span id="samStepLabel" class="fw-semibold">1/3</span>
           </div>
 
           <div class="btn-group btn-group-sm">
@@ -48,7 +48,7 @@
         <hr class="my-2" />
 
         <!-- ========== STEP 1: SCOPE + TARGETS (from tree with single checkbox) ========== -->
-        <div id="samStep1">
+        <div id="samStep1" style="display:block">
           <!-- Scope -->
           <div class="mb-3">
             <div class="d-flex align-items-center gap-2 mb-2">
@@ -156,66 +156,91 @@
           </div>
         </div>
 
-        <!-- ========== STEP 2: PARAMETERS ========== -->
-        <div id="samStep2" class="d-none">
-          <!-- Total taxa -->
-          <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Total taxa (K)</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Global sampling budget distributed across clades.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
+        <!-- ========== STEP 2: DB SAMPLING CONFIGURATION ========== -->
+        <div id="samStep2" class="d-none" style="display:none">
 
-            <input id="totalTaxa" type="number" min="2" step="1" value="50" class="form-control form-control-sm" />
-            <div class="form-text small">
-              <span id="taxaKBadge" class="badge bg-secondary-lt text-secondary" style="display:none;">K=—</span>
+          <!-- Step 1 scope indicator -->
+          <div id="dbScopeInfo" class="border rounded-3 p-2 bg-success-lt mb-3 d-none">
+            <i class="fa-solid fa-globe text-muted me-1"></i>
+            <span class="small text-muted">Loading scope…</span>
+          </div>
+
+          <!-- DB stats banner (loaded on step entry) -->
+          <div id="dbSamStats" class="border rounded-3 p-2 bg-light mb-3">
+            <div class="fw-semibold small mb-1">
+              <i class="fa-solid fa-database me-1 text-primary"></i>
+              Genome database
+            </div>
+            <div class="row g-2 text-center">
+              <div class="col-6">
+                <div class="border rounded bg-white p-1">
+                  <div class="small text-muted">Matched spp.</div>
+                  <div class="fw-bold text-success" id="dbStatMatched">—</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="border rounded bg-white p-1">
+                  <div class="small text-muted">Kingdoms</div>
+                  <div class="fw-bold text-info" id="dbStatKingdoms">—</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Allocation rank -->
+          <!-- Max Sample Size -->
           <div class="mb-3">
             <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Allocation rank</span>
+              <span>Max sample size</span>
               <span class="help-icon text-muted"
                     data-bs-toggle="popover"
                     data-bs-trigger="hover"
                     data-bs-placement="top"
                     data-bs-custom-class="popover-help"
-                    data-bs-content="Rank used to distribute K across clades (strata).">
+                    data-bs-content="Maximum number of species in the final sample. The strategy is applied within this budget.">
                 <i class="fa-solid fa-circle-question"></i>
               </span>
             </label>
+            <input id="dbMaxSampleSize" type="number" min="1" step="1" value="50"
+                   class="form-control form-control-sm" />
+          </div>
 
-            <select id="allocationRank" class="form-select form-select-sm">
-              <option value="phylum">Phylum</option>
-              <option value="class" selected>Class</option>
+          <!-- Start Rank -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Start rank</span>
+              <span class="help-icon text-muted"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="hover"
+                    data-bs-placement="top"
+                    data-bs-custom-class="popover-help"
+                    data-bs-content="Highest taxonomic rank to consider. Species are grouped by this rank for strategy allocation.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
+            <select id="dbStartRank" class="form-select form-select-sm">
+              <option value="kingdom">Kingdom</option>
+              <option value="phylum" selected>Phylum</option>
+              <option value="class">Class</option>
               <option value="order">Order</option>
               <option value="family">Family</option>
               <option value="genus">Genus</option>
             </select>
           </div>
 
-          <!-- Target rank -->
+          <!-- End Rank -->
           <div class="mb-3">
             <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Target rank</span>
+              <span>End rank</span>
               <span class="help-icon text-muted"
                     data-bs-toggle="popover"
                     data-bs-trigger="hover"
                     data-bs-placement="top"
                     data-bs-custom-class="popover-help"
-                    data-bs-content="Rank at which the final sampled tips are returned (usually species).">
+                    data-bs-content="Lowest rank returned. Usually 'species'. Results always resolve down to species.">
                 <i class="fa-solid fa-circle-question"></i>
               </span>
             </label>
-
-            <select id="targetRank" class="form-select form-select-sm">
+            <select id="dbEndRank" class="form-select form-select-sm">
               <option value="species" selected>Species</option>
               <option value="genus">Genus</option>
               <option value="family">Family</option>
@@ -223,123 +248,177 @@
             </select>
           </div>
 
-          <!-- Allocation mode -->
+          <!-- Strategy -->
           <div class="mb-3">
             <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Allocation mode</span>
+              <span>Sampling strategy</span>
               <span class="help-icon text-muted"
                     data-bs-toggle="popover"
                     data-bs-trigger="hover"
                     data-bs-placement="top"
                     data-bs-custom-class="popover-help"
-                    data-bs-content="How K is distributed across child clades (balanced vs proportional).">
+                    data-bs-content="none = all species (up to max); random = uniform random; proportional = quota ∝ clade size; balanced = equal quota per clade.">
                 <i class="fa-solid fa-circle-question"></i>
               </span>
             </label>
-
-            <select id="allocMode" class="form-select form-select-sm">
-              <option value="proportional" selected>Proportional (by richness)</option>
-              <option value="balanced">Balanced (equalize clades)</option>
+            <select id="dbStrategy" class="form-select form-select-sm">
+              <option value="none">None (all up to max)</option>
+              <option value="random">Random</option>
+              <option value="proportional" selected>Proportional</option>
+              <option value="balanced">Balanced</option>
             </select>
           </div>
 
-          <!-- Allocation policy -->
-          <div class="mb-3">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="minOnePerClade" checked />
-              <label class="form-check-label small d-flex align-items-center gap-2" for="minOnePerClade">
-                <span>Enforce ≥ 1 taxon per clade</span>
-                <span class="help-icon text-muted"
-                      data-bs-toggle="popover"
-                      data-bs-trigger="hover"
-                      data-bs-placement="top"
-                      data-bs-custom-class="popover-help"
-                      data-bs-content="Guarantees at least one representative per clade when available.">
-                  <i class="fa-solid fa-circle-question"></i>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Refinement -->
-          <div class="mb-3">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="expandSpecies" />
-              <label class="form-check-label small d-flex align-items-center gap-2" for="expandSpecies">
-                <span>Expand representatives to species level</span>
-                <span class="help-icon text-muted"
-                      data-bs-toggle="popover"
-                      data-bs-trigger="hover"
-                      data-bs-placement="top"
-                      data-bs-custom-class="popover-help"
-                      data-bs-content="After representative selection, expands sampling to species level.">
-                  <i class="fa-solid fa-circle-question"></i>
-                </span>
-              </label>
-            </div>
-
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Max species per genus</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Upper bound on species sampled within a single genus.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-
-            <input id="maxPerGenus" type="number" min="1" step="1" value="1" class="form-control form-control-sm" />
-          </div>
-
-          <!-- Outgroup -->
-          <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Outgroup rank distance</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Taxonomic distance used to select outgroup taxa.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-
-            <select id="outgroupRank" class="form-select form-select-sm mb-2">
-              <option value="">None</option>
-              <option value="order">Order</option>
-              <option value="class">Class</option>
-              <option value="phylum">Phylum</option>
-            </select>
-
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Outgroup taxa</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Number of outgroup taxa sampled independently.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-
-            <input id="outgroupN" type="number" min="1" step="1" value="2" class="form-control form-control-sm" />
-          </div>
-
-          <!-- Action -->
-          <div class="d-grid">
-            <button id="runSampling" class="btn btn-sm btn-success" type="button">
+          <!-- Action buttons -->
+          <div class="d-grid gap-2">
+            <button id="runDbSampling" class="btn btn-sm btn-success" type="button">
               <i class="fa-solid fa-play me-1"></i>
-              Generate sampling
+              Execute sampling
             </button>
           </div>
 
           <div class="form-text small mt-2">
-            <i class="fa-solid fa-shield-halved me-1"></i>
-            Scope/targets are validated before execution.
+            <i class="fa-solid fa-database me-1"></i>
+            Sampling runs on matched COL genomes in the local database.
+          </div>
+        </div>
+
+        <!-- ========== STEP 3: ASSEMBLY FILTERING (optional) ========== -->
+        <div id="samStep3" class="d-none" style="display:none">
+
+          <!-- Step 2 result indicator -->
+          <div id="asmInputInfo" class="border rounded-3 p-2 bg-primary-lt mb-3 d-none">
+            <i class="fa-solid fa-dna text-primary me-1"></i>
+            <span class="small text-primary">Loading…</span>
+          </div>
+
+          <!-- Mode selection -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 fw-semibold">
+              <i class="fa-solid fa-sliders me-1 text-muted"></i>
+              Filtering mode
+            </label>
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="radio" name="asmMode" id="asmModeScoring" value="scoring" checked>
+              <label class="form-check-label small" for="asmModeScoring">
+                <strong>Scoring</strong> <span class="text-muted">— weighted composite score, best per species</span>
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="asmMode" id="asmModeHard" value="hard">
+              <label class="form-check-label small" for="asmModeHard">
+                <strong>Hard filtering</strong> <span class="text-muted">— strict thresholds, remove species below</span>
+              </label>
+            </div>
+          </div>
+
+          <hr class="my-2">
+
+          <!-- ── Assembly Info (categorical) ── -->
+          <div class="mb-3">
+            <div class="fw-semibold small mb-2">
+              <i class="fa-solid fa-info-circle me-1 text-info"></i>
+              Assembly Info
+            </div>
+
+            <label class="form-label small mb-1">Assembly Level</label>
+            <div id="asmLevelChecks" class="mb-2">
+              <div class="form-check form-check-sm">
+                <input class="form-check-input asm-level" type="checkbox" value="Complete Genome" id="asmLvl1" checked>
+                <label class="form-check-label small" for="asmLvl1">Complete Genome</label>
+              </div>
+              <div class="form-check form-check-sm">
+                <input class="form-check-input asm-level" type="checkbox" value="Chromosome" id="asmLvl2" checked>
+                <label class="form-check-label small" for="asmLvl2">Chromosome</label>
+              </div>
+              <div class="form-check form-check-sm">
+                <input class="form-check-input asm-level" type="checkbox" value="Scaffold" id="asmLvl3" checked>
+                <label class="form-check-label small" for="asmLvl3">Scaffold</label>
+              </div>
+            </div>
+
+            <label class="form-label small mb-1">RefSeq Category</label>
+            <div id="asmRefseqChecks" class="mb-2">
+              <div class="form-check form-check-sm">
+                <input class="form-check-input asm-refseq" type="checkbox" value="reference genome" id="asmRef1" checked>
+                <label class="form-check-label small" for="asmRef1">Reference genome</label>
+              </div>
+              <div class="form-check form-check-sm">
+                <input class="form-check-input asm-refseq" type="checkbox" value="representative genome" id="asmRef2" checked>
+                <label class="form-check-label small" for="asmRef2">Representative genome</label>
+              </div>
+              <div class="form-check form-check-sm">
+                <input class="form-check-input asm-refseq" type="checkbox" value="na" id="asmRef3">
+                <label class="form-check-label small" for="asmRef3">N/A</label>
+              </div>
+            </div>
+
+          </div>
+
+          <hr class="my-2">
+
+          <!-- ── Quality Metrics (numeric thresholds) ── -->
+          <div class="mb-3">
+            <div class="fw-semibold small mb-2">
+              <i class="fa-solid fa-chart-bar me-1 text-success"></i>
+              Quality Metrics
+            </div>
+
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label small mb-0">Coverage ≥</label>
+                <input id="asmMinCoverage" type="number" min="0" step="1" value=""
+                       class="form-control form-control-sm" placeholder="any">
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-2">
+
+          <!-- Assembly stats summary (loaded after stats call) -->
+          <div id="asmStatsSummary" class="border rounded-3 p-2 bg-light mb-3 d-none">
+            <div class="fw-semibold small mb-1">
+              <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
+              Assembly Overview
+            </div>
+            <div class="row g-2 text-center">
+              <div class="col-4">
+                <div class="border rounded bg-white p-1">
+                  <div class="small text-muted">Assemblies</div>
+                  <div class="fw-bold text-primary" id="asmStatTotal">—</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="border rounded bg-white p-1">
+                  <div class="small text-muted">Avg Score</div>
+                  <div class="fw-bold text-success" id="asmStatAvgScore">—</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="border rounded bg-white p-1">
+                  <div class="small text-muted">Avg Cov.</div>
+                  <div class="fw-bold text-info" id="asmStatAvgCov">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="d-grid gap-2">
+            <button id="runAsmFilter" class="btn btn-sm btn-primary" type="button">
+              <i class="fa-solid fa-filter me-1"></i>
+              Apply assembly filter
+            </button>
+            <button id="skipAsmFilter" class="btn btn-sm btn-outline-secondary" type="button">
+              <i class="fa-solid fa-forward me-1"></i>
+              Skip (use all assemblies)
+            </button>
+          </div>
+
+          <div class="form-text small mt-2">
+            <i class="fa-solid fa-lightbulb me-1 text-warning"></i>
+            Scoring mode picks the best assembly per species.
+            Hard mode removes species that don't meet thresholds.
           </div>
         </div>
       </div>

@@ -43,7 +43,7 @@ class NCBIGenome(models.Model):
     )
 
     # Basic information
-    organism_name = models.CharField(max_length=255, blank=True, default="")
+    organism_name = models.TextField(blank=True, default="")
     refseq_category = models.CharField(
         max_length=64,
         blank=True,
@@ -133,14 +133,12 @@ class NCBIGenome(models.Model):
     )
 
     # Sequencing and assembly info
-    sequencing_tech = models.CharField(
-        max_length=255,
+    sequencing_tech = models.TextField(
         blank=True,
         default="",
         help_text="Sequencing technology",
     )
-    assembly_method = models.CharField(
-        max_length=255,
+    assembly_method = models.TextField(
         blank=True,
         default="",
         help_text="Assembly method",
@@ -223,14 +221,12 @@ class NCBIGenome(models.Model):
     )
 
     # Additional names
-    common_name = models.CharField(
-        max_length=255,
+    common_name = models.TextField(
         blank=True,
         default="",
         help_text="Organism common name",
     )
-    directory_name = models.CharField(
-        max_length=255,
+    directory_name = models.TextField(
         blank=True,
         default="",
         help_text="NCBI directory name",

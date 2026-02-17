@@ -299,3 +299,152 @@ class TaxonSyncRun(models.Model):
         self.finished_at = timezone.now()
         self.error_message = error
         self.save(update_fields=["status", "finished_at", "error_message"])
+
+
+# ============================================================
+# DiscoveryRun - Weekly automatic species discovery
+# ============================================================
+class DiscoveryRun(models.Model):
+    """
+    Records each weekly discovery run that searches NCBI
+    for new species with high-quality genomes not yet in our DB.
+    """
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("running", "Running"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    TRIGGER_CHOICES = [
+        ("scheduled", "Scheduled"),
+        ("manual", "Manual"),
+    ]
+
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default="pending", db_index=True
+    )
+    trigger = models.CharField(
+        max_length=16, choices=TRIGGER_CHOICES, default="scheduled"
+    )
+
+    # Kingdoms searched
+    kingdoms_searched = models.JSONField(
+        default=list,
+        help_text="List of kingdoms searched in this run",
+    )
+
+    # Results
+    total_scanned = models.PositiveIntegerField(default=0)
+    new_species_found = models.PositiveIntegerField(default=0)
+
+    # Celery tracking
+    celery_task_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    # Errors and log
+    error_message = models.TextField(blank=True, default="")
+    log = models.JSONField(default=list)
+
+    class Meta:
+        app_label = "taxonomy"
+        verbose_name = "Discovery Run"
+        verbose_name_plural = "Discovery Runs"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Discovery #{self.pk} [{self.status}] - {self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else 'pending'}"
+
+    @property
+    def duration_seconds(self):
+        if not self.started_at:
+            return None
+        end = self.finished_at or timezone.now()
+        return int((end - self.started_at).total_seconds())
+
+    def add_log(self, level, message, **kwargs):
+        entry = {
+            "timestamp": timezone.now().isoformat(),
+            "level": level,
+            "message": message,
+            **kwargs,
+        }
+        self.log.append(entry)
+        self.save(update_fields=["log"])
+
+    def mark_started(self):
+        self.status = "running"
+        self.started_at = timezone.now()
+        self.save(update_fields=["status", "started_at"])
+
+    def mark_completed(self):
+        self.status = "completed"
+        self.finished_at = timezone.now()
+        self.save(update_fields=["status", "finished_at"])
+
+    def mark_failed(self, error):
+        self.status = "failed"
+        self.finished_at = timezone.now()
+        self.error_message = error
+        self.save(update_fields=["status", "finished_at", "error_message"])
+
+
+class DiscoveredSpecies(models.Model):
+    """
+    A new species found in NCBI that is not yet in the local database.
+    Allows the admin to review and optionally import discoveries.
+    """
+
+    discovery_run = models.ForeignKey(
+        DiscoveryRun,
+        on_delete=models.CASCADE,
+        related_name="discoveries",
+    )
+
+    # Species info from NCBI
+    taxid = models.PositiveIntegerField(help_text="NCBI Taxonomy ID")
+    scientific_name = models.CharField(max_length=255)
+    common_name = models.CharField(max_length=255, blank=True, default="")
+    kingdom = models.CharField(max_length=64, blank=True, default="")
+
+    # Best genome info
+    accession = models.CharField(max_length=64, help_text="Best genome accession")
+    quality_score = models.FloatField(default=0.0)
+    genome_level = models.CharField(max_length=64, blank=True, default="")
+    refseq_category = models.CharField(max_length=64, blank=True, default="")
+    protein_coding = models.PositiveIntegerField(null=True, blank=True)
+    scaffold_n50_kb = models.FloatField(null=True, blank=True)
+    genome_coverage = models.FloatField(null=True, blank=True)
+    total_sequence_length = models.BigIntegerField(null=True, blank=True)
+
+    # Admin action
+    is_imported = models.BooleanField(
+        default=False, db_index=True,
+        help_text="Whether this species has been imported into the database",
+    )
+    is_dismissed = models.BooleanField(
+        default=False, db_index=True,
+        help_text="Marked as not interesting by admin",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "taxonomy"
+        verbose_name = "Discovered Species"
+        verbose_name_plural = "Discovered Species"
+        ordering = ["-quality_score"]
+        unique_together = [("discovery_run", "taxid")]
+        indexes = [
+            models.Index(fields=["taxid"]),
+            models.Index(fields=["quality_score"]),
+            models.Index(fields=["is_imported"]),
+        ]
+
+    def __str__(self):
+        return f"{self.scientific_name} (taxid {self.taxid}) - Q:{self.quality_score}"

@@ -70,18 +70,6 @@ export function createSamplingFiltersController({ renderer }) {
     targetsEmptyHint: null,
     targetsWarn: null,
     targetsWarnText: null,
-
-    totalTaxa: null,
-    taxaKBadge: null,
-    allocationRank: null,
-    targetRank: null,
-    allocMode: null,
-    minOnePerClade: null,
-    expandSpecies: null,
-    maxPerGenus: null,
-    outgroupRank: null,
-    outgroupN: null,
-    runSampling: null,
   };
 
   function bindDom() {
@@ -111,17 +99,7 @@ export function createSamplingFiltersController({ renderer }) {
     dom.targetsWarn = document.getElementById("targetsWarn");
     dom.targetsWarnText = document.getElementById("targetsWarnText");
 
-    dom.totalTaxa = document.getElementById("totalTaxa");
-    dom.taxaKBadge = document.getElementById("taxaKBadge");
-    dom.allocationRank = document.getElementById("allocationRank");
-    dom.targetRank = document.getElementById("targetRank");
-    dom.allocMode = document.getElementById("allocMode");
-    dom.minOnePerClade = document.getElementById("minOnePerClade");
-    dom.expandSpecies = document.getElementById("expandSpecies");
-    dom.maxPerGenus = document.getElementById("maxPerGenus");
-    dom.outgroupRank = document.getElementById("outgroupRank");
-    dom.outgroupN = document.getElementById("outgroupN");
-    dom.runSampling = document.getElementById("runSampling");
+    // Old Step 2 DOM refs removed — DB sampling module handles Step 2 now
   }
 
   function setWarn(msg) {
@@ -487,14 +465,7 @@ export function createSamplingFiltersController({ renderer }) {
     updateScopeBadge();
     renderTargetsChips();
 
-    if (dom.allocationRank) dom.allocationRank.value = "class";
-    if (dom.targetRank) dom.targetRank.value = "species";
-    if (dom.allocMode) dom.allocMode.value = "proportional";
-    if (dom.minOnePerClade) dom.minOnePerClade.checked = true;
-    if (dom.expandSpecies) dom.expandSpecies.checked = false;
-    if (dom.maxPerGenus) dom.maxPerGenus.value = "1";
-    if (dom.outgroupRank) dom.outgroupRank.value = "";
-    if (dom.outgroupN) dom.outgroupN.value = "2";
+    // Old Step 2 fields removed — DB sampling module handles its own reset
 
     emitSamplingConfigChanged();
     repaintRichnessPanelDebounced();
@@ -649,28 +620,9 @@ export function createSamplingFiltersController({ renderer }) {
     });
 
     dom.totalTaxa?.addEventListener("input", emitSamplingConfigChangedDebounced);
-    dom.allocationRank?.addEventListener("change", emitSamplingConfigChanged);
-    dom.targetRank?.addEventListener("change", emitSamplingConfigChanged);
-    dom.allocMode?.addEventListener("change", emitSamplingConfigChanged);
-    dom.minOnePerClade?.addEventListener("change", emitSamplingConfigChanged);
-    dom.expandSpecies?.addEventListener("change", emitSamplingConfigChanged);
 
-    dom.maxPerGenus?.addEventListener("input", () => {
-      if (locked) return;
-      let v = parseInt(dom.maxPerGenus?.value || "1", 10);
-      if (!Number.isFinite(v) || v < 1) v = 1;
-      if (dom.maxPerGenus && String(v) !== String(dom.maxPerGenus.value)) dom.maxPerGenus.value = String(v);
-      emitSamplingConfigChangedDebounced();
-    });
-
-    dom.outgroupRank?.addEventListener("change", emitSamplingConfigChanged);
-    dom.outgroupN?.addEventListener("input", () => {
-      if (locked) return;
-      let v = parseInt(dom.outgroupN?.value || "1", 10);
-      if (!Number.isFinite(v) || v < 1) v = 1;
-      if (dom.outgroupN && String(v) !== String(dom.outgroupN.value)) dom.outgroupN.value = String(v);
-      emitSamplingConfigChangedDebounced();
-    });
+    // Note: Old Step 2 DOM elements (allocationRank, allocMode, etc.)
+    // are removed — DB sampling module handles Step 2 now.
 
     window.addEventListener("tree:active-changed", (ev) => {
       setActiveNodeFromTree(ev.detail || null);
@@ -727,9 +679,7 @@ export function createSamplingFiltersController({ renderer }) {
   }
 
   function resetDefaults() {
-    if (dom.allocationRank) dom.allocationRank.value = "class";
-    if (dom.targetRank) dom.targetRank.value = "species";
-    if (dom.allocMode) dom.allocMode.value = "proportional";
+    // Old Step 2 defaults removed — DB sampling module handles its own defaults
   }
 
   return {
