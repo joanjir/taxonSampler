@@ -1,0 +1,240 @@
+﻿{% extends "taxonomy/layout/app_shell.html" %}
+
+{% block title %}TaxaBridge - Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header d-print-none">
+  <div class="container-xl">
+    <div class="row g-2 align-items-center">
+      <div class="col">
+        <h2 class="page-title">
+          <i class="ti ti-dashboard me-2"></i>TaxaBridge Dashboard
+        </h2>
+        <div class="text-muted mt-1">
+          NCBI genome management and linking with Catalogue of Life
+        </div>
+      </div>
+      <div class="col-auto">
+        <a href="{% url 'taxonomy:tree' %}" class="btn btn-primary">
+          <i class="ti ti-binary-tree me-1"></i> View Tree
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="container-xl">
+    
+    <!-- Stats Cards Row 1: Genomes -->
+    <div class="row row-deck row-cards mb-4">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">Total Genomes</div>
+            </div>
+            <div class="h1 mb-0">{{ total_genomes|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">Linked (CoL)</div>
+              <span class="ms-auto badge bg-green-lt text-green">{{ match_percent }}%</span>
+            </div>
+            <div class="h1 mb-0 text-success">{{ matched_genomes|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">Unlinked</div>
+            </div>
+            <div class="h1 mb-0 text-warning">{{ unmatched_genomes|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">Needs Review</div>
+            </div>
+            <div class="h1 mb-0 text-danger">{{ needs_review|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards Row 2: Taxonomy -->
+    <div class="row row-deck row-cards mb-4">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">NCBI Taxa</div>
+            </div>
+            <div class="h1 mb-0">{{ total_ncbi_taxa|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">CoL Taxa</div>
+            </div>
+            <div class="h1 mb-0">{{ total_col_taxa|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">CoL Species (accepted)</div>
+            </div>
+            <div class="h1 mb-0">{{ total_col_species|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center">
+              <div class="subheader">Active Crosswalks</div>
+            </div>
+            <div class="h1 mb-0">{{ total_crosswalks|default:0 }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs for Report and Species List -->
+    <div class="card">
+      <div class="card-header">
+        <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
+          <li class="nav-item">
+            <a href="#tab-report" class="nav-link active" data-bs-toggle="tab">
+              <i class="ti ti-chart-pie me-2"></i> Report
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div class="card-body">
+        <div class="tab-content">
+          <!-- Tab: Report (Charts) -->
+          <div class="tab-pane active show" id="tab-report">
+            <div class="row">
+              <!-- Link Status & Assembly Level (stacked) -->
+              <div class="col-lg-6 d-flex flex-column">
+                <!-- Link Status Chart -->
+                <div class="card mb-3">
+                  <div class="card-header">
+                    <h3 class="card-title">Link Status</h3>
+                  </div>
+                  <div class="card-body">
+                    <div id="linkStatusChart">
+                      {% with total=matched_genomes|default:0|add:unmatched_genomes|default:0|add:needs_review|default:0 %}
+                        {% if total > 0 %}
+                        <div class="progress progress-separated mb-3" style="height: 1.5rem;">
+                          {% widthratio matched_genomes|default:0 total 100 as matched_pct %}
+                          {% widthratio unmatched_genomes|default:0 total 100 as unmatched_pct %}
+                          {% widthratio needs_review|default:0 total 100 as review_pct %}
+                          <div class="progress-bar bg-success" role="progressbar" style="width: {{ matched_pct }}%" aria-label="Linked"></div>
+                          <div class="progress-bar bg-warning" role="progressbar" style="width: {{ unmatched_pct }}%" aria-label="Unlinked"></div>
+                          <div class="progress-bar bg-danger" role="progressbar" style="width: {{ review_pct }}%" aria-label="Needs Review"></div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 mt-3">
+                          <div class="d-flex align-items-center">
+                            <span class="legend bg-success me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
+                            <span class="text-secondary small">Linked</span>
+                            <span class="ms-1 fw-bold">{{ matched_genomes|default:0 }}</span>
+                          </div>
+                          <div class="d-flex align-items-center">
+                            <span class="legend bg-warning me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
+                            <span class="text-secondary small">Unlinked</span>
+                            <span class="ms-1 fw-bold">{{ unmatched_genomes|default:0 }}</span>
+                          </div>
+                          <div class="d-flex align-items-center">
+                            <span class="legend bg-danger me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
+                            <span class="text-secondary small">Review</span>
+                            <span class="ms-1 fw-bold">{{ needs_review|default:0 }}</span>
+                          </div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted text-center py-5">No data</div>
+                        {% endif %}
+                      {% endwith %}
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Assembly Level Chart -->
+                <div class="card flex-grow-1">
+                  <div class="card-header">
+                    <h3 class="card-title">Assembly Level</h3>
+                  </div>
+                  <div class="card-body">
+                    <div id="assemblyLevelChart">
+                      {% if genome_levels %}
+                        {% with total=genome_levels|length %}
+                        <div class="progress progress-separated mb-3" style="height: 1.5rem;" id="assemblyProgressBar"></div>
+                        <div class="d-flex flex-wrap gap-3 mt-3" id="assemblyLegend"></div>
+                        {% endwith %}
+                      {% else %}
+                      <div class="text-muted text-center py-5">No data</div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Kingdom Chart -->
+              <div class="col-lg-6">
+                <div class="card h-100">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-title mb-0">Distribution by Kingdom</h3>
+                    <small class="text-muted">Total: {{ total_genomes }}</small>
+                  </div>
+                  <div class="card-body">
+                    <div id="chartKingdoms" style="height: 300px;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% load static %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
+<script>
+  // Server-side data passed to JavaScript
+  window.HOME_DATA = {
+    genomeLevels: [
+      {% for level in genome_levels %}
+      { label: "{{ level.genome_level|default:'Unspecified' }}", value: {{ level.count }} }{% if not forloop.last %},{% endif %}
+      {% endfor %}
+    ],
+    kingdomStats: [
+      {% for k in kingdom_stats %}
+      { label: "{{ k.kingdom }}", value: {{ k.count }}, domain: "{{ k.superkingdom|default:'' }}" }{% if not forloop.last %},{% endif %}
+      {% endfor %}
+    ]
+  };
+</script>
+<script src="{% static 'taxonomy/js/dashboard/home.js' %}"></script>
+{% endblock %}

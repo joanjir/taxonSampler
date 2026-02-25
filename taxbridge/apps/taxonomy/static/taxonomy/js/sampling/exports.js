@@ -13,6 +13,24 @@ import { postDownload } from "../shared/helpers.js";
 import { copyToClipboard } from "../tree/ui.js";
 
 /**
+ * Dynamically load SheetJS (xlsx) from CDN if not already loaded.
+ * Returns the XLSX global.
+ */
+let _xlsxPromise = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (_xlsxPromise) return _xlsxPromise;
+  _xlsxPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => reject(new Error("Failed to load SheetJS library"));
+    document.head.appendChild(s);
+  });
+  return _xlsxPromise;
+}
+
+/**
  * Detect if a payload is a DB sampling result (species array)
  * vs tree-based sampling (ingroup/outgroupPicked).
  */
@@ -93,6 +111,83 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
     const payload = getExportPayload({ allowManualFallback: false });
     if (!payload) return;
     await postDownload("/taxonomy/sampling/export/newick/", payload, "sampling_taxonomic.newick");
+  });
+
+  document.getElementById("exportSelExcel")?.addEventListener("click", async () => {
+    const last = getLastSampling();
+    if (!last || !isDbSamplingResult(last)) {
+      alert("Excel export is only available after DB sampling.");
+      return;
+    }
+
+    try {
+      const XLSX = await loadXLSX();
+      const species = last.species || [];
+
+      // Build rows with all available fields
+      const rows = species.map((s, i) => ({
+        "#":               i + 1,
+        "Organism Name":   s.organism_name || "",
+        "Scientific Name": s.scientific_name || s.organism_name || "",
+        "TaxID":           s.taxid || "",
+        "Accession":       s.accession || "",
+        "Kingdom":         s.kingdom || "",
+        "Phylum":          s.phylum || "",
+        "Class":           s.class || "",
+        "Order":           s.order || "",
+        "Family":          s.family || "",
+        "Genus":           s.genus || "",
+        "COL Name":        s.col_name || "",
+        "Clade Group":     s.clade_group || "",
+        "Genome Level":    s.genome_level || "",
+        "RefSeq Category": s.refseq_category || "",
+        "Coverage":        s.genome_coverage ?? "",
+        "Genome Size (bp)": s.total_sequence_length ?? "",
+        "GC %":            s.gc_percent ?? "",
+        "Contig N50 (kb)": s.contig_n50_kb ?? "",
+        "Scaffold N50 (kb)": s.scaffold_n50_kb ?? "",
+        "Scaffolds":       s.scaffold_count ?? "",
+        "Chromosomes":     s.chromosome_count ?? "",
+        "Genes":           s.genes ?? "",
+        "Protein Coding":  s.protein_coding ?? "",
+        "Quality Score":   s.quality_score ?? "",
+        "Release Date":    s.release_date || "",
+        "Source DB":       s.source_database || "",
+        "Sequencing Tech": s.sequencing_tech || "",
+        "BUSCO Complete %": s.busco_complete ?? "",
+      }));
+
+      // Create workbook with two sheets: Species + Clades
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Species
+      const wsSpecies = XLSX.utils.json_to_sheet(rows);
+      // Auto-width columns
+      const colWidths = Object.keys(rows[0] || {}).map(k => ({
+        wch: Math.max(k.length, ...rows.map(r => String(r[k] ?? "").length).slice(0, 50)) + 2
+      }));
+      wsSpecies["!cols"] = colWidths;
+      XLSX.utils.book_append_sheet(wb, wsSpecies, "Species");
+
+      // Sheet 2: Clades allocation
+      const clades = (last.clades || []).map(c => ({
+        "Clade":     c.name || "",
+        "Rank":      c.rank || "",
+        "Available": c.species_available ?? "",
+        "Quota":     c.quota ?? "",
+        "Sampled":   c.selected ?? "",
+      }));
+      if (clades.length) {
+        const wsClades = XLSX.utils.json_to_sheet(clades);
+        XLSX.utils.book_append_sheet(wb, wsClades, "Clades");
+      }
+
+      // Download
+      XLSX.writeFile(wb, "sampling_report.xlsx");
+    } catch (err) {
+      console.error("[exports] Excel export error:", err);
+      alert("Excel export failed: " + (err.message || err));
+    }
   });
 
   document.getElementById("copySel")?.addEventListener("click", async () => {

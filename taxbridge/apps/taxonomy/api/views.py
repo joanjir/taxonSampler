@@ -903,20 +903,20 @@ def genomes_list(request):
     
     col_match_status = request.GET.get("col_match_status", "").strip()
     if col_match_status:
-        # needs_review filter should include both needs_review AND no_match
-        if col_match_status == "needs_review":
-            qs = qs.filter(Q(col_match_status="needs_review") | Q(col_match_status="no_match"))
+        if col_match_status == "unlinked":
+            # Unlinked = unmatched (never searched) + not_in_col (searched, not found)
+            qs = qs.filter(col_match_status__in=["unmatched", "not_in_col"])
         else:
             qs = qs.filter(col_match_status=col_match_status)
     
-    # Filter by COL status (accepted, synonym, no_match)
+    # Filter by COL status (accepted, synonym, not_in_col)
     col_status = request.GET.get("col_status", "").strip()
     if col_status:
-        if col_status == "no_match":
-            # No COL match - external_taxon is null and col_match_status is no_match
-            qs = qs.filter(col_match_status="no_match")
+        if col_status == "not_in_col":
+            # Searched in COL but not found
+            qs = qs.filter(col_match_status="not_in_col")
         else:
-            # Filter by external_taxon.status
+            # Filter by external_taxon.status (accepted, synonym, etc.)
             qs = qs.filter(external_taxon__status=col_status)
     
     # Sorting
@@ -939,10 +939,12 @@ def genomes_list(request):
     # Serialize
     results = []
     for g in genomes:
-        # Get COL status if it exists
+        # Get COL status: external_taxon.status or 'not_in_col' if searched but not found
         col_status = None
         if g.external_taxon:
             col_status = g.external_taxon.status
+        elif g.col_match_status == "not_in_col":
+            col_status = "not_in_col"
         
         results.append({
             "id": g.id,
@@ -1079,29 +1081,74 @@ def genome_update(request, accession: str):
     except Exception:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     
-    # Update col_match_status
-    if "col_match_status" in data:
-        valid_statuses = ["matched", "unmatched", "needs_review", "no_match"]
-        if data["col_match_status"] in valid_statuses:
-            genome.col_match_status = data["col_match_status"]
+    # ── Update species name (Taxon.scientific_name + organism_name) ──
+    new_species_name = data.get("species_name", "").strip()
+    if new_species_name and genome.taxon:
+        genome.taxon.scientific_name = new_species_name
+        genome.taxon.save(update_fields=["scientific_name"])
+        genome.organism_name = new_species_name
     
-    # Update external_taxon
-    if "external_taxon_id" in data:
-        if data["external_taxon_id"]:
-            try:
-                external_taxon = ExternalTaxon.objects.get(id=data["external_taxon_id"])
-                genome.external_taxon = external_taxon
-                genome.col_match_status = "matched"
-            except ExternalTaxon.DoesNotExist:
-                return JsonResponse({"error": "ExternalTaxon not found"}, status=404)
-        else:
-            genome.external_taxon = None
-            if genome.col_match_status == "matched":
-                genome.col_match_status = "unmatched"
+    # ── Update taxonomy fields on genome ──
+    taxonomy = data.get("taxonomy", {})
+    if taxonomy:
+        if "phylum" in taxonomy:
+            genome.phylum = taxonomy["phylum"]
+        if "class" in taxonomy:
+            genome.class_name = taxonomy["class"]
     
-    # Update notes
+    # ── Update external_taxon (COL link) ──
+    ext_id = data.get("external_taxon_id")
+    if ext_id:
+        # User selected a COL taxon — link it
+        try:
+            external_taxon = ExternalTaxon.objects.get(id=ext_id)
+            genome.external_taxon = external_taxon
+            # If user also supplied taxonomy, update the external_taxon classification
+            if taxonomy:
+                external_taxon.classification = taxonomy
+                external_taxon.save(update_fields=["classification"])
+        except ExternalTaxon.DoesNotExist:
+            return JsonResponse({"error": "ExternalTaxon not found"}, status=404)
+    elif taxonomy:
+        # No COL taxon selected but taxonomy provided — create/update manual ExternalTaxon
+        species_name = new_species_name or genome.organism_name or ""
+        if species_name:
+            manual_ext, _created = ExternalTaxon.objects.update_or_create(
+                system="manual",
+                name=species_name,
+                rank="species",
+                defaults={
+                    "dataset_code": "manual",
+                    "external_id": f"manual-{genome.accession}",
+                    "status": "accepted",
+                    "classification": taxonomy,
+                },
+            )
+            genome.external_taxon = manual_ext
+    
+    # ── Update notes ──
     if "col_match_notes" in data:
         genome.col_match_notes = data["col_match_notes"]
+    
+    # ── Update status ──
+    if ext_id:
+        genome.col_match_status = "matched"
+    else:
+        genome.col_match_status = "manual"
+    
+    # ── Create / update TaxonCrosswalk record ──
+    if genome.taxon and genome.external_taxon:
+        from apps.taxonomy.models import TaxonCrosswalk
+        TaxonCrosswalk.objects.update_or_create(
+            ncbi_taxon=genome.taxon,
+            external_taxon=genome.external_taxon,
+            defaults={
+                "score": 1.0,
+                "decision": "manual",
+                "method": "manual",
+                "is_active": True,
+            },
+        )
     
     genome.save()
     
@@ -1111,6 +1158,7 @@ def genome_update(request, accession: str):
         "col_match_status": genome.col_match_status,
         "external_taxon_id": genome.external_taxon_id,
         "col_match_notes": genome.col_match_notes,
+        "organism_name": genome.organism_name,
     })
 
 
@@ -1172,6 +1220,7 @@ def col_search(request):
             "rank": ext.rank,
             "status": ext.status,
             "classification": classification_str,
+            "classification_raw": ext.classification or {},
             "accepted_name": ext.accepted.name if ext.accepted else None,
             "is_existing": is_existing,
         })
@@ -1180,6 +1229,75 @@ def col_search(request):
         "results": data,
         "hide_existing": hide_existing,
     })
+
+
+@require_GET
+def gbif_search(request):
+    """
+    GET /api/v1/taxonomy/gbif/search/?q=query
+
+    Proxy search to GBIF Species API (suggest endpoint).
+    Returns species-level matches with taxonomy for use in the edit modal.
+
+    Query params:
+        - q: Search term (min 2 characters)
+        - limit: Max results (default: 10)
+    """
+    import urllib.request
+    import urllib.parse
+
+    query = request.GET.get("q", "").strip()
+    limit = min(int(request.GET.get("limit", 10)), 50)
+
+    if len(query) < 2:
+        return JsonResponse({"results": []})
+
+    try:
+        params = urllib.parse.urlencode({
+            "q": query,
+            "rank": "SPECIES",
+            "limit": limit,
+        })
+        url = f"https://api.gbif.org/v1/species/suggest?{params}"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            gbif_data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return JsonResponse({"error": f"GBIF API error: {str(e)}"}, status=502)
+
+    # Deduplicate by canonicalName
+    seen = set()
+    results = []
+    for item in gbif_data:
+        canon = item.get("canonicalName", "")
+        if not canon or canon in seen:
+            continue
+        seen.add(canon)
+
+        classification = {}
+        for rank in ["kingdom", "phylum", "class", "order", "family", "genus", "species"]:
+            val = item.get(rank)
+            if val:
+                classification[rank] = val
+
+        # Build classification string
+        cls_str = " > ".join(
+            classification.get(r, "")
+            for r in ["kingdom", "phylum", "class", "order", "family", "genus"]
+            if classification.get(r)
+        )
+
+        results.append({
+            "gbif_key": item.get("key"),
+            "name": canon,
+            "rank": (item.get("rank") or "").lower(),
+            "status": (item.get("taxonomicStatus") or "accepted").lower(),
+            "classification": cls_str,
+            "classification_raw": classification,
+            "source": "gbif",
+        })
+
+    return JsonResponse({"results": results})
 
 
 # ============================================================
@@ -1444,16 +1562,14 @@ def sampling_newick(request):
                 node_index[acc_key] = n
                 parent = n
 
-            # Add species leaf
+            # Add species leaf (skip duplicates)
             org_name = sp.get("organism_name") or sp.get("scientific_name") or "Unknown"
             safe_leaf = org_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
 
-            # Deduplicate leaf names
+            # Skip if this species already exists as a leaf
             if safe_leaf in used_leaves:
-                used_leaves[safe_leaf] += 1
-                safe_leaf = f"{safe_leaf}_{used_leaves[safe_leaf]}"
-            else:
-                used_leaves[safe_leaf] = 1
+                continue
+            used_leaves[safe_leaf] = True
 
             leaf = parent.add_child(name=safe_leaf)
             leaf.add_feature("rank", "species")

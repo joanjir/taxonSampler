@@ -1,0 +1,63 @@
+{% extends "taxonomy/layout/base.html" %}
+{% load static %}
+
+{% block title %}Iniciar Sesión - TaxaBridge{% endblock %}
+
+{% block body %}
+<div class="page page-center">
+  <div class="container container-tight py-4">
+    <div class="text-center mb-4">
+      <a href="{% url 'taxonomy:home' %}" class="navbar-brand navbar-brand-autodark">
+        <h1 class="fw-bold" style="font-size: 2rem;">🧬 TaxaBridge</h1>
+      </a>
+    </div>
+    <div class="card card-md">
+      <div class="card-body">
+        <h2 class="h2 text-center mb-4">Administrador</h2>
+
+        {% if form.errors %}
+        <div class="alert alert-danger">
+          <i class="ti ti-alert-circle me-2"></i>
+          {% if form.non_field_errors %}
+            {% for error in form.non_field_errors %}
+              {{ error }}
+            {% endfor %}
+          {% else %}
+            Usuario o contraseña incorrectos.
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'login' %}" autocomplete="off" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ next|default:'/taxonomy/' }}">
+          <div class="mb-3">
+            <label class="form-label">Usuario</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="ti ti-user"></i></span>
+              <input type="text" name="username" class="form-control" placeholder="Tu nombre de usuario" autofocus autocomplete="username">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Contraseña</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="ti ti-lock"></i></span>
+              <input type="password" name="password" class="form-control" placeholder="Tu contraseña" autocomplete="current-password">
+            </div>
+          </div>
+          <div class="form-footer">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="ti ti-login me-2"></i>Ingresar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="text-center mt-3">
+      <a href="{% url 'taxonomy:home' %}" class="text-muted">
+        <i class="ti ti-arrow-left me-1"></i>Volver al inicio
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

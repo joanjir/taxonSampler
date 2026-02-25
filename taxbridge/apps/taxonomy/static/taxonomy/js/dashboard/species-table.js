@@ -36,8 +36,8 @@
     const badges = {
       "matched": "bg-green-lt text-green",
       "unmatched": "bg-yellow-lt text-yellow",
-      "needs_review": "bg-red-lt text-red",
-      "no_match": "bg-red-lt text-red"
+      "not_in_col": "bg-yellow-lt text-yellow",
+      "manual": "bg-purple-lt text-purple"
     };
     return badges[status] || "bg-secondary-lt text-secondary";
   }
@@ -46,6 +46,7 @@
     const badges = {
       "accepted": "bg-green-lt text-green",
       "synonym": "bg-blue-lt text-blue",
+      "not_in_col": "bg-red-lt text-red",
       "misapplied": "bg-yellow-lt text-yellow",
       "unknown": "bg-secondary-lt text-secondary"
     };
@@ -55,9 +56,9 @@
   function matchStatusLabel(status) {
     const labels = {
       "matched": "Linked",
-      "unmatched": "Unlinked", 
-      "needs_review": "Review",
-      "no_match": "Review"
+      "unmatched": "Unlinked",
+      "not_in_col": "Unlinked",
+      "manual": "Manual"
     };
     return labels[status] || status;
   }
@@ -147,7 +148,7 @@
         </td>
         <td>
           <span class="badge ${colStatusBadge(g.col_status)}">
-            ${g.col_status || '-'}
+            ${g.col_status === 'not_in_col' ? 'Not in COL' : (g.col_status || '-')}
           </span>
         </td>
         ${isAdmin ? `
@@ -156,9 +157,11 @@
             <button class="btn btn-sm btn-ghost-primary" onclick="viewGenome('${g.accession}')" title="View details">
               <i class="ti ti-eye"></i>
             </button>
-            <button class="btn btn-sm btn-ghost-secondary" onclick="editGenome('${g.accession}')" title="Edit COL match">
+            ${(g.col_match_status === 'unmatched' || g.col_match_status === 'not_in_col' || g.col_match_status === 'manual') ? `
+            <button class="btn btn-sm btn-ghost-secondary" onclick="editGenome('${g.accession}')" title="Manual COL match">
               <i class="ti ti-edit"></i>
             </button>
+            ` : ''}
           </div>
         </td>
         ` : `
@@ -292,16 +295,51 @@
       editModal = new bootstrap.Modal(editEl);
     }
 
-    // COL Search in Edit Modal
-    const colSearchInput = document.getElementById('colSearchInput');
-    if (colSearchInput) {
-      colSearchInput.addEventListener('input', function() {
-        const query = this.value.trim();
-        if (query.length >= 3) {
-          searchCOLTaxa(query);
-        } else {
-          document.getElementById('colSearchResults').innerHTML = '';
+    // COL Search in Edit Modal — uses editSpeciesName as the search input
+    const speciesNameInput = document.getElementById('editSpeciesName');
+    const btnSearchCol = document.getElementById('btnSearchCol');
+    
+    if (speciesNameInput) {
+      speciesNameInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const query = this.value.trim();
+          if (query.length >= 2) searchCOLTaxa(query);
         }
+      });
+    }
+    
+    if (btnSearchCol) {
+      btnSearchCol.addEventListener('click', function() {
+        const query = speciesNameInput?.value.trim();
+        if (query && query.length >= 2) searchCOLTaxa(query);
+      });
+    }
+
+    const btnSearchGbif = document.getElementById('btnSearchGbif');
+    if (btnSearchGbif) {
+      btnSearchGbif.addEventListener('click', function() {
+        const query = speciesNameInput?.value.trim();
+        if (query && query.length >= 2) searchGBIFTaxa(query);
+      });
+    }
+    
+    // Listen for changes on tax fields to update counter
+    document.querySelectorAll('.tax-field').forEach(input => {
+      input.addEventListener('input', updateTaxFieldCount);
+    });
+    
+    // Toggle label for extended ranks
+    const extRanksEl = document.getElementById('extendedRanks');
+    const toggleLabel = document.getElementById('toggleExtendedRanks');
+    if (extRanksEl && toggleLabel) {
+      extRanksEl.addEventListener('show.bs.collapse', () => {
+        toggleLabel.querySelector('.ti').classList.replace('ti-chevron-down', 'ti-chevron-up');
+        toggleLabel.childNodes[1].textContent = 'Hide extended ranks ';
+      });
+      extRanksEl.addEventListener('hide.bs.collapse', () => {
+        toggleLabel.querySelector('.ti').classList.replace('ti-chevron-up', 'ti-chevron-down');
+        toggleLabel.childNodes[1].textContent = 'Show all COL ranks ';
       });
     }
   }
@@ -391,28 +429,48 @@
       </div>
     ` : '';
 
-    const colHtml = g.external_taxon ? `
-      <div class="alert alert-success">
-        <div class="d-flex align-items-center">
-          <i class="ti ti-check me-2"></i>
-          <div class="flex-grow-1">
-            <div class="fw-bold">${g.external_taxon.name}</div>
-            <div class="small text-muted">
-              ${g.external_taxon.classification_path?.map(p => p.name).join(' > ') || 'Classification not available'}
-            </div>
-            <div class="small">
-              <span class="badge bg-${g.external_taxon.status === 'accepted' ? 'green' : 'blue'}-lt">
-                ${g.external_taxon.status}
-              </span>
-              <span class="text-muted ms-2">ID: ${g.external_taxon.external_id}</span>
+    const colHtml = g.external_taxon ? (() => {
+      const ext = g.external_taxon;
+      // Build taxonomy table from classification dict if available
+      const cls = ext.classification || {};
+      const primaryRanks = ['kingdom','phylum','class','order','family','genus','species'];
+      const taxRows = primaryRanks
+        .filter(r => cls[r])
+        .map(r => `<tr><td class="text-muted text-capitalize small">${r}</td><td>${cls[r]}</td></tr>`)
+        .join('');
+      // Also collect extra ranks not in primaryRanks
+      const extraRows = Object.entries(cls)
+        .filter(([r]) => !primaryRanks.includes(r) && cls[r])
+        .map(([r, v]) => `<tr><td class="text-muted text-capitalize small">${r}</td><td>${v}</td></tr>`)
+        .join('');
+      const allRows = taxRows + extraRows;
+      const classificationHtml = allRows
+        ? `<table class="table table-sm table-borderless mb-0 mt-2">${allRows}</table>`
+        : (ext.classification_path?.length
+            ? `<div class="small text-muted">${ext.classification_path.map(p => p.name).join(' > ')}</div>`
+            : '');
+
+      return `
+        <div class="alert alert-success">
+          <div class="d-flex align-items-center">
+            <i class="ti ti-check me-2"></i>
+            <div class="flex-grow-1">
+              <div class="fw-bold">${ext.name}</div>
+              ${classificationHtml}
+              <div class="small mt-1">
+                <span class="badge bg-${ext.status === 'accepted' ? 'green' : 'blue'}-lt">
+                  ${ext.status}
+                </span>
+                <span class="text-muted ms-2">ID: ${ext.external_id}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    ` : `
-      <div class="alert alert-${g.col_match_status === 'no_match' ? 'danger' : 'warning'}">
+      `;
+    })() : `
+      <div class="alert alert-warning">
         <i class="ti ti-alert-triangle me-2"></i>
-        ${g.col_match_status === 'no_match' ? 'No match found in Catalogue of Life' : 'Not linked to Catalogue of Life'}
+        Not linked to Catalogue of Life
       </div>
     `;
 
@@ -581,81 +639,201 @@
     `;
   }
 
+  // Helper: count filled taxonomy fields and update badge
+  function updateTaxFieldCount() {
+    const all = document.querySelectorAll('.tax-field');
+    const ext = document.querySelectorAll('.tax-ext');
+    let total = 0, extFilled = 0;
+    all.forEach(i => { if (i.value.trim()) total++; });
+    ext.forEach(i => { if (i.value.trim()) extFilled++; });
+    
+    const badge = document.getElementById('taxFieldCount');
+    if (badge) badge.textContent = `${total} filled`;
+    
+    const extLabel = document.getElementById('extRankFilled');
+    if (extLabel) extLabel.textContent = extFilled ? `(${extFilled} filled)` : '';
+    
+    // Auto-expand extended section if any extended field has data
+    if (extFilled > 0) {
+      const extRanksEl = document.getElementById('extendedRanks');
+      if (extRanksEl && !extRanksEl.classList.contains('show')) {
+        new bootstrap.Collapse(extRanksEl, { toggle: true });
+      }
+    }
+  }
+
   function populateEditForm(data) {
     document.getElementById('editOrganismName').textContent = data.organism_name || '-';
-    document.getElementById('editMatchStatus').value = data.col_match_status || 'unmatched';
+    document.getElementById('editAccessionDisplay').textContent = data.accession || '-';
     document.getElementById('editMatchNotes').value = data.col_match_notes || '';
+    
+    // Species name = search input (unified)
+    document.getElementById('editSpeciesName').value =
+      (data.taxon?.scientific_name) || data.organism_name || '';
+    
+    // Current match badge in header
+    const matchBadge = document.getElementById('currentMatchBadge');
+    if (matchBadge) {
+      matchBadge.innerHTML = `<span class="badge ${matchStatusBadge(data.col_match_status)}">${matchStatusLabel(data.col_match_status)}</span>`;
+    }
+    
+    // Fill ALL taxonomy fields from external_taxon classification or genome
+    const cls = data.external_taxon?.classification || {};
+    document.querySelectorAll('.tax-field').forEach(input => {
+      const rank = input.dataset.rank;
+      let val = cls[rank] || '';
+      if (!val && rank === 'phylum') val = data.phylum || '';
+      if (!val && rank === 'class') val = data.class_name || '';
+      input.value = val;
+    });
+    
+    // Update counter
+    updateTaxFieldCount();
     
     // Show current COL match if exists
     const currentMatchSection = document.getElementById('currentMatchSection');
     const currentMatchInfo = document.getElementById('currentMatchInfo');
     
-    if (data.col_taxon_name) {
+    if (data.external_taxon) {
+      const ext = data.external_taxon;
+      const pathStr = ext.classification_path?.map(p => p.name).join(' > ') || 'No classification';
       currentMatchInfo.innerHTML = `
         <div class="d-flex align-items-center">
           <div class="flex-grow-1">
-            <div class="fw-bold text-success">${data.col_taxon_name}</div>
-            <div class="small text-muted">${data.col_classification || 'No classification'}</div>
-            <div class="small">Status: <span class="badge ${colStatusBadge(data.col_status)}">${data.col_status}</span></div>
+            <div class="fw-bold text-success">${ext.name}</div>
+            <div class="small text-muted">${pathStr}</div>
+            <div class="small">Status: <span class="badge ${colStatusBadge(ext.status)}">${ext.status}</span></div>
           </div>
           <button type="button" class="btn btn-sm btn-ghost-danger" onclick="clearCurrentMatch()">
             <i class="ti ti-x"></i> Remove
           </button>
         </div>
       `;
-      currentMatchInfo.className = 'alert alert-success';
+      currentMatchInfo.className = 'alert alert-success mb-0 py-2';
+      currentMatchSection.style.display = 'block';
     } else {
-      currentMatchInfo.innerHTML = '<span class="text-muted">No COL match</span>';
-      currentMatchInfo.className = 'alert alert-light';
+      currentMatchSection.style.display = 'none';
     }
     
-    // Clear search
-    document.getElementById('colSearchInput').value = data.organism_name || '';
+    // Clear search results and selection
     document.getElementById('colSearchResults').innerHTML = '';
     document.getElementById('selectedColSection').style.display = 'none';
+    document.getElementById('selectedColId').value = '';
   }
 
   async function searchCOLTaxa(query) {
+    const results = document.getElementById('colSearchResults');
+    if (!results) return;
+    results.innerHTML = '<div class="list-group-item text-muted"><i class="ti ti-loader ti-spin me-1"></i>Searching COL...</div>';
     try {
       const endpoint = window.HOME_DATA?.endpoints?.colSearch || '/api/v1/taxonomy/col/search/';
       const resp = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`);
       const data = await resp.json();
       
-      const results = document.getElementById('colSearchResults');
-      if (!results) return;
-      
       if (data.results && data.results.length > 0) {
-        results.innerHTML = data.results.map(r => `
-          <a href="#" class="list-group-item list-group-item-action" onclick="selectCOLTaxon('${r.id}', '${r.name}', '${r.classification || ''}'); return false;">
+        results.innerHTML = data.results.map(r => {
+          const rawJson = JSON.stringify(r.classification_raw || {}).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          return `
+          <a href="#" class="list-group-item list-group-item-action" 
+             onclick="selectCOLTaxon(${r.id}, '${r.name.replace(/'/g, "\\'")}', '${(r.classification || '').replace(/'/g, "\\'")}', '${rawJson}'); return false;">
             <div class="d-flex w-100 justify-content-between">
-              <h6 class="mb-1">${r.name}</h6>
+              <h6 class="mb-1">${r.name} <span class="badge bg-primary-lt ms-1">COL</span></h6>
               <small class="text-success">${r.status || 'accepted'}</small>
             </div>
             <p class="mb-1 small text-muted">${r.classification || ''}</p>
           </a>
-        `).join('');
+        `}).join('');
       } else {
-        results.innerHTML = '<div class="list-group-item text-muted">No results found</div>';
+        results.innerHTML = '<div class="list-group-item text-muted">No results found in COL</div>';
       }
     } catch (err) {
       console.error('COL search failed:', err);
-      document.getElementById('colSearchResults').innerHTML = '<div class="list-group-item text-danger">Search failed</div>';
+      results.innerHTML = '<div class="list-group-item text-danger">COL search failed</div>';
     }
   }
 
-  window.selectCOLTaxon = function(id, name, classification) {
+  async function searchGBIFTaxa(query) {
+    const results = document.getElementById('colSearchResults');
+    if (!results) return;
+    results.innerHTML = '<div class="list-group-item text-muted"><i class="ti ti-loader ti-spin me-1"></i>Searching GBIF...</div>';
+    try {
+      const endpoint = window.HOME_DATA?.endpoints?.gbifSearch || '/api/v1/taxonomy/gbif/search/';
+      const resp = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`);
+      const data = await resp.json();
+
+      if (data.error) throw new Error(data.error);
+
+      if (data.results && data.results.length > 0) {
+        results.innerHTML = data.results.map(r => {
+          const rawJson = JSON.stringify(r.classification_raw || {}).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          return `
+          <a href="#" class="list-group-item list-group-item-action" 
+             onclick="selectGBIFTaxon('${r.name.replace(/'/g, "\\'")}', '${(r.classification || '').replace(/'/g, "\\'")}', '${rawJson}'); return false;">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1">${r.name} <span class="badge bg-lime-lt ms-1">GBIF</span></h6>
+              <small class="text-${r.status === 'accepted' ? 'success' : 'info'}">${r.status || 'accepted'}</small>
+            </div>
+            <p class="mb-1 small text-muted">${r.classification || ''}</p>
+          </a>
+        `}).join('');
+      } else {
+        results.innerHTML = '<div class="list-group-item text-muted">No results found in GBIF</div>';
+      }
+    } catch (err) {
+      console.error('GBIF search failed:', err);
+      results.innerHTML = '<div class="list-group-item text-danger">GBIF search failed: ' + err.message + '</div>';
+    }
+  }
+
+  window.selectCOLTaxon = function(id, name, classification, classificationRawStr) {
     document.getElementById('selectedColId').value = id;
     document.getElementById('selectedColName').textContent = name;
     document.getElementById('selectedColClassification').textContent = classification || 'No classification available';
     document.getElementById('selectedColSection').style.display = 'block';
     document.getElementById('colSearchResults').innerHTML = '';
-    document.getElementById('editMatchStatus').value = 'matched';
+    
+    // Fill ALL taxonomy fields from COL classification
+    try {
+      const raw = typeof classificationRawStr === 'string'
+        ? JSON.parse(classificationRawStr.replace(/&quot;/g, '"'))
+        : classificationRawStr || {};
+      document.querySelectorAll('.tax-field').forEach(input => {
+        const rank = input.dataset.rank;
+        if (raw[rank]) input.value = raw[rank];
+      });
+      updateTaxFieldCount();
+    } catch (e) {
+      console.warn('Could not parse COL classification:', e);
+    }
+  };
+
+  // Select a GBIF result — fills taxonomy but does NOT set a COL external_taxon_id
+  window.selectGBIFTaxon = function(name, classification, classificationRawStr) {
+    // Clear any COL selection (GBIF is taxonomy-only, not a COL link)
+    document.getElementById('selectedColId').value = '';
+    document.getElementById('selectedColSection').style.display = 'none';
+    document.getElementById('colSearchResults').innerHTML = '';
+
+    // Fill taxonomy fields from GBIF data
+    try {
+      const raw = typeof classificationRawStr === 'string'
+        ? JSON.parse(classificationRawStr.replace(/&quot;/g, '"'))
+        : classificationRawStr || {};
+      document.querySelectorAll('.tax-field').forEach(input => {
+        const rank = input.dataset.rank;
+        if (raw[rank]) input.value = raw[rank];
+      });
+      updateTaxFieldCount();
+    } catch (e) {
+      console.warn('Could not parse GBIF classification:', e);
+    }
+
+    showToast('GBIF', `Taxonomy filled from GBIF for "${name}"`, 'success');
   };
 
   window.clearColSelection = function() {
     document.getElementById('selectedColSection').style.display = 'none';
     document.getElementById('selectedColId').value = '';
-    document.getElementById('editMatchStatus').value = 'unmatched';
   };
 
   window.clearCurrentMatch = function() {
@@ -667,7 +845,7 @@
   window.saveGenomeMatch = async function() {
     const accession = document.getElementById('editAccession').value;
     const colId = document.getElementById('selectedColId').value;
-    const matchStatus = document.getElementById('editMatchStatus').value;
+    const speciesName = document.getElementById('editSpeciesName').value.trim();
     const notes = document.getElementById('editMatchNotes').value;
     
     if (!accession) {
@@ -675,29 +853,40 @@
       return;
     }
 
+    // Build taxonomy from ALL form inputs dynamically
+    const taxonomy = {};
+    document.querySelectorAll('.tax-field').forEach(input => {
+      const val = input.value.trim();
+      if (val) taxonomy[input.dataset.rank] = val;
+    });
+
     try {
       const endpoint = window.HOME_DATA?.endpoints?.genomeUpdate || '/api/v1/taxonomy/genomes/';
-      const resp = await fetch(`${endpoint}${accession}/`, {
-        method: 'PATCH',
+      const resp = await fetch(`${endpoint}${accession}/update/`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': getCsrfToken()
         },
         body: JSON.stringify({
-          col_taxon_id: colId || null,
-          col_match_status: matchStatus,
+          species_name: speciesName || null,
+          external_taxon_id: colId ? parseInt(colId) : null,
+          taxonomy: taxonomy,
           col_match_notes: notes
         })
       });
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
       
-      showToast('Success', 'COL match updated successfully', 'success');
+      showToast('Success', 'Manual COL match saved', 'success');
       editModal.hide();
       loadGenomes(); // Refresh table
     } catch (err) {
-      console.error('Failed to save genome match:', err);
-      showToast('Error', 'Failed to save COL match', 'error');
+      console.error('Failed to save manual match:', err);
+      showToast('Error', `Failed to save: ${err.message}`, 'error');
     }
   };
 

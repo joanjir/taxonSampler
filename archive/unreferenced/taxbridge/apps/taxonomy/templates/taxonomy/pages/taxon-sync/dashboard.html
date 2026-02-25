@@ -1,0 +1,677 @@
+﻿{% extends "taxonomy/layout/app_shell.html" %}
+
+{% block title %}Taxon Sync - TaxaBridge{% endblock %}
+
+{% block content %}
+<div class="page-header d-print-none">
+  <div class="container-xl">
+    <div class="row g-2 align-items-center">
+      <div class="col">
+        <h2 class="page-title d-flex align-items-center">
+          <i class="ti ti-arrows-exchange me-2"></i> Taxon Synchronization
+          <span class="ms-2" id="taxonSyncHelp" tabindex="0" 
+                data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="right" 
+                data-bs-html="true" data-bs-custom-class="popover-help"
+                data-bs-content="<div class='small'><strong>Taxon Sync</strong> downloads genome metadata from NCBI Datasets API and links each taxon with the Catalogue of Life (COL) using the ChecklistBank API.<br><br><strong>Process:</strong><br>1. Fetch genomes by kingdom from NCBI<br>2. Create/update local taxa records<br>3. Match each taxon name with COL<br>4. Store crosswalk relationships</div>"
+                style="cursor: pointer;"><i class="ti ti-info-circle text-primary" style="font-size: 1.25rem;"></i></span>
+        </h2>
+        <div class="text-secondary mt-1">
+          Download from NCBI and link with Catalogue of Life
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="container-xl">
+    <!-- Stats Cards -->
+    <div class="row row-deck row-cards mb-4">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-blue-lt me-3">
+                <i class="ti ti-dna-2 fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">NCBI Taxa</div>
+                <div class="h1 mb-0">{{ stats.total_taxa|default:"0" }}</div>
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} species
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-green-lt me-3">
+                <i class="ti ti-link fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">COL Linked</div>
+                <div class="h1 mb-0">{{ stats.crosswalks|default:"0" }}</div>
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-world me-1"></i> {{ stats.external_taxa|default:"0" }} external taxa
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-yellow-lt me-3">
+                <i class="ti ti-percentage fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">Coverage</div>
+                {% if stats.total_taxa > 0 %}
+                <div class="h1 mb-0">{% widthratio stats.matched_taxa stats.total_taxa 100 %}%</div>
+                {% else %}
+                <div class="h1 mb-0">0%</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} linked taxa
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-purple-lt me-3">
+                <i class="ti ti-history fs-2"></i>
+              </span>
+              <div>
+                <div class="text-secondary fs-5">Syncs</div>
+                <div class="h1 mb-0">{{ stats.successful_syncs|default:"0" }} / {{ stats.total_syncs|default:"0" }}</div>
+              </div>
+            </div>
+            <div class="text-secondary">
+              <i class="ti ti-circle-check me-1"></i> Successful / Total
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row row-deck row-cards">
+      <!-- Start Sync Panel (admin only) -->
+      {% if is_admin %}
+      <div class="col-lg-2">
+        <div class="card" style="height: auto;">
+          <div class="card-header py-2">
+            <h3 class="card-title mb-0" style="font-size: 0.85rem;">
+              <i class="ti ti-player-play me-1"></i> New Sync
+            </h3>
+          </div>
+          <div class="card-body py-2">
+            <form id="sync-form">
+              <div class="mb-2">
+                <label class="form-label required">Kingdom</label>
+                <select class="form-select form-select-sm" name="kingdom" id="kingdom-select" {% if running_sync %}disabled{% endif %}>
+                  <option value="metazoa" selected>🦁 Metazoa</option>
+                  <option value="fungi">🍄 Fungi</option>
+                  <option value="viridiplantae">🌿 Viridiplantae</option>
+                  <option value="bacteria">🦠 Bacteria</option>
+                  <option value="archaea">🧬 Archaea</option>
+                  <option value="protista">🧫 Protista</option>
+                  <option value="microsporidia">🦠 Microsporidia</option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Limit</label>
+                <input type="number" class="form-control form-control-sm" name="limit" id="limit-input" 
+                       value="0" min="0" placeholder="0 = all" {% if running_sync %}disabled{% endif %}>
+              </div>
+              <div class="mb-3">
+                <label class="form-check form-switch form-check-sm">
+                  <input class="form-check-input" type="checkbox" name="skip_quality" id="skip-quality" {% if running_sync %}disabled{% endif %}>
+                  <span class="form-check-label">Skip filters</span>
+                </label>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm w-100" id="btn-start-sync" {% if running_sync %}disabled{% endif %}>
+                {% if running_sync %}
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                Syncing...
+                {% else %}
+                <i class="ti ti-rocket me-1"></i> Start Sync
+                {% endif %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Tabs: Current Task / History / Species List -->
+      <div class="col-lg-{% if is_admin %}10{% else %}12{% endif %}">
+        <div class="card">
+          <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" data-bs-toggle="tabs" role="tablist">
+              {% if is_admin %}
+              <li class="nav-item" role="presentation">
+                <a href="#tab-current" class="nav-link {% if running_sync %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if running_sync %}aria-selected="true"{% endif %}>
+                  <i class="ti ti-player-play me-2"></i>
+                  Current Task
+                  {% if running_sync %}
+                  <span class="badge bg-green-lt text-green ms-2">Running</span>
+                  {% endif %}
+                </a>
+              </li>
+              <li class="nav-item" role="presentation">
+                <a href="#tab-history" class="nav-link" data-bs-toggle="tab" role="tab">
+                  <i class="ti ti-history me-2"></i>
+                  History
+                  <span class="badge bg-blue-lt text-blue ms-2">{{ recent_syncs|length }}</span>
+                </a>
+              </li>
+              <li class="nav-item" role="presentation">
+                <a href="#tab-discoveries" class="nav-link" data-bs-toggle="tab" role="tab">
+                  <i class="ti ti-sparkles me-2"></i>
+                  Discoveries
+                  {% if pending_discoveries > 0 %}
+                  <span class="badge bg-lime-lt text-lime ms-2">{{ pending_discoveries }}</span>
+                  {% endif %}
+                </a>
+              </li>
+              {% endif %}
+              <li class="nav-item" role="presentation">
+                <a href="#tab-species" class="nav-link {% if not running_sync or not is_admin %}active{% endif %}" data-bs-toggle="tab" role="tab" {% if not running_sync or not is_admin %}aria-selected="true"{% endif %}>
+                  <i class="ti ti-list me-2"></i>
+                  Species List
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div class="card-body">
+            <div class="tab-content">
+              <!-- Tab: Current Task (admin only) -->
+              {% if is_admin %}
+              <div class="tab-pane {% if running_sync %}active show{% endif %}" id="tab-current" role="tabpanel">
+                {% if running_sync %}
+                <div id="running-sync-card" data-sync-id="{{ running_sync.pk }}">
+                  <!-- Header with status -->
+                  <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                      <h3 class="mb-1 text-dark">
+                        <span class="status-indicator status-green status-indicator-animated me-2"></span>
+                        Sync #{{ running_sync.pk }}
+                      </h3>
+                      <span class="badge bg-azure-lt text-azure fs-5">
+                        {% if running_sync.kingdom == 'metazoa' %}🦁{% elif running_sync.kingdom == 'fungi' %}🍄{% elif running_sync.kingdom == 'viridiplantae' %}🌿{% elif running_sync.kingdom == 'bacteria' %}🦠{% else %}🧬{% endif %}
+                        {{ running_sync.kingdom|title }}
+                      </span>
+                    </div>
+                    <div class="text-end">
+                      <span class="badge bg-blue-lt text-blue text-uppercase fs-5 me-2" id="sync-phase-badge">
+                        {{ running_sync.get_status_display }}
+                      </span>
+                      <button class="btn btn-outline-danger" id="btn-cancel-sync">
+                        <i class="ti ti-x me-1"></i> Cancel
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- Progress Steps as Cards -->
+                  <div class="row row-deck row-cards my-4" id="sync-steps">
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.status == 'fetching_ncbi' %}border-primary{% endif %}" id="step-ncbi">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-blue-lt {% if running_sync.status != 'fetching_ncbi' and running_sync.status != 'matching_col' and running_sync.status != 'completed' %}opacity-50{% endif %}">
+                                <i class="ti ti-dna fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-blue-lt text-blue me-2">1</span>
+                                <span class="text-secondary small">NCBI Downloaded</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-ncbi-fetched">{{ running_sync.ncbi_fetched }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.taxa_created > 0 %}border-success{% endif %}" id="step-taxa">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-green-lt {% if running_sync.taxa_created == 0 %}opacity-50{% endif %}">
+                                <i class="ti ti-leaf fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-green-lt text-green me-2">2</span>
+                                <span class="text-secondary small">Taxa Created</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-taxa-created">{{ running_sync.taxa_created }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.status == 'matching_col' %}border-warning{% endif %}" id="step-col">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-yellow-lt {% if running_sync.status != 'matching_col' and running_sync.status != 'completed' %}opacity-50{% endif %}">
+                                <i class="ti ti-link fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-yellow-lt text-yellow me-2">3</span>
+                                <span class="text-secondary small">COL Linked</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-col-matched">{{ running_sync.col_matched }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                      <div class="card card-sm {% if running_sync.status == 'completed' %}border-purple{% endif %}" id="step-crosswalks">
+                        <div class="card-body">
+                          <div class="row align-items-center">
+                            <div class="col-auto">
+                              <span class="avatar bg-purple-lt {% if running_sync.status != 'completed' %}opacity-50{% endif %}">
+                                <i class="ti ti-route-2 fs-2"></i>
+                              </span>
+                            </div>
+                            <div class="col">
+                              <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-purple-lt text-purple me-2">4</span>
+                                <span class="text-secondary small">Crosswalks</span>
+                              </div>
+                              <div class="h2 mb-0 text-dark" id="stat-crosswalks">{{ running_sync.crosswalks_created }}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Current action indicator -->
+                  <div class="alert alert-info d-flex align-items-center" role="alert" id="sync-status-alert">
+                    <div class="spinner-border spinner-border-sm me-3" role="status"></div>
+                    <div id="sync-status-text">
+                      {% if running_sync.status == 'fetching_ncbi' %}
+                      <strong>Step 1/4:</strong> Downloading genomes from NCBI...
+                      {% elif running_sync.status == 'matching_col' %}
+                      <strong>Step 3/4:</strong> Linking taxa with Catalogue of Life...
+                      {% else %}
+                      {{ running_sync.get_status_display }}
+                      {% endif %}
+                    </div>
+                    <div class="ms-auto">
+                      <span class="badge bg-blue-lt text-blue fs-4" id="sync-progress-text">{{ running_sync.progress_percent|floatformat:0 }}%</span>
+                    </div>
+                  </div>
+                </div>
+                {% else %}
+                <div class="empty">
+                  <div class="empty-icon">
+                    <i class="ti ti-player-pause fs-1"></i>
+                  </div>
+                  <p class="empty-title">No task running</p>
+                  <p class="empty-subtitle text-secondary">
+                    Select a kingdom and start a new sync to download genomes from NCBI and link them with COL.
+                  </p>
+                </div>
+                {% endif %}
+              </div>
+
+              <!-- Tab: History -->
+              <div class="tab-pane" id="tab-history" role="tabpanel">
+                <div class="table-responsive">
+                  <table class="table table-vcenter table-hover">
+                    <thead>
+                      <tr>
+                        <th class="w-1">ID</th>
+                        <th>Kingdom</th>
+                        <th>Status</th>
+                        <th class="text-end">NCBI</th>
+                        <th class="text-end">COL</th>
+                        <th class="text-end">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for sync in recent_syncs %}
+                      <tr>
+                        <td><span class="fw-bold text-primary">#{{ sync.pk }}</span></td>
+                        <td>
+                          <span class="badge bg-azure-lt text-azure">
+                            {% if sync.kingdom == 'metazoa' %}🦁{% elif sync.kingdom == 'fungi' %}🍄{% elif sync.kingdom == 'viridiplantae' %}🌿{% elif sync.kingdom == 'bacteria' %}🦠{% else %}🧬{% endif %}
+                            {{ sync.kingdom|title }}
+                          </span>
+                        </td>
+                        <td>
+                          {% if sync.status == 'completed' %}
+                          <span class="badge bg-green-lt text-green">
+                            <i class="ti ti-check me-1"></i> Completed
+                          </span>
+                          {% elif sync.status == 'failed' %}
+                          <span class="badge bg-red-lt text-red">
+                            <i class="ti ti-x me-1"></i> Failed
+                          </span>
+                          {% elif sync.status == 'cancelled' %}
+                          <span class="badge bg-secondary-lt text-secondary">
+                            <i class="ti ti-ban me-1"></i> Cancelled
+                          </span>
+                          {% elif sync.status == 'fetching_ncbi' %}
+                          <span class="badge bg-blue-lt text-blue">
+                            <span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem;"></span>
+                            Downloading NCBI
+                          </span>
+                          {% elif sync.status == 'matching_col' %}
+                          <span class="badge bg-yellow-lt text-yellow">
+                            <span class="spinner-border spinner-border-sm me-1" style="width: 0.75rem; height: 0.75rem;"></span>
+                            Linking COL
+                          </span>
+                          {% else %}
+                          <span class="badge bg-secondary-lt text-secondary">{{ sync.get_status_display }}</span>
+                          {% endif %}
+                        </td>
+                        <td class="text-end">
+                          <span class="text-blue fw-bold">{{ sync.ncbi_fetched }}</span>
+                          <span class="text-secondary">/</span>
+                          <span class="fw-medium">{{ sync.ncbi_total }}</span>
+                        </td>
+                        <td class="text-end">
+                          <span class="text-green fw-bold">{{ sync.col_matched }}</span>
+                          <span class="text-secondary">/</span>
+                          <span class="fw-medium">{{ sync.col_total }}</span>
+                        </td>
+                        <td class="text-end">
+                          {{ sync.created_at|date:"d/m/Y H:i" }}
+                        </td>
+                      </tr>
+                      {% empty %}
+                      <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                          <i class="ti ti-database-off fs-1 d-block mb-2"></i>
+                          No previous syncs
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {% endif %}
+
+              <!-- Tab: Discoveries -->
+              <div class="tab-pane" id="tab-discoveries" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h3 class="mb-0">
+                    <i class="ti ti-sparkles me-2"></i>New Species Discovered
+                  </h3>
+                  <div class="d-flex gap-2">
+                    {% if is_admin %}
+                    <button class="btn btn-primary btn-sm" id="btn-start-discovery">
+                      <i class="ti ti-radar me-1"></i> Scan Now
+                    </button>
+                    {% endif %}
+                    <select id="discoveryStatusFilter" class="form-select form-select-sm" style="width: auto;">
+                      <option value="pending" selected>Pending</option>
+                      <option value="imported">Imported</option>
+                      <option value="dismissed">Dismissed</option>
+                      <option value="all">All</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Discovery Info Banner -->
+                <div class="alert alert-info d-none" id="discovery-running-alert">
+                  <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2"></div>
+                    <span>Scanning NCBI for new species...</span>
+                  </div>
+                </div>
+
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                  <table class="table table-vcenter card-table table-striped table-hover" id="discoveriesTable">
+                    <thead class="sticky-top bg-white">
+                      <tr>
+                        <th>Species</th>
+                        <th>Kingdom</th>
+                        <th>Accession</th>
+                        <th>Level</th>
+                        <th class="text-end">Quality</th>
+                        <th class="text-end">Protein Coding</th>
+                        <th class="text-end">Coverage</th>
+                        <th>Status</th>
+                        {% if is_admin %}<th>Actions</th>{% endif %}
+                      </tr>
+                    </thead>
+                    <tbody id="discoveriesTableBody">
+                      <tr>
+                        <td colspan="{% if is_admin %}9{% else %}8{% endif %}" class="text-center text-muted py-4">
+                          <div class="spinner-border spinner-border-sm me-2"></div> Loading...
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                  <span id="discoveryTableInfo" class="text-muted"></span>
+                  <nav>
+                    <ul class="pagination pagination-sm mb-0" id="discoveryPagination"></ul>
+                  </nav>
+                </div>
+              </div>
+
+              <!-- Tab: Species List -->
+              <div class="tab-pane {% if not running_sync or not is_admin %}active show{% endif %}" id="tab-species" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h3 class="mb-0">
+                    <i class="ti ti-dna me-2"></i>Species List
+                  </h3>
+                  <div class="d-flex gap-2">
+                    <select id="statusFilter" class="form-select form-select-sm" style="width: auto;">
+                      <option value="">All Match Status</option>
+                      <option value="matched">Linked</option>
+                      <option value="unmatched">Unlinked</option>
+                      <option value="needs_review">Needs review</option>
+                    </select>
+                    <select id="colStatusFilter" class="form-select form-select-sm" style="width: auto;">
+                      <option value="">All COL Status</option>
+                      <option value="accepted">Accepted</option>
+                      <option value="synonym">Synonym</option>
+                      <option value="no_match">Not in COL</option>
+                    </select>
+                    <input type="search" id="searchInput" class="form-control form-select-sm" placeholder="Search organism..." style="width: 200px;">
+                  </div>
+                </div>
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                  <table class="table table-vcenter card-table table-striped table-hover" id="genomesTable">
+                    <thead class="sticky-top bg-white">
+                      <tr>
+                        <th>Accession</th>
+                        <th>Organism</th>
+                        <th>Level</th>
+                        <th>Genes</th>
+                        <th>Protein Coding</th>
+                        <th>Match</th>
+                        <th>COL Status</th>
+                        <th>{% if is_admin %}Actions{% else %}View{% endif %}</th>
+                      </tr>
+                    </thead>
+                    <tbody id="genomesTableBody">
+                      <!-- Loaded via AJAX -->
+                    </tbody>
+                  </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                  <span id="tableInfo" class="text-muted">Loading...</span>
+                  <nav>
+                    <ul class="pagination pagination-sm mb-0" id="pagination">
+                    </ul>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- View Genome Modal -->
+<div class="modal modal-blur fade" id="viewGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="ti ti-dna me-2"></i>Species Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="viewGenomeBody">
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
+        {% if is_admin %}
+        <button type="button" class="btn btn-primary" id="viewToEditBtn">
+          <i class="ti ti-edit me-2"></i>Edit COL Match
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Genome Modal (admin only) -->
+{% if is_admin %}
+<div class="modal modal-blur fade" id="editGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="ti ti-edit me-2"></i>Edit COL Match</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {% csrf_token %}
+        <input type="hidden" id="editAccession">
+        
+        <!-- Current species info -->
+        <div class="mb-4">
+          <div class="subheader mb-2">Current Species</div>
+          <div class="card bg-light">
+            <div class="card-body py-2">
+              <div class="row">
+                <div class="col-6">
+                  <div class="text-muted small">Organism</div>
+                  <div class="fw-bold" id="editOrganismName">-</div>
+                </div>
+                <div class="col-6">
+                  <div class="text-muted small">Accession</div>
+                  <div><code id="editAccessionDisplay">-</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Current COL match -->
+        <div class="mb-4" id="currentMatchSection">
+          <div class="subheader mb-2">Current COL Match</div>
+          <div id="currentMatchInfo" class="alert alert-light">
+            <span class="text-muted">No COL match</span>
+          </div>
+        </div>
+        
+        <!-- Search COL -->
+        <div class="mb-4">
+          <div class="subheader mb-2">Search COL Taxon</div>
+          <div class="input-group mb-2">
+            <span class="input-group-text"><i class="ti ti-search"></i></span>
+            <input type="text" class="form-control" id="colSearchInput" placeholder="Search by species name...">
+          </div>
+          <div id="colSearchResults" class="list-group" style="max-height: 200px; overflow-y: auto;">
+            <!-- Results will be populated here -->
+          </div>
+        </div>
+        
+        <!-- Selected COL taxon -->
+        <div class="mb-4" id="selectedColSection" style="display: none;">
+          <div class="subheader mb-2">Selected COL Taxon</div>
+          <div class="alert alert-success d-flex align-items-center" id="selectedColInfo">
+            <div class="flex-grow-1">
+              <div class="fw-bold" id="selectedColName">-</div>
+              <div class="small text-muted" id="selectedColClassification">-</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-ghost-danger" onclick="clearColSelection()">
+              <i class="ti ti-x"></i>
+            </button>
+          </div>
+          <input type="hidden" id="selectedColId">
+        </div>
+        
+        <!-- Match status -->
+        <div class="mb-4">
+          <div class="subheader mb-2">Match Status</div>
+          <select id="editMatchStatus" class="form-select">
+            <option value="matched">Linked</option>
+            <option value="unmatched">Unlinked</option>
+            <option value="needs_review">Needs Review</option>
+            <option value="no_match">Not in COL</option>
+          </select>
+        </div>
+        
+        <!-- Notes -->
+        <div class="mb-3">
+          <div class="subheader mb-2">Notes</div>
+          <textarea id="editMatchNotes" class="form-control" rows="3" placeholder="Add notes about this COL match..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveGenomeMatch()">
+          <i class="ti ti-check me-2"></i>Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% load static %}
+<script>
+  // Server-side data passed to JavaScript for species list
+  window.HOME_DATA = {
+    genomeLevels: [],
+    phylaStats: [],
+    isAdmin: {% if is_admin %}true{% else %}false{% endif %},
+    endpoints: {
+      genomesList: "{% url 'taxonomy_api:genomes-list' %}",
+      genomeDetail: "/api/v1/taxonomy/genomes/",
+      genomeUpdate: "/api/v1/taxonomy/genomes/",
+      colSearch: "/api/v1/taxonomy/col/search/"
+    }
+  };
+</script>
+<script src="{% static 'taxonomy/js/dashboard/species-table.js' %}"></script>
+<script src="{% static 'taxonomy/js/dashboard/discoveries.js' %}"></script>
+<script src="{% static 'taxonomy/js/dashboard/taxon-sync.js' %}"></script>
+{% endblock %}

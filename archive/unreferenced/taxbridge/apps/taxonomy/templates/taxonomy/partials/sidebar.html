@@ -1,0 +1,49 @@
+<aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+  <div class="container-fluid">
+    <!-- Brand -->
+    <h1 class="navbar-brand navbar-brand-autodark">
+      <a href="{% url 'taxonomy:home' %}">
+        <span class="text-white fw-bold">TaxaBridge</span>
+      </a>
+    </h1>
+    
+    <!-- Mobile toggle -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    
+    <div class="collapse navbar-collapse" id="sidebar-menu">
+      <ul class="navbar-nav pt-lg-3">
+        <!-- Home -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:home' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-home"></i>
+            </span>
+            <span class="nav-link-title">Home</span>
+          </a>
+        </li>
+        
+        <!-- Taxonomy Tree -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:tree' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-binary-tree"></i>
+            </span>
+            <span class="nav-link-title">Taxonomy Tree</span>
+          </a>
+        </li>
+        
+        <!-- Taxon Sync (NCBI + COL) -->
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:taxon-sync-dashboard' %}">
+            <span class="nav-link-icon d-md-none d-lg-inline-block">
+              <i class="ti ti-arrows-exchange"></i>
+            </span>
+            <span class="nav-link-title">Taxon Sync</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</aside>

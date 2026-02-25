@@ -16,10 +16,8 @@ def home(request):
     total_genomes = NCBIGenome.objects.count()
     matched_genomes = NCBIGenome.objects.filter(col_match_status="matched").count()
     unmatched_genomes = NCBIGenome.objects.filter(col_match_status="unmatched").count()
-    # no_match (not found in COL) also counts as needs_review
-    needs_review_count = NCBIGenome.objects.filter(
-        Q(col_match_status="needs_review") | Q(col_match_status="no_match")
-    ).count()
+    not_in_col_count = NCBIGenome.objects.filter(col_match_status="not_in_col").count()
+    manual_count = NCBIGenome.objects.filter(col_match_status="manual").count()
     
     # Statistics by genome level
     genome_levels = list(
@@ -83,7 +81,8 @@ def home(request):
         "total_genomes": total_genomes,
         "matched_genomes": matched_genomes,
         "unmatched_genomes": unmatched_genomes,
-        "needs_review": needs_review_count,
+        "not_in_col_count": not_in_col_count,
+        "manual_count": manual_count,
         "genome_levels": genome_levels,
         "kingdom_stats": kingdom_stats,
         # Taxonomy

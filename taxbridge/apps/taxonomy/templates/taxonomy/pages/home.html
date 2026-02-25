@@ -26,90 +26,74 @@
 <div class="page-body">
   <div class="container-xl">
     
-    <!-- Stats Cards Row 1: Genomes -->
+    <!-- Stats Cards -->
     <div class="row row-deck row-cards mb-4">
       <div class="col-sm-6 col-lg-3">
         <div class="card">
           <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Total Genomes</div>
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-blue-lt me-3"><i class="ti ti-dna-2 fs-2"></i></span>
+              <div>
+                <div class="subheader">Species</div>
+                <div class="h1 mb-0">{{ total_ncbi_taxa|default:0 }}</div>
+              </div>
             </div>
-            <div class="h1 mb-0">{{ total_genomes|default:0 }}</div>
+            <div class="text-secondary small">
+              <i class="ti ti-database me-1"></i> {{ total_genomes|default:0 }} genome assemblies
+            </div>
           </div>
         </div>
       </div>
       <div class="col-sm-6 col-lg-3">
         <div class="card">
           <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Linked (CoL)</div>
-              <span class="ms-auto badge bg-green-lt text-green">{{ match_percent }}%</span>
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-green-lt me-3"><i class="ti ti-percentage fs-2"></i></span>
+              <div>
+                <div class="subheader">COL Coverage</div>
+                <div class="h1 mb-0">{{ match_percent }}%</div>
+              </div>
             </div>
-            <div class="h1 mb-0 text-success">{{ matched_genomes|default:0 }}</div>
+            <div class="text-secondary small">
+              <i class="ti ti-check me-1"></i> {{ matched_genomes|default:0 }} / {{ total_genomes|default:0 }} linked
+            </div>
           </div>
         </div>
       </div>
       <div class="col-sm-6 col-lg-3">
         <div class="card">
           <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Unlinked</div>
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-yellow-lt me-3"><i class="ti ti-unlink fs-2"></i></span>
+              <div>
+                <div class="subheader">Unlinked</div>
+                <div class="h1 mb-0">{{ unmatched_genomes|default:0|add:not_in_col_count|default:0 }}</div>
+              </div>
             </div>
-            <div class="h1 mb-0 text-warning">{{ unmatched_genomes|default:0 }}</div>
+            <div class="text-secondary small">
+              {% if not_in_col_count %}
+              <i class="ti ti-x me-1"></i> {{ not_in_col_count }} not in COL
+              {% if unmatched_genomes %} &middot; {{ unmatched_genomes }} pending{% endif %}
+              {% else %}
+              <i class="ti ti-clock me-1"></i> pending COL match
+              {% endif %}
+            </div>
           </div>
         </div>
       </div>
       <div class="col-sm-6 col-lg-3">
         <div class="card">
           <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Needs Review</div>
+            <div class="d-flex align-items-center mb-2">
+              <span class="avatar bg-purple-lt me-3"><i class="ti ti-binary-tree fs-2"></i></span>
+              <div>
+                <div class="subheader">COL Tree</div>
+                <div class="h1 mb-0">{{ total_col_species|default:0 }}</div>
+              </div>
             </div>
-            <div class="h1 mb-0 text-danger">{{ needs_review|default:0 }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stats Cards Row 2: Taxonomy -->
-    <div class="row row-deck row-cards mb-4">
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">NCBI Taxa</div>
+            <div class="text-secondary small">
+              <i class="ti ti-leaf me-1"></i> accepted species in tree
             </div>
-            <div class="h1 mb-0">{{ total_ncbi_taxa|default:0 }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">CoL Taxa</div>
-            </div>
-            <div class="h1 mb-0">{{ total_col_taxa|default:0 }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">CoL Species (accepted)</div>
-            </div>
-            <div class="h1 mb-0">{{ total_col_species|default:0 }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center">
-              <div class="subheader">Active Crosswalks</div>
-            </div>
-            <div class="h1 mb-0">{{ total_crosswalks|default:0 }}</div>
           </div>
         </div>
       </div>
@@ -140,15 +124,17 @@
                   </div>
                   <div class="card-body">
                     <div id="linkStatusChart">
-                      {% with total=matched_genomes|default:0|add:unmatched_genomes|default:0|add:needs_review|default:0 %}
+                      {% with total=matched_genomes|default:0|add:unmatched_genomes|default:0|add:not_in_col_count|default:0|add:manual_count|default:0 %}
                         {% if total > 0 %}
                         <div class="progress progress-separated mb-3" style="height: 1.5rem;">
                           {% widthratio matched_genomes|default:0 total 100 as matched_pct %}
                           {% widthratio unmatched_genomes|default:0 total 100 as unmatched_pct %}
-                          {% widthratio needs_review|default:0 total 100 as review_pct %}
+                          {% widthratio not_in_col_count|default:0 total 100 as not_in_col_pct %}
+                          {% widthratio manual_count|default:0 total 100 as manual_pct %}
                           <div class="progress-bar bg-success" role="progressbar" style="width: {{ matched_pct }}%" aria-label="Linked"></div>
                           <div class="progress-bar bg-warning" role="progressbar" style="width: {{ unmatched_pct }}%" aria-label="Unlinked"></div>
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: {{ review_pct }}%" aria-label="Needs Review"></div>
+                          <div class="progress-bar bg-danger" role="progressbar" style="width: {{ not_in_col_pct }}%" aria-label="Not in COL"></div>
+                          <div class="progress-bar bg-purple" role="progressbar" style="width: {{ manual_pct }}%" aria-label="Manual"></div>
                         </div>
                         <div class="d-flex flex-wrap gap-3 mt-3">
                           <div class="d-flex align-items-center">
@@ -163,8 +149,13 @@
                           </div>
                           <div class="d-flex align-items-center">
                             <span class="legend bg-danger me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
-                            <span class="text-secondary small">Review</span>
-                            <span class="ms-1 fw-bold">{{ needs_review|default:0 }}</span>
+                            <span class="text-secondary small">Not in COL</span>
+                            <span class="ms-1 fw-bold">{{ not_in_col_count|default:0 }}</span>
+                          </div>
+                          <div class="d-flex align-items-center">
+                            <span class="legend bg-purple me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
+                            <span class="text-secondary small">Manual</span>
+                            <span class="ms-1 fw-bold">{{ manual_count|default:0 }}</span>
                           </div>
                         </div>
                         {% else %}

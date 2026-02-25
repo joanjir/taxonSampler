@@ -27,6 +27,14 @@
       "Contig": "bg-secondary",
       "Unspecified": "bg-muted"
     };
+
+    // Sort: Complete Genome → Chromosome → Scaffold → Contig → rest
+    const levelOrder = ["Complete Genome", "Chromosome", "Scaffold", "Contig"];
+    genomeLevelData.sort((a, b) => {
+      const ia = levelOrder.indexOf(a.label);
+      const ib = levelOrder.indexOf(b.label);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
     
     const total = genomeLevelData.reduce((sum, d) => sum + d.value, 0);
     const progressBar = document.getElementById("assemblyProgressBar");

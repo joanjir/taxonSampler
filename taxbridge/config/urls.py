@@ -41,3 +41,15 @@ urlpatterns = [
 # Serve static files in development
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Preview 404 in development and register handler
+if settings.DEBUG:
+    # Use TemplateView to avoid importing app views during URL setup
+    from django.views.generic import TemplateView
+    urlpatterns += [
+        path("__preview_404__", TemplateView.as_view(template_name="404.html"), name="preview-404"),
+        path("__preview_404__/", TemplateView.as_view(template_name="404.html"), name="preview-404-slash"),
+    ]
+
+# Use custom handler404 (used when DEBUG=False)
+handler404 = 'apps.taxonomy.views.custom_404_view'

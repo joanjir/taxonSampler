@@ -131,11 +131,12 @@ def tree_search(request):
 
     # A) Species hits (fast)
     if "species" in include:
+        # COL species (accepted + synonyms)
         sp_qs = (
             ExternalTaxon.objects
-            .filter(system="col", rank="species", status="accepted")
+            .filter(system="col", rank="species")
             .filter(name__icontains=q)
-            .only("id", "external_id", "name", "classification_path")
+            .only("id", "external_id", "name", "status", "classification_path")
             .order_by("name")[:15000]
         )
 
@@ -148,6 +149,9 @@ def tree_search(request):
             if k in hits_by_key:
                 continue
 
+            st = (rec.status or "").lower()
+            source = "synonym" if "synonym" in st else "accepted"
+
             hits_by_key[k] = {
                 "key": k,
                 "name": rec.name,
@@ -156,6 +160,43 @@ def tree_search(request):
                 "external_id": rec.external_id,
                 "label": parts_to_label(parts),
                 "kind": "species",
+                "source": source,
+            }
+
+        # Manual species
+        manual_qs = (
+            ExternalTaxon.objects
+            .filter(system="manual", rank="species")
+            .filter(name__icontains=q)
+            .only("id", "external_id", "name", "classification")
+            .order_by("name")[:5000]
+        )
+        primary_ranks = ["kingdom", "phylum", "class", "order", "family", "genus"]
+        for rec in manual_qs:
+            cls = rec.classification or {}
+            path = []
+            domain_val = cls.get("domain") or cls.get("superkingdom")
+            if domain_val:
+                path.append(("domain", domain_val))
+            for r in primary_ranks:
+                val = cls.get(r)
+                if val:
+                    path.append((r, val))
+            parts = [{"rank": "dataset", "name": "Root"}] + [{"rank": r, "name": n} for r, n in path] + [
+                {"rank": "species", "name": rec.name}
+            ]
+            k = path_key_from_parts(parts)
+            if k in hits_by_key:
+                continue
+            hits_by_key[k] = {
+                "key": k,
+                "name": rec.name,
+                "rank": "species",
+                "id": rec.id,
+                "external_id": rec.external_id,
+                "label": parts_to_label(parts),
+                "kind": "species",
+                "source": "manual",
             }
 
     # B) Node hits within classification_path
@@ -170,7 +211,7 @@ def tree_search(request):
 
         scan_qs = (
             ExternalTaxon.objects
-            .filter(system="col", rank="species", status="accepted")
+            .filter(system="col", rank="species")
             .only("classification_path")
             .order_by("id")[:nodes_scan_limit]
         )

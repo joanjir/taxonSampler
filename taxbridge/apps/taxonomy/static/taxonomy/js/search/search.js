@@ -88,6 +88,14 @@ export function createSearchController({ renderer, searchEndpoint }) {
         ? "text-warning small" 
         : "text-success small";
         
+      // Add source indicator
+      if (currentHit?.source === "manual") {
+        statusEl.textContent += " [M]";
+      } else if (currentHit?.source === "synonym") {
+        statusEl.textContent += " [S]";
+      } else if (currentHit?.source === "accepted") {
+        statusEl.textContent += " [A]";
+      }
       // Add existing species indicator
       if (currentHit?.is_existing) {
         statusEl.textContent += " (already in database)";

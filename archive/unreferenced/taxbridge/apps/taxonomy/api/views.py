@@ -1,0 +1,1739 @@
+﻿"""
+API views for taxonomy module.
+
+All JSON API endpoints are consolidated here following Django best practices.
+Separated from UI views which render HTML templates.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List, Tuple
+
+
+from django.db.models import Q
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
+
+from apps.taxonomy.models import ExternalTaxon, Taxon
+from apps.taxonomy.tree.managers import (
+    expand_to_keys,
+    count_species_under,
+)
+from apps.taxonomy.utils import (
+    path_key_from_parts,
+    norm_rank,
+)
+from apps.taxonomy.sampling.service import run_sampling
+from apps.taxonomy.sampling.service import TreeIndex
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+_ROOT_RANKS_SET = {"domain", "superkingdom", "kingdom"}
+
+def _normalize_path_for_key(path: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """
+    Normalize classification_path to build key.
+    Detects and corrects leaf->root order if necessary.
+    """
+    if not path:
+        return []
+    
+    # Check if path comes in leaf->root order (last element is root)
+    last_rank = norm_rank(path[-1].get("rank", ""))
+    if last_rank in _ROOT_RANKS_SET:
+        path = list(reversed(path))
+    
+    return path
+
+
+# =============================================================================
+# Tree API Endpoints
+# =============================================================================
+
+@require_GET
+def tree_data(request):
+    """
+    GET /api/v1/taxonomy/tree/data/
+    
+    Returns tree JSON for D3 visualization.
+    
+    Query params:
+        - limit: Max species to include (default: 15000)
+        - max_rank or rankCut: Maximum rank to show (default: species = no cut)
+        - expand_keys: Comma-separated keys to expand
+    """
+    limit = request.GET.get("limit", "15000")
+    # Accept both 'max_rank' (backend standard) and 'rankCut' (frontend legacy)
+    # None = fully expanded tree; "" = collapsed root; "genus" = cut at genus
+    raw_rank = request.GET.get("max_rank") or request.GET.get("rankCut")
+    max_rank = raw_rank  # keep None when not provided
+    expand_keys_str = request.GET.get("expand_keys", "")
+    
+    try:
+        limit = int(limit)
+    except ValueError:
+        limit = 15000
+    
+    expand_keys = [k.strip() for k in expand_keys_str.split(",") if k.strip()]
+    
+    # Build tree from database
+    # rank_cut=None → fully expanded; rank_cut="" → collapsed root only
+    tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut=max_rank, with_keys=True)
+    
+    if not tree:
+        return JsonResponse({"error": "Tree not found"}, status=404)
+    
+    # Expand specific keys if provided
+    if expand_keys:
+        tree = expand_to_keys(tree, expand_keys)
+    
+    # Count total species
+    species_count = count_species_under(tree)
+    
+    return JsonResponse({
+        "tree": tree,
+        "limit": limit,
+        "max_rank": max_rank,
+        "expanded_keys": expand_keys,
+        "species_count": species_count,
+    })
+
+
+@require_GET
+def tree_children(request):
+    """GET /api/.../tree/children/?key=<node-key>
+
+    Returns immediate children of the node identified by `key` (or root if omitted).
+    Each child includes `key`, `name`, `rank`, `species_count`, and `has_children`.
+    """
+    key = request.GET.get("key") or None
+    limit = _parse_int(request.GET.get("limit"), default=10000, lo=100, hi=500000)
+
+    dataset_code = (request.GET.get("dataset_code") or "").strip() or None
+
+    # If no key provided, use the fast CTE-backed helper; otherwise use scan-based
+    if not key:
+        raw_items = ExternalTaxon.objects.children_for_key_cte(key=None, system="col", dataset_code=dataset_code, limit=limit)
+        items = []
+        for it in raw_items:
+            rank = norm_rank(it.get("rank") or "")
+            name = it.get("name")
+            species_count = it.get("count_species") or it.get("species_count") or 0
+            has_children = bool(it.get("has_children"))
+            child_key = path_key_from_parts([
+                {"rank": "dataset", "name": "Root"},
+                {"rank": rank or "?", "name": name},
+            ])
+            items.append({
+                "key": child_key,
+                "name": name,
+                "rank": rank,
+                "species_count": species_count,
+                "has_children": has_children,
+            })
+        return JsonResponse({"key": None, "count": len(items), "children": items})
+
+    # key provided: use scan-based fallback
+    raw_items = ExternalTaxon.objects.children_for_key(key=key, system="col", dataset_code=dataset_code, scan_limit=200000)
+    items = []
+    for it in raw_items:
+        name = it.get("name")
+        rank = it.get("rank") or "?"
+        species_count = it.get("count_species") or it.get("species_count") or 0
+        has_children = bool(it.get("has_children"))
+        child_key = f"{key}|{rank}:{name}"
+        items.append({
+            "key": child_key,
+            "name": name,
+            "rank": rank,
+            "species_count": species_count,
+            "has_children": has_children,
+        })
+
+    return JsonResponse({"key": key, "count": len(items), "children": items})
+
+
+@require_GET
+def tree_aggregates(request):
+    """GET /api/.../tree/aggregates/?key=<node-key>&rank=<rank>
+
+    Returns aggregated nodes of `rank` under the given node key, with species counts.
+    """
+    key = request.GET.get("key") or None
+    rank = (request.GET.get("rank") or "class").strip().lower()
+    limit = _parse_int(request.GET.get("limit"), default=1000, lo=1, hi=20000)
+
+    dataset_code = (request.GET.get("dataset_code") or "").strip() or None
+
+    # Use CTE-backed aggregation for root, fallback for keyed subtrees
+    if not key:
+        raw = ExternalTaxon.objects.aggregates_under_cte(key=None, target_rank=rank, system="col", dataset_code=dataset_code, limit=limit)
+        items = []
+        for it in raw:
+            r = norm_rank(it.get("rank") or rank)
+            name = it.get("name")
+            species_count = it.get("species_count") or it.get("count_species") or 0
+            has_children = bool(it.get("has_children"))
+            node_key = path_key_from_parts([
+                {"rank": "dataset", "name": "Root"},
+                {"rank": r, "name": name},
+            ])
+            items.append({"key": node_key, "name": name, "rank": r, "species_count": species_count, "has_children": has_children})
+        items.sort(key=lambda x: (-x["species_count"], x["name"]))
+        return JsonResponse({"key": None, "rank": rank, "total": len(items), "limit": limit, "items": items[:limit]})
+
+    # key provided: use scan-based listing
+    raw = ExternalTaxon.objects.aggregates_under(key=key, target_rank=rank, system="col", dataset_code=dataset_code, scan_limit=200000, limit=limit)
+    items = []
+    for it in raw:
+        name = it.get("name")
+        r = it.get("rank") or rank
+        species_count = it.get("species_count") or it.get("count_species") or 0
+        has_children = bool(it.get("has_children"))
+        node_key = f"{key}|{r}:{name}"
+        items.append({"key": node_key, "name": name, "rank": r, "species_count": species_count, "has_children": has_children})
+
+    items.sort(key=lambda x: (-x["species_count"], x["name"]))
+    return JsonResponse({"key": key, "rank": rank, "total": len(items), "limit": limit, "items": items[:limit]})
+
+
+@require_GET
+def tree_search(request):
+    """
+    GET /api/v1/taxonomy/tree/search/?q=<query>
+    
+    Search taxa by name in the tree.
+    Returns hits with key for tree navigation.
+    
+    Query params:
+        - q: Search query (min 2 characters)
+        - limit: Max results (default: 50, max: 200)
+        - hide_existing: If true, hide species that already exist locally (default: false)
+    """
+    query = request.GET.get("q", "").strip()
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    hide_existing = request.GET.get("hide_existing", "").lower() == "true"
+    
+    if len(query) < 2:
+        return JsonResponse({"hits": [], "query": query, "total": 0})
+
+    q_lower = query.lower()
+    hits = []
+    seen_keys: set = set()
+    
+    # Get all NCBI species names to check for existing local species
+    existing_species = set(Taxon.objects.filter(rank="species").values_list("scientific_name", flat=True))
+
+    # 1) Direct name match on ExternalTaxon records (species)
+    species_qs = (
+        ExternalTaxon.objects
+        .filter(
+            name__icontains=query,
+            system="col",
+            status="accepted",
+        )
+        .only("id", "external_id", "name", "rank", "classification_path")
+        [:limit]
+    )
+
+    for ext in species_qs:
+        # Check if this species already exists locally
+        is_existing = ext.name in existing_species
+        
+        # Skip if user wants to hide existing species and this one exists
+        if hide_existing and is_existing:
+            continue
+            
+        path = _normalize_path_for_key(ext.classification_path or [])
+        if ext.rank == "species":
+            path = list(path) + [{"rank": "species", "name": ext.name}]
+        
+        key = "dataset:Root|" + path_key_from_parts(path) if path else ""
+        if key and key not in seen_keys:
+            seen_keys.add(key)
+            hits.append({
+                "id": ext.id,
+                "external_id": ext.external_id,
+                "name": ext.name,
+                "rank": ext.rank,
+                "key": key,
+                "is_existing": is_existing,
+            })
+
+    # 2) Search higher-level clades inside classification_path
+    #    (these taxa don't have their own ExternalTaxon record)
+    if len(hits) < limit:
+        clade_qs = (
+            ExternalTaxon.objects
+            .filter(
+                classification_path__icontains=query,
+                system="col",
+                status="accepted",
+            )
+            .only("classification_path")
+            [:500]  # scan more to find unique clades
+        )
+        
+        for ext in clade_qs:
+            path = _normalize_path_for_key(ext.classification_path or [])
+            # Walk the path to find nodes whose name matches the query
+            for i, node in enumerate(path):
+                node_name = node.get("name", "")
+                if q_lower in node_name.lower():
+                    # Build key up to (and including) this node
+                    clade_path = path[:i + 1]
+                    key = "dataset:Root|" + path_key_from_parts(clade_path)
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        hits.append({
+                            "id": None,
+                            "external_id": None,
+                            "name": node_name,
+                            "rank": norm_rank(node.get("rank", "")),
+                            "key": key,
+                            "is_existing": False,  # Higher-level clades are not considered "existing species"
+                        })
+                        if len(hits) >= limit:
+                            break
+            if len(hits) >= limit:
+                break
+
+    return JsonResponse({
+        "hits": hits,
+        "query": query,
+        "total": len(hits),
+        "hide_existing": hide_existing,
+    })
+
+
+# =============================================================================
+# COL Navigation API Endpoints
+# =============================================================================
+
+# Base filter for COL species queries
+_BASE_FILTER = Q(system="col") & Q(rank="species") & Q(status="accepted")
+_ROOT_RANKS = {"domain", "superkingdom", "kingdom"}
+
+
+def _parse_int(v: str | None, default: int, lo: int, hi: int) -> int:
+    """Parse integer with bounds validation."""
+    try:
+        n = int(v) if v is not None else default
+    except ValueError:
+        n = default
+    return max(lo, min(hi, n))
+
+
+def _is_leaf_to_root(raw_path: List[Dict[str, Any]]) -> bool:
+    """Check if path is ordered leaf->root."""
+    if not raw_path:
+        return False
+    last_rank = (raw_path[-1].get("rank") or "").strip().lower()
+    return last_rank in _ROOT_RANKS
+
+
+def _normalize_path(raw_path: Any) -> List[Tuple[str, str]]:
+    """
+    Normalize classification_path to root->leaf list of (rank, name).
+    Removes invalid entries and corrects order if leaf->root.
+    """
+    if not isinstance(raw_path, list):
+        return []
+
+    clean: List[Tuple[str, str]] = []
+    for x in raw_path:
+        if not isinstance(x, dict):
+            continue
+        rank = (x.get("rank") or "").strip()
+        name = (x.get("name") or "").strip()
+        if not rank or not name:
+            continue
+        clean.append((rank.lower(), name))
+
+    if _is_leaf_to_root(raw_path):
+        clean.reverse()
+
+    # Deduplicate consecutive
+    out: List[Tuple[str, str]] = []
+    prev = None
+    for item in clean:
+        if item != prev:
+            out.append(item)
+        prev = item
+    return out
+
+
+def _parse_path_param(path_param: str | None) -> List[Tuple[str, str]]:
+    """
+    Parse path parameter from JSON string.
+    Accepts [] or null as "root".
+    """
+    if not path_param:
+        return []
+    try:
+        obj = json.loads(path_param)
+    except json.JSONDecodeError:
+        raise ValueError("path is not valid JSON")
+
+    if obj is None:
+        return []
+    if not isinstance(obj, list):
+        raise ValueError("path must be a JSON list")
+
+    out: List[Tuple[str, str]] = []
+    for x in obj:
+        if not isinstance(x, dict):
+            continue
+        r = (x.get("rank") or "").strip().lower()
+        n = (x.get("name") or "").strip()
+        if r and n:
+            out.append((r, n))
+    return out
+
+
+def _path_starts_with(full: List[Tuple[str, str]], prefix: List[Tuple[str, str]]) -> bool:
+    """Check if full path starts with prefix."""
+    if len(prefix) > len(full):
+        return False
+    return full[: len(prefix)] == prefix
+
+
+def _get_next_after_prefix(full: List[Tuple[str, str]], prefix: List[Tuple[str, str]]) -> Tuple[str, str] | None:
+    """Get the next element after prefix in full path."""
+    if not _path_starts_with(full, prefix):
+        return None
+    if len(full) == len(prefix):
+        return None
+    return full[len(prefix)]
+
+
+def _has_children_for_prefix(full: List[Tuple[str, str]], prefix: List[Tuple[str, str]]) -> bool:
+    """Check if path has more elements after prefix."""
+    return len(full) > len(prefix)
+
+
+def _make_path_json(prefix: List[Tuple[str, str]]) -> List[Dict[str, str]]:
+    """Convert path tuples to JSON-serializable format."""
+    return [{"rank": r, "name": n} for r, n in prefix]
+
+
+@require_GET
+def col_next_ranks(request):
+    """
+    GET /api/v1/taxonomy/col/next-ranks/
+    
+    Returns ranks that appear immediately after the given path.
+    
+    Query params:
+        - dataset_code: COL dataset code (required)
+        - path: JSON array of {rank, name} (optional, defaults to root)
+        - scan_limit: Max species to scan (default: 20000)
+    """
+    dataset_code = (request.GET.get("dataset_code") or "").strip()
+    if not dataset_code:
+        return HttpResponseBadRequest("dataset_code is required")
+
+    try:
+        prefix = _parse_path_param(request.GET.get("path"))
+    except ValueError as e:
+        return HttpResponseBadRequest(str(e))
+
+    limit_scan = _parse_int(request.GET.get("scan_limit"), default=20000, lo=1000, hi=200000)
+
+    qs = (
+        ExternalTaxon.objects
+        .filter(_BASE_FILTER, dataset_code=dataset_code)
+        .only("classification_path")
+        .iterator(chunk_size=2000)
+    )
+
+    counts: Dict[str, Dict[str, int]] = {}
+    name_sets: Dict[str, set] = {}
+
+    scanned = 0
+    for sp in qs:
+        scanned += 1
+        if scanned > limit_scan:
+            break
+
+        full = _normalize_path(sp.classification_path)
+        nxt = _get_next_after_prefix(full, prefix)
+        if not nxt:
+            continue
+        r, n = nxt
+        if r not in counts:
+            counts[r] = {"count_species": 0}
+            name_sets[r] = set()
+        counts[r]["count_species"] += 1
+        if len(name_sets[r]) < 50000:
+            name_sets[r].add(n)
+
+    out = []
+    for r, d in counts.items():
+        out.append({
+            "rank": r,
+            "count_species": d["count_species"],
+            "count_distinct_names": len(name_sets.get(r, set())),
+        })
+
+    out.sort(key=lambda x: (-x["count_species"], x["rank"]))
+
+    return JsonResponse({
+        "dataset_code": dataset_code,
+        "path": _make_path_json(prefix),
+        "scanned_species": scanned if scanned <= limit_scan else limit_scan,
+        "next_ranks": out,
+    })
+
+
+@require_GET
+def col_nodes(request):
+    """
+    GET /api/v1/taxonomy/col/nodes/
+    
+    Returns nodes of a specific rank under the given path.
+    
+    Query params:
+        - dataset_code: COL dataset code (required)
+        - rank: Taxonomic rank to list (required)
+        - path: JSON array of {rank, name} (optional)
+        - offset: Pagination offset (default: 0)
+        - limit: Page size (default: 200, max: 2000)
+        - scan_limit: Max species to scan (default: 100000)
+    """
+    dataset_code = (request.GET.get("dataset_code") or "").strip()
+    if not dataset_code:
+        return HttpResponseBadRequest("dataset_code is required")
+
+    rank = (request.GET.get("rank") or "").strip().lower()
+    if not rank:
+        return HttpResponseBadRequest("rank is required")
+
+    try:
+        prefix = _parse_path_param(request.GET.get("path"))
+    except ValueError as e:
+        return HttpResponseBadRequest(str(e))
+
+    offset = _parse_int(request.GET.get("offset"), default=0, lo=0, hi=10_000_000)
+    limit = _parse_int(request.GET.get("limit"), default=200, lo=1, hi=2000)
+    limit_scan = _parse_int(request.GET.get("scan_limit"), default=100000, lo=5000, hi=500000)
+
+    qs = (
+        ExternalTaxon.objects
+        .filter(_BASE_FILTER, dataset_code=dataset_code)
+        .only("classification_path")
+        .iterator(chunk_size=2000)
+    )
+
+    counts: Dict[str, int] = {}
+    has_child_map: Dict[str, bool] = {}
+    scanned = 0
+
+    for sp in qs:
+        scanned += 1
+        if scanned > limit_scan:
+            break
+
+        full = _normalize_path(sp.classification_path)
+        nxt = _get_next_after_prefix(full, prefix)
+        if not nxt:
+            continue
+        nxt_rank, nxt_name = nxt
+        if nxt_rank != rank:
+            continue
+
+        counts[nxt_name] = counts.get(nxt_name, 0) + 1
+
+        node_prefix = prefix + [(nxt_rank, nxt_name)]
+        has_children = _has_children_for_prefix(full, node_prefix)
+        if nxt_name not in has_child_map:
+            has_child_map[nxt_name] = has_children
+        else:
+            has_child_map[nxt_name] = has_child_map[nxt_name] or has_children
+
+    items_all = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    total = len(items_all)
+    page = items_all[offset: offset + limit]
+
+    items = []
+    for name, c in page:
+        path_next = _make_path_json(prefix + [(rank, name)])
+        items.append({
+            "rank": rank,
+            "name": name,
+            "count_species": c,
+            "has_children": bool(has_child_map.get(name, False)),
+            "path_next": path_next,
+        })
+
+    next_offset = offset + limit if (offset + limit) < total else None
+
+    return JsonResponse({
+        "dataset_code": dataset_code,
+        "path": _make_path_json(prefix),
+        "rank": rank,
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+        "next_offset": next_offset,
+        "scanned_species": scanned if scanned <= limit_scan else limit_scan,
+        "items": items,
+    })
+
+
+@require_GET
+def col_species(request):
+    """
+    GET /api/v1/taxonomy/col/species/
+    
+    List accepted species under the given path.
+    
+    Query params:
+        - dataset_code: COL dataset code (required)
+        - path: JSON array of {rank, name} (optional)
+        - offset: Pagination offset (default: 0)
+        - limit: Page size (default: 200, max: 2000)
+        - scan_limit: Max species to scan (default: 200000)
+    """
+    dataset_code = (request.GET.get("dataset_code") or "").strip()
+    if not dataset_code:
+        return HttpResponseBadRequest("dataset_code is required")
+
+    try:
+        prefix = _parse_path_param(request.GET.get("path"))
+    except ValueError as e:
+        return HttpResponseBadRequest(str(e))
+
+    offset = _parse_int(request.GET.get("offset"), default=0, lo=0, hi=10_000_000)
+    limit = _parse_int(request.GET.get("limit"), default=200, lo=1, hi=2000)
+    limit_scan = _parse_int(request.GET.get("scan_limit"), default=200000, lo=5000, hi=1_000_000)
+
+    qs = (
+        ExternalTaxon.objects
+        .filter(_BASE_FILTER, dataset_code=dataset_code)
+        .only("id", "external_id", "name", "classification_path")
+        .iterator(chunk_size=2000)
+    )
+
+    matches: List[Dict[str, Any]] = []
+    scanned = 0
+
+    for sp in qs:
+        scanned += 1
+        if scanned > limit_scan:
+            break
+
+        full = _normalize_path(sp.classification_path)
+        if not _path_starts_with(full, prefix):
+            continue
+
+        matches.append({"id": sp.id, "external_id": sp.external_id, "name": sp.name})
+
+    matches.sort(key=lambda x: x["name"])
+    total = len(matches)
+    page = matches[offset: offset + limit]
+    next_offset = offset + limit if (offset + limit) < total else None
+
+    return JsonResponse({
+        "dataset_code": dataset_code,
+        "path": _make_path_json(prefix),
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+        "next_offset": next_offset,
+        "scanned_species": scanned if scanned <= limit_scan else limit_scan,
+        "species": page,
+    })
+
+
+@require_POST
+def col_resolve_selection(request):
+    """
+    POST /api/v1/taxonomy/col/resolve/
+    
+    Resolve unique accepted species under union of selected paths.
+    
+    Request body:
+        {
+            "dataset_code": "COL25.12",
+            "selected_paths": [[{rank, name}, ...], ...]
+        }
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Invalid JSON")
+
+    dataset_code = (payload.get("dataset_code") or "").strip()
+    if not dataset_code:
+        return HttpResponseBadRequest("dataset_code is required")
+
+    selected_paths = payload.get("selected_paths")
+    if not isinstance(selected_paths, list):
+        return HttpResponseBadRequest("selected_paths must be a list")
+
+    prefixes: List[List[Tuple[str, str]]] = []
+    for p in selected_paths:
+        if p is None:
+            prefixes.append([])
+            continue
+        if not isinstance(p, list):
+            continue
+        pr: List[Tuple[str, str]] = []
+        for x in p:
+            if not isinstance(x, dict):
+                continue
+            r = (x.get("rank") or "").strip().lower()
+            n = (x.get("name") or "").strip()
+            if r and n:
+                pr.append((r, n))
+        prefixes.append(pr)
+
+    prefixes = [p for p in prefixes if p]
+    if not prefixes:
+        return JsonResponse({"dataset_code": dataset_code, "species": []})
+
+    limit_scan = 500000
+
+    qs = (
+        ExternalTaxon.objects
+        .filter(_BASE_FILTER, dataset_code=dataset_code)
+        .only("id", "external_id", "name", "classification_path")
+        .iterator(chunk_size=2000)
+    )
+
+    out_map: Dict[int, Dict[str, Any]] = {}
+    scanned = 0
+    for sp in qs:
+        scanned += 1
+        if scanned > limit_scan:
+            break
+        full = _normalize_path(sp.classification_path)
+        for pref in prefixes:
+            if _path_starts_with(full, pref):
+                out_map[sp.id] = {"id": sp.id, "external_id": sp.external_id, "name": sp.name}
+                break
+
+    species_list = list(out_map.values())
+    species_list.sort(key=lambda x: x["name"])
+
+    return JsonResponse({
+        "dataset_code": dataset_code,
+        "scanned_species": scanned if scanned <= limit_scan else limit_scan,
+        "species": species_list,
+    })
+
+
+# =============================================================================
+# Sampling API Endpoints
+# =============================================================================
+
+@require_GET
+def sampling_scope_info(request):
+    """
+    GET /api/v1/taxonomy/sampling/scope-info/
+    
+    Returns species counts for scope, targets, and active node.
+    Used by the sampling wizard to show richness info.
+    
+    Query params:
+        - scope_key: Key of scope node (optional)
+        - target_keys: Comma-separated list of target keys (optional)
+        - active_key: Key of currently active node (optional)
+    
+    Response:
+        {
+            "scope": {"key": "...", "name": "...", "rank": "...", "species_count": 123},
+            "targets": [{"key": "...", "name": "...", "rank": "...", "species_count": 45}, ...],
+            "active": {"key": "...", "name": "...", "rank": "...", "species_count": 10},
+            "children": [{"key": "...", "name": "...", "rank": "...", "species_count": 5}, ...]
+        }
+    """
+    from apps.taxonomy.sampling.service import TreeIndex
+    
+    scope_key = request.GET.get("scope_key", "").strip() or None
+    target_keys_str = request.GET.get("target_keys", "").strip()
+    active_key = request.GET.get("active_key", "").strip() or None
+    
+    target_keys = [k.strip() for k in target_keys_str.split(",") if k.strip()] if target_keys_str else []
+    
+    # Build tree index
+    tree = ExternalTaxon.objects.build_tree(limit=10000, rank_cut="species", with_keys=True)
+    if not tree:
+        return JsonResponse({"error": "No tree data available"}, status=404)
+    
+    index = TreeIndex()
+    index.build(tree)
+    
+    def node_info(key):
+        """Get node info with species count."""
+        if not key:
+            return None
+        node = index.get_node(key)
+        if not node:
+            return None
+        species_count = index.count_rank_under(node, "species")
+        return {
+            "key": key,
+            "name": node.get("name", ""),
+            "rank": node.get("rank", ""),
+            "species_count": species_count,
+        }
+    
+    def get_children(key):
+        """Get immediate children of a node with species counts."""
+        if not key:
+            # Return root's children
+            root_children = tree.get("children") or []
+            result = []
+            for child in root_children:
+                child_rank = norm_rank(child.get("rank", ""))
+                child_name = child.get("name", "")
+                child_key = path_key_from_parts([
+                    {"rank": tree.get("rank", ""), "name": tree.get("name", "")},
+                    {"rank": child_rank, "name": child_name}
+                ])
+                species_count = index.count_rank_under(child, "species")
+                result.append({
+                    "key": child_key,
+                    "name": child_name,
+                    "rank": child_rank,
+                    "species_count": species_count,
+                })
+            return result
+        
+        node = index.get_node(key)
+        if not node:
+            return []
+        
+        node_children = node.get("children") or []
+        result = []
+        for child in node_children:
+            child_rank = norm_rank(child.get("rank", ""))
+            child_name = child.get("name", "")
+            # Build child key by appending to parent key
+            child_key = f"{key}|{child_rank}:{child_name}"
+            species_count = index.count_rank_under(child, "species")
+            result.append({
+                "key": child_key,
+                "name": child_name,
+                "rank": child_rank,
+                "species_count": species_count,
+            })
+        return result
+    
+    # Build response
+    scope_info = node_info(scope_key) if scope_key else None
+    if not scope_info and scope_key:
+        # Scope key not found, use entire tree
+        scope_info = {
+            "key": None,
+            "name": tree.get("name", "Root"),
+            "rank": tree.get("rank", ""),
+            "species_count": index.count_rank_under(tree, "species"),
+        }
+    
+    targets_info = [node_info(k) for k in target_keys if k]
+    targets_info = [t for t in targets_info if t]  # Filter None
+    
+    active_info = node_info(active_key) if active_key else None
+    
+    # Get children of scope (or root if no scope)
+    children_info = get_children(scope_key)
+    
+    return JsonResponse({
+        "scope": scope_info,
+        "targets": targets_info,
+        "active": active_info,
+        "children": children_info,
+    })
+
+
+@require_POST
+def sampling_run(request):
+    """
+    POST /api/v1/taxonomy/sampling/run/
+
+    Executes the sampling algorithm on the server side.
+    Receives sampling configuration, builds the tree, runs ingroup+outgroup
+    sampling, and returns the result.
+
+    Request body:
+        {
+            "scope_key": null | "rank:name|...",
+            "targets": [],
+            "K": 50,
+            "allocation_rank": "class",
+            "target_rank": "species",
+            "allocation": "proportional",
+            "min_one_per_clade": true,
+            "outgroup_rank": "",
+            "outgroup_n": 2,
+            "limit": 15000,
+            "max_rank": "class"
+        }
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Invalid JSON")
+
+    # Build tree from DB (same as tree_data endpoint)
+    limit = int(payload.get("limit", 5000))
+    max_rank = payload.get("max_rank") or "class"
+
+    tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut=max_rank, with_keys=True)
+    if not tree:
+        return JsonResponse({"error": "No tree data available"}, status=404)
+
+    # Expand all nodes so sampling can traverse the full tree
+    full_tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut="species", with_keys=True)
+    if not full_tree:
+        full_tree = tree
+
+    # Prepare sampling config
+    config = {
+        "scope_key": payload.get("scope_key") or None,
+        "targets": payload.get("targets") or [],
+        "K": max(2, int(payload.get("K", 50))),
+        "allocation_rank": (payload.get("allocation_rank") or "class").strip().lower(),
+        "target_rank": (payload.get("target_rank") or "species").strip().lower(),
+        "allocation": (payload.get("allocation") or "proportional").strip().lower(),
+        "min_one_per_clade": bool(payload.get("min_one_per_clade", True)),
+        "outgroup_rank": (payload.get("outgroup_rank") or "").strip().lower(),
+        "outgroup_n": max(1, int(payload.get("outgroup_n", 2))),
+    }
+
+    # Run sampling
+    result = run_sampling(full_tree, config)
+
+    # Serialize response
+    ingroup = result.ingroup
+    outgroup = result.outgroup
+
+    return JsonResponse({
+        "scope_root_key": ingroup.scope_root_key,
+        "mode": payload.get("sampling_root_mode", "tree"),
+        "targets": config["targets"],
+        "K": config["K"],
+        "allocation": config["allocation"],
+        "allocationRank": ingroup.allocation_rank,
+        "targetRank": ingroup.target_rank,
+        "minOnePerClade": config["min_one_per_clade"],
+
+        "ingroup": {
+            "note": ingroup.note,
+            "quotas": [
+                {
+                    "key": q.get("key", ""),
+                    "name": q.get("name", ""),
+                    "rank": q.get("rank", ""),
+                    "speciesAvail": q.get("species_avail", 0),
+                    "quota": q.get("quota", 0),
+                    "picked": q.get("picked", []),
+                }
+                for q in (ingroup.quotas or [])
+            ],
+            "picked": ingroup.picked,
+        },
+
+        "outgroupPicked": outgroup.picked,
+        "outgroup": outgroup.meta,
+    })
+
+
+# =============================================================================
+# Genomes API Endpoints
+# =============================================================================
+
+@require_GET
+def genomes_list(request):
+    """
+    GET /api/v1/taxonomy/genomes/
+    
+    List of NCBI genomes with filtering and pagination.
+    
+    Query params:
+        - page: Page number (default: 1)
+        - page_size: Page size (default: 50, max: 200)
+        - search: Search by organism name
+        - phylum: Filter by phylum
+        - class_name: Filter by class
+        - genome_level: Filter by genome level
+        - col_match_status: Filter by linkage status
+        - ordering: Sort field (default: organism_name)
+    """
+    from apps.taxonomy.models import NCBIGenome
+    
+    # Pagination
+    try:
+        page = int(request.GET.get("page", 1))
+        page_size = min(int(request.GET.get("page_size", 50)), 200)
+    except ValueError:
+        page, page_size = 1, 50
+    
+    # Filters
+    qs = NCBIGenome.objects.all()
+    
+    search = request.GET.get("search", "").strip()
+    if search:
+        qs = qs.filter(
+            Q(organism_name__icontains=search) |
+            Q(accession__icontains=search) |
+            Q(common_name__icontains=search)
+        )
+    
+    phylum = request.GET.get("phylum", "").strip()
+    if phylum:
+        qs = qs.filter(phylum=phylum)
+    
+    class_name = request.GET.get("class_name", "").strip()
+    if class_name:
+        qs = qs.filter(class_name=class_name)
+    
+    genome_level = request.GET.get("genome_level", "").strip()
+    if genome_level:
+        qs = qs.filter(genome_level=genome_level)
+    
+    col_match_status = request.GET.get("col_match_status", "").strip()
+    if col_match_status:
+        # needs_review filter should include both needs_review AND no_match
+        if col_match_status == "needs_review":
+            qs = qs.filter(Q(col_match_status="needs_review") | Q(col_match_status="no_match"))
+        else:
+            qs = qs.filter(col_match_status=col_match_status)
+    
+    # Filter by COL status (accepted, synonym, no_match)
+    col_status = request.GET.get("col_status", "").strip()
+    if col_status:
+        if col_status == "no_match":
+            # No COL match - external_taxon is null and col_match_status is no_match
+            qs = qs.filter(col_match_status="no_match")
+        else:
+            # Filter by external_taxon.status
+            qs = qs.filter(external_taxon__status=col_status)
+    
+    # Sorting
+    ordering = request.GET.get("ordering", "organism_name")
+    valid_orderings = ["organism_name", "-organism_name", "accession", "-accession", 
+                       "phylum", "-phylum", "genome_level", "-genome_level",
+                       "col_match_status", "-col_match_status"]
+    if ordering in valid_orderings:
+        qs = qs.order_by(ordering)
+    else:
+        qs = qs.order_by("organism_name")
+    
+    # Total count
+    total_count = qs.count()
+    
+    # Pagination
+    offset = (page - 1) * page_size
+    genomes = qs.select_related('external_taxon')[offset:offset + page_size]
+    
+    # Serialize
+    results = []
+    for g in genomes:
+        # Get COL status if it exists
+        col_status = None
+        if g.external_taxon:
+            col_status = g.external_taxon.status
+        
+        results.append({
+            "id": g.id,
+            "accession": g.accession,
+            "organism_name": g.organism_name,
+            "common_name": g.common_name,
+            "genome_level": g.genome_level,
+            "genome_coverage": g.genome_coverage,
+            "genes": g.genes,
+            "protein_coding": g.protein_coding,
+            "has_proteome": g.has_proteome,
+            "proteome_quality": g.proteome_quality,
+            "col_match_status": g.col_match_status,
+            "col_status": col_status,  # accepted, synonym, etc
+            "taxon_id": g.taxon_id,
+            "external_taxon_id": g.external_taxon_id,
+        })
+    
+    return JsonResponse({
+        "count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_count + page_size - 1) // page_size,
+        "results": results,
+    })
+
+
+@require_GET
+def genome_detail(request, accession: str):
+    """
+    GET /api/v1/taxonomy/genomes/<accession>/
+    
+    Genome detail by accession.
+    """
+    from apps.taxonomy.models import NCBIGenome
+    
+    try:
+        genome = NCBIGenome.objects.select_related("taxon", "external_taxon").get(accession=accession)
+    except NCBIGenome.DoesNotExist:
+        return JsonResponse({"error": f"Genome {accession} not found"}, status=404)
+    
+    # External taxon classification if available
+    external_taxon_data = None
+    if genome.external_taxon:
+        ext = genome.external_taxon
+        external_taxon_data = {
+            "id": ext.id,
+            "external_id": ext.external_id,
+            "name": ext.name,
+            "rank": ext.rank,
+            "status": ext.status,
+            "classification": ext.classification or {},
+            "classification_path": ext.classification_path or [],
+        }
+    
+    data = {
+        "id": genome.id,
+        "accession": genome.accession,
+        "organism_name": genome.organism_name,
+        "common_name": genome.common_name,
+        "strain": genome.strain,
+        "phylum": genome.phylum,
+        "class_name": genome.class_name,
+        # Genome assembly info
+        "genome_level": genome.genome_level,
+        "refseq_category": genome.refseq_category,
+        "source_database": genome.source_database,
+        "release_date": genome.release_date,
+        "sequencing_tech": genome.sequencing_tech,
+        "assembly_method": genome.assembly_method,
+        # Quality metrics
+        "genome_coverage": genome.genome_coverage,
+        "contig_n50_kb": genome.contig_n50_kb,
+        "scaffold_n50_kb": genome.scaffold_n50_kb,
+        "scaffold_count": genome.scaffold_count,
+        "contig_count": genome.contig_count,
+        "chromosome_count": genome.chromosome_count,
+        "total_sequence_length": genome.total_sequence_length,
+        "gc_percent": genome.gc_percent,
+        "quality_score": genome.quality_score,
+        # Genes
+        "genes": genome.genes,
+        "protein_coding": genome.protein_coding,
+        "non_coding_genes": genome.non_coding_genes,
+        "pseudogenes": genome.pseudogenes,
+        # Annotation
+        "annotation_provider": genome.annotation_provider,
+        "annotation_status": genome.annotation_status,
+        # BUSCO
+        "busco_complete": genome.busco_complete,
+        "busco_single_copy": genome.busco_single_copy,
+        "busco_duplicated": genome.busco_duplicated,
+        "busco_fragmented": genome.busco_fragmented,
+        "busco_missing": genome.busco_missing,
+        "busco_lineage": genome.busco_lineage,
+        # Proteome
+        "has_proteome": genome.has_proteome,
+        "proteome_quality": genome.proteome_quality,
+        # COL match
+        "col_match_status": genome.col_match_status,
+        "col_match_notes": genome.col_match_notes,
+        # Related objects
+        "taxon": {
+            "taxid": genome.taxon.taxid,
+            "scientific_name": genome.taxon.scientific_name,
+            "rank": genome.taxon.rank,
+        } if genome.taxon else None,
+        "external_taxon": external_taxon_data,
+        # Metadata
+        "fetched_at": genome.fetched_at.isoformat() if genome.fetched_at else None,
+        "updated_at": genome.updated_at.isoformat() if genome.updated_at else None,
+    }
+    
+    return JsonResponse(data)
+
+
+@require_POST
+def genome_update(request, accession: str):
+    """
+    POST /api/v1/taxonomy/genomes/<accession>/update/
+    Admin only - update a genome's COL match.
+    """
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    from apps.taxonomy.models import NCBIGenome
+    
+    try:
+        genome = NCBIGenome.objects.get(accession=accession)
+    except NCBIGenome.DoesNotExist:
+        return JsonResponse({"error": f"Genome {accession} not found"}, status=404)
+    
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    
+    # Update col_match_status
+    if "col_match_status" in data:
+        valid_statuses = ["matched", "unmatched", "needs_review", "no_match"]
+        if data["col_match_status"] in valid_statuses:
+            genome.col_match_status = data["col_match_status"]
+    
+    # Update external_taxon
+    if "external_taxon_id" in data:
+        if data["external_taxon_id"]:
+            try:
+                external_taxon = ExternalTaxon.objects.get(id=data["external_taxon_id"])
+                genome.external_taxon = external_taxon
+                genome.col_match_status = "matched"
+            except ExternalTaxon.DoesNotExist:
+                return JsonResponse({"error": "ExternalTaxon not found"}, status=404)
+        else:
+            genome.external_taxon = None
+            if genome.col_match_status == "matched":
+                genome.col_match_status = "unmatched"
+    
+    # Update notes
+    if "col_match_notes" in data:
+        genome.col_match_notes = data["col_match_notes"]
+    
+    genome.save()
+    
+    return JsonResponse({
+        "success": True,
+        "accession": genome.accession,
+        "col_match_status": genome.col_match_status,
+        "external_taxon_id": genome.external_taxon_id,
+        "col_match_notes": genome.col_match_notes,
+    })
+
+
+@require_GET
+def col_search(request):
+    """
+    GET /api/v1/taxonomy/col/search/?q=query
+    
+    Search COL taxa by name. For use in the edit modal.
+    
+    Query params:
+        - q: Search term (min 2 characters)
+        - limit: Max results (default: 20)
+        - hide_existing: If true, hide species that already exist locally (default: false)
+    """
+    query = request.GET.get("q", "").strip()
+    limit = min(int(request.GET.get("limit", 20)), 100)
+    hide_existing = request.GET.get("hide_existing", "").lower() == "true"
+    
+    if len(query) < 2:
+        return JsonResponse({"results": []})
+    
+    # Get all NCBI species names to check for existing local species
+    existing_species = set(Taxon.objects.filter(rank="species").values_list("scientific_name", flat=True))
+    
+    # Search in local ExternalTaxon database
+    results = ExternalTaxon.objects.filter(
+        Q(name__icontains=query) | Q(external_id__icontains=query),
+        system="col",
+        rank="species"
+    ).select_related("accepted")[:limit * 2]  # Get more to filter existing ones
+    
+    data = []
+    for ext in results:
+        # Check if this species already exists locally
+        is_existing = ext.name in existing_species
+        
+        # Skip if user wants to hide existing species and this one exists
+        if hide_existing and is_existing:
+            continue
+        
+        # Stop adding if we already have enough results
+        if len(data) >= limit:
+            break
+            
+        # Build classification string
+        classification_str = ""
+        if ext.classification:
+            parts = []
+            for rank in ["kingdom", "phylum", "class", "order", "family", "genus"]:
+                if rank in ext.classification:
+                    parts.append(ext.classification[rank])
+            classification_str = " > ".join(parts)
+        
+        data.append({
+            "id": ext.id,
+            "external_id": ext.external_id,
+            "name": ext.name,
+            "rank": ext.rank,
+            "status": ext.status,
+            "classification": classification_str,
+            "accepted_name": ext.accepted.name if ext.accepted else None,
+            "is_existing": is_existing,
+        })
+    
+    return JsonResponse({
+        "results": data,
+        "hide_existing": hide_existing,
+    })
+
+
+# ============================================================
+# DB Sampling API — Step 2
+# ============================================================
+
+@require_GET
+def sampling_stats(request):
+    """
+    Returns statistics about available species for sampling config UI.
+    Query params:
+        - kingdom: Filter by kingdom (optional)
+        - phylum: Filter by phylum (optional)
+        - scope_filters: JSON-encoded dict of rank→taxon filters (optional)
+        - species_names: JSON-encoded list of organism names (optional)
+    """
+    from apps.taxonomy.sampling.db_engine import get_sampling_stats
+
+    kingdom = request.GET.get("kingdom", "")
+    phylum = request.GET.get("phylum", "")
+
+    # Parse scope_filters from query param (JSON string)
+    scope_filters = None
+    sf_raw = request.GET.get("scope_filters", "")
+    if sf_raw:
+        try:
+            scope_filters = json.loads(sf_raw)
+        except json.JSONDecodeError:
+            pass
+
+    # Parse species_names from query param (JSON string)
+    species_names = None
+    sn_raw = request.GET.get("species_names", "")
+    if sn_raw:
+        try:
+            species_names = json.loads(sn_raw)
+        except json.JSONDecodeError:
+            pass
+
+    stats = get_sampling_stats(
+        scope_kingdom=kingdom,
+        scope_phylum=phylum,
+        scope_filters=scope_filters,
+        species_names=species_names,
+    )
+
+    return JsonResponse(stats)
+
+
+@csrf_exempt
+@require_POST
+def sampling_execute(request):
+    """
+    Execute a DB-based sampling with the given configuration.
+    POST body (JSON):
+        - max_sample_size: int (required)
+        - start_rank: str (default: phylum)
+        - end_rank: str (default: species)
+        - strategy: none | random | proportional | balanced (default: proportional)
+        - kingdom: str (optional scope filter)
+        - phylum: str (optional scope filter)
+        - save: bool (if true, saves a SamplingConfiguration record)
+        - name: str (optional name for saved config)
+    """
+    from apps.taxonomy.sampling.db_engine import run_db_sampling
+    from apps.taxonomy.models import SamplingConfiguration
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    # Validate max_sample_size
+    max_sample_size = data.get("max_sample_size")
+    if not max_sample_size or not isinstance(max_sample_size, int) or max_sample_size < 1:
+        return JsonResponse({"error": "max_sample_size must be a positive integer"}, status=400)
+
+    start_rank = data.get("start_rank", "phylum").lower()
+    end_rank = data.get("end_rank", "species").lower()
+    strategy = data.get("strategy", "proportional").lower()
+    kingdom = data.get("scope_kingdom") or data.get("kingdom", "")
+    phylum = data.get("scope_phylum") or data.get("phylum", "")
+    scope_filters = data.get("scope_filters") or None
+    species_names = data.get("species_names") or None
+    save_config = data.get("save", False)
+    config_name = data.get("name", "")
+
+    valid_ranks = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    valid_strategies = ["none", "random", "proportional", "balanced"]
+
+    if start_rank not in valid_ranks:
+        return JsonResponse({"error": f"Invalid start_rank: {start_rank}"}, status=400)
+    if end_rank not in valid_ranks:
+        return JsonResponse({"error": f"Invalid end_rank: {end_rank}"}, status=400)
+    if strategy not in valid_strategies:
+        return JsonResponse({"error": f"Invalid strategy: {strategy}"}, status=400)
+
+    # Validate rank order: start_rank must be higher (smaller index) than end_rank
+    if valid_ranks.index(start_rank) >= valid_ranks.index(end_rank):
+        return JsonResponse(
+            {"error": f"start_rank ({start_rank}) must be higher than end_rank ({end_rank})"},
+            status=400,
+        )
+
+    # Save config if requested
+    config_id = None
+    if save_config:
+        config_obj = SamplingConfiguration.objects.create(
+            name=config_name,
+            max_sample_size=max_sample_size,
+            start_rank=start_rank,
+            end_rank=end_rank,
+            strategy=strategy,
+            scope_kingdom=kingdom,
+            scope_phylum=phylum,
+        )
+        config_id = config_obj.pk
+
+    # Execute sampling
+    try:
+        result = run_db_sampling(
+            max_sample_size=max_sample_size,
+            start_rank=start_rank,
+            end_rank=end_rank,
+            strategy=strategy,
+            scope_kingdom=kingdom,
+            scope_phylum=phylum,
+            scope_filters=scope_filters,
+            species_names=species_names,
+            config_id=config_id,
+        )
+    except Exception as e:
+        if config_id:
+            SamplingConfiguration.objects.filter(pk=config_id).update(
+                status="failed", error=str(e)
+            )
+        return JsonResponse({"error": str(e)}, status=500)
+
+    # Update config with results
+    if config_id:
+        SamplingConfiguration.objects.filter(pk=config_id).update(
+            status="executed",
+            executed_at=timezone.now(),
+            result={
+                "total_available": result.total_available,
+                "total_selected": result.total_selected,
+                "strategy": result.strategy,
+                "clades_count": len(result.clades),
+                "warnings": result.warnings,
+            },
+        )
+
+    return JsonResponse({
+        "success": True,
+        "config_id": config_id,
+        "strategy": result.strategy,
+        "max_sample_size": result.max_sample_size,
+        "start_rank": result.start_rank,
+        "end_rank": result.end_rank,
+        "total_available": result.total_available,
+        "total_selected": result.total_selected,
+        "warnings": result.warnings,
+        "clades": result.clades,
+        "species": result.species,
+    })
+
+
+@require_GET
+def sampling_configs(request):
+    """List saved sampling configurations."""
+    from apps.taxonomy.models import SamplingConfiguration
+
+    configs = SamplingConfiguration.objects.all()[:20]
+    data = []
+    for c in configs:
+        data.append({
+            "id": c.pk,
+            "name": c.name,
+            "max_sample_size": c.max_sample_size,
+            "start_rank": c.start_rank,
+            "end_rank": c.end_rank,
+            "strategy": c.strategy,
+            "scope_kingdom": c.scope_kingdom,
+            "scope_phylum": c.scope_phylum,
+            "status": c.status,
+            "result": c.result,
+            "created_at": c.created_at.isoformat(),
+            "executed_at": c.executed_at.isoformat() if c.executed_at else None,
+        })
+
+    return JsonResponse({"configs": data})
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Newick / Phylo Tree generation from DB Sampling results
+# ═══════════════════════════════════════════════════════════════════════
+
+@csrf_exempt
+@require_POST
+def sampling_newick(request):
+    """
+    Generate a Newick string (and optionally an SVG tree) from
+    a DB sampling result.
+
+    POST body: DB sampling result JSON containing species[] with
+    taxonomy fields (kingdom, phylum, class, order, family, genus,
+    organism_name).
+
+    Query params:
+      - format: "newick" (default) | "svg"
+
+    Returns:
+      - newick: text/plain Newick file download
+      - svg: JSON with {"svg": "<svg>...", "newick": "..."}
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    species = payload.get("species", [])
+    if not species:
+        return JsonResponse({"error": "No species in payload"}, status=400)
+
+    fmt = request.GET.get("format", "newick")
+
+    try:
+        from ete3 import Tree
+
+        # Build ETE3 tree from taxonomy hierarchy
+        root = Tree()
+        root.name = "Root"
+        root.dist = 0.0
+
+        # Taxonomy levels to traverse
+        tax_ranks = ["kingdom", "phylum", "class", "order", "family", "genus"]
+        node_index = {"": root}
+        used_leaves = {}
+
+        for sp in species:
+            parent = root
+            acc_parts = []
+
+            for rank in tax_ranks:
+                taxon_name = (sp.get(rank) or "").strip()
+                if not taxon_name:
+                    continue
+
+                acc_parts.append(f"{rank}:{taxon_name}")
+                acc_key = "|".join(acc_parts)
+
+                if acc_key in node_index:
+                    parent = node_index[acc_key]
+                    continue
+
+                # Create internal node
+                safe_name = taxon_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
+                internal_name = safe_name
+                n = parent.add_child(name=internal_name)
+                n.add_feature("rank", rank)
+                n.dist = 1.0
+                node_index[acc_key] = n
+                parent = n
+
+            # Add species leaf
+            org_name = sp.get("organism_name") or sp.get("scientific_name") or "Unknown"
+            safe_leaf = org_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
+
+            # Deduplicate leaf names
+            if safe_leaf in used_leaves:
+                used_leaves[safe_leaf] += 1
+                safe_leaf = f"{safe_leaf}_{used_leaves[safe_leaf]}"
+            else:
+                used_leaves[safe_leaf] = 1
+
+            leaf = parent.add_child(name=safe_leaf)
+            leaf.add_feature("rank", "species")
+            leaf.dist = 1.0
+
+        # ── Collapse single-child chain from root ──────────────────
+        # If the root has only one child chain (e.g., Root→Animalia→…)
+        # move root down to the first node with >1 child or a leaf.
+        while len(root.children) == 1 and root.children[0].children:
+            child = root.children[0]
+            root = child
+            root.up = None          # detach from phantom parent
+            root.dist = 0.0         # root has no branch length
+
+        newick_str = root.write(format=1)
+
+        if fmt == "svg":
+            # Try to render SVG using ETE3
+            try:
+                from ete3 import TreeStyle, TextFace, NodeStyle
+                import tempfile
+                import os
+
+                ts = TreeStyle()
+                ts.show_leaf_name = True
+                ts.show_branch_length = False
+                ts.show_branch_support = False
+                ts.mode = "r"  # rectangular mode
+                ts.branch_vertical_margin = 4
+                ts.scale = 40
+                ts.title.add_face(TextFace(f"Sampling result ({len(species)} species)", fsize=14), column=0)
+
+                # Style internal nodes with rank labels
+                for node in root.traverse():
+                    ns = NodeStyle()
+                    if node.is_leaf():
+                        ns["fgcolor"] = "#2d8a4e"
+                        ns["size"] = 4
+                    else:
+                        ns["fgcolor"] = "#555"
+                        ns["size"] = 3
+                    node.set_style(ns)
+
+                # Render to SVG file
+                with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w") as f:
+                    tmp_path = f.name
+
+                root.render(tmp_path, tree_style=ts, w=800, units="px")
+
+                with open(tmp_path, "r", encoding="utf-8") as f:
+                    svg_content = f.read()
+
+                os.unlink(tmp_path)
+
+                return JsonResponse({
+                    "svg": svg_content,
+                    "newick": newick_str,
+                    "species_count": len(species),
+                })
+
+            except Exception as svg_err:
+                # If SVG rendering fails (e.g., no display), return Newick only
+                return JsonResponse({
+                    "svg": None,
+                    "newick": newick_str,
+                    "species_count": len(species),
+                    "svg_error": str(svg_err),
+                })
+
+        # Default: return Newick file download
+        from django.http import HttpResponse
+        resp = HttpResponse(newick_str, content_type="text/plain; charset=utf-8")
+        resp["Content-Disposition"] = 'attachment; filename="sampling_taxonomic.newick"'
+        return resp
+
+    except ImportError:
+        return JsonResponse({"error": "ete3 is not installed"}, status=500)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Assembly Filtering (Step 3)
+# ═══════════════════════════════════════════════════════════════════════
+
+@require_GET
+def assembly_fields(request):
+    """
+    Return the field registry for assembly filtering UI.
+    Includes field names, types, ranges, choices, and default weights.
+    """
+    from apps.taxonomy.sampling.assembly_engine import get_filter_fields
+    return JsonResponse(get_filter_fields())
+
+
+@csrf_exempt
+@require_POST
+def assembly_stats(request):
+    """
+    Get aggregate assembly statistics for a set of species accessions.
+
+    POST body JSON:
+      { "accessions": ["GCF_...", ...] }
+
+    Returns min/max/avg for numeric fields and distributions for
+    categorical fields.
+    """
+    from apps.taxonomy.sampling.assembly_engine import get_assembly_stats
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    accessions = data.get("accessions", [])
+    if not accessions:
+        return JsonResponse({"error": "No accessions provided"}, status=400)
+
+    try:
+        stats = get_assembly_stats(accessions)
+        return JsonResponse(stats)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_POST
+def assembly_filter(request):
+    """
+    Apply assembly filtering/scoring to the sampling result.
+
+    POST body JSON:
+      {
+        "accessions": ["GCF_...", ...],
+        "mode": "hard" | "scoring",
+        "hard_filters": { "genome_coverage": {"min": 30}, ... },
+        "categorical_filters": { "genome_level": ["Chromosome", "Complete Genome"], ... },
+        "scoring_weights": { "genome_coverage": 0.3, "contig_n50_kb": 0.3, ... },
+        "best_per_species": true
+      }
+
+    Returns filtered/scored species list with full assembly metadata.
+    """
+    from apps.taxonomy.sampling.assembly_engine import (
+        run_assembly_filter,
+        AssemblyFilterConfig,
+    )
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    accessions = data.get("accessions", [])
+    if not accessions:
+        return JsonResponse({"error": "No accessions provided"}, status=400)
+
+    mode = data.get("mode", "scoring")
+    if mode not in ("hard", "scoring"):
+        return JsonResponse({"error": f"Invalid mode: {mode}"}, status=400)
+
+    config = AssemblyFilterConfig(
+        mode=mode,
+        hard_filters=data.get("hard_filters") or {},
+        categorical_filters=data.get("categorical_filters") or {},
+        scoring_weights=data.get("scoring_weights") or {},
+        best_per_species=data.get("best_per_species", True),
+    )
+
+    try:
+        result = run_assembly_filter(accessions, config)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({
+        "success": True,
+        "mode": result.mode,
+        "input_species": result.input_species,
+        "output_species": result.output_species,
+        "filtered_out": result.filtered_out,
+        "stats": result.stats,
+        "warnings": result.warnings,
+        "species": result.species,
+    })

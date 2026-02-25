@@ -329,7 +329,13 @@ def compute_quality_score(
 
 
 def get_kingdom_taxid(kingdom: str) -> int:
-    """Get taxid for a kingdom name."""
+    """Get taxid for a kingdom name.
+    
+    Resolves in order:
+    1. Known KINGDOMS dict
+    2. Direct numeric TaxID
+    3. Search NCBI Taxonomy API by name
+    """
     kingdom_lower = kingdom.lower()
     if kingdom_lower in KINGDOMS:
         return KINGDOMS[kingdom_lower]
@@ -337,7 +343,36 @@ def get_kingdom_taxid(kingdom: str) -> int:
     try:
         return int(kingdom)
     except (ValueError, TypeError):
-        raise ValueError(f"Unknown kingdom: {kingdom}. Available: {list(KINGDOMS.keys())}")
+        pass
+    # Search NCBI Taxonomy by name
+    taxid = _search_ncbi_taxid_by_name(kingdom)
+    if taxid:
+        return taxid
+    raise ValueError(f"Unknown kingdom or taxon: '{kingdom}'. Could not find in NCBI Taxonomy.")
+
+
+def _search_ncbi_taxid_by_name(name: str) -> Optional[int]:
+    """Search NCBI Taxonomy EUtils for a taxon name and return its TaxID."""
+    try:
+        url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        params = {
+            "db": "taxonomy",
+            "term": f'{name}[Scientific Name]',
+            "retmode": "json",
+            "retmax": 1,
+        }
+        r = requests.get(url, params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        id_list = data.get("esearchresult", {}).get("idlist", [])
+        if id_list:
+            logger.info(f"Resolved '{name}' to NCBI TaxID {id_list[0]}")
+            return int(id_list[0])
+        logger.warning(f"No NCBI TaxID found for '{name}'")
+        return None
+    except Exception as e:
+        logger.error(f"Error searching NCBI Taxonomy for '{name}': {e}")
+        return None
 
 
 def get_quality_criteria(kingdom: str) -> Dict[str, float]:

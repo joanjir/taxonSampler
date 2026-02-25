@@ -373,7 +373,6 @@ def sync_taxon_with_col(
             sync_run.add_log("INFO", f"Skipping {len(existing_accessions)} existing genomes")
         
         new_count = 0
-        skipped_existing = 0
         for genome_data in fetch_ncbi_genomes(taxid):
             sync_run.ncbi_total += 1
             
@@ -387,7 +386,7 @@ def sync_taxon_with_col(
             # Skip already synced genomes
             accession = genome_data.get("accession", "")
             if skip_existing and accession and accession in existing_accessions:
-                skipped_existing += 1
+                sync_run.ncbi_skipped += 1
                 continue
 
             # Apply filters using centralized GenomeFilters
@@ -421,9 +420,9 @@ def sync_taxon_with_col(
             if new_count % 50 == 0 and new_count > 0:
                 sync_run.save(update_fields=[
                     "ncbi_total", "ncbi_fetched", "ncbi_filtered",
-                    "taxa_created", "genomes_created",
+                    "ncbi_skipped", "taxa_created", "genomes_created",
                 ])
-                sync_run.add_log("INFO", f"NCBI progress: {new_count} new genomes")
+                sync_run.add_log("INFO", f"NCBI progress: {new_count} new genomes ({sync_run.ncbi_skipped} already in DB)")
                 logger.info(f"TaxonSync #{sync_run_id}: {new_count} new genomes")
             
             # limit applies to NEW genomes only
@@ -432,10 +431,11 @@ def sync_taxon_with_col(
 
         sync_run.save(update_fields=[
             "ncbi_total", "ncbi_fetched", "ncbi_filtered",
-            "taxa_created", "genomes_created",
+            "ncbi_skipped", "taxa_created", "genomes_created",
         ])
-        sync_run.add_log("INFO", f"Skipped {skipped_existing} genomes that already exist in DB")
-        sync_run.add_log("INFO", f"NCBI phase complete: {new_count} new genomes ({sync_run.ncbi_fetched} processed)")
+        if sync_run.ncbi_skipped:
+            sync_run.add_log("INFO", f"Skipped {sync_run.ncbi_skipped} genomes that already exist in DB")
+        sync_run.add_log("INFO", f"NCBI phase complete: {new_count} new genomes ({sync_run.ncbi_fetched} processed, {sync_run.ncbi_skipped} already in DB)")
 
         # ========== PHASE 2: Match with COL ==========
         sync_run.mark_col_phase()
@@ -471,6 +471,10 @@ def sync_taxon_with_col(
                     _create_col_crosswalk_task(taxon, result, sync_run, COL_DATASET)
                 else:
                     sync_run.col_unmatched += 1
+                    # Mark genomes as "not_in_col" — searched but not found
+                    NCBIGenome.objects.filter(taxon=taxon).exclude(
+                        col_match_status="manual"
+                    ).update(col_match_status="not_in_col")
 
             except Exception as e:
                 logger.warning(f"COL match failed for {taxon.scientific_name}: {e}")
@@ -564,7 +568,7 @@ def _create_col_crosswalk_task(taxon, result, sync_run, col_dataset: str):
             defaults={
                 "score": 1.0 if result.matched else 0.0,
                 "decision": "high",
-                "method": "exact" if result.matched else "no_match",
+                "method": "exact",
                 "is_active": True,
                 "evidence": {"source": "checklistbank", "matched": result.matched},
             },

@@ -25,11 +25,57 @@ from urllib3.util.retry import Retry
 # ============================================================
 
 def canonicalize_scientific_name(name: str) -> str:
-    """Normalize scientific name: Mus (Mus) musculus -> Mus musculus"""
+    """Normalize scientific name:
+    - Mus (Mus) musculus -> Mus musculus
+    - Candida dubliniensis CD36 -> Candida dubliniensis
+    - Trichomonas vaginalis G3 -> Trichomonas vaginalis
+    - Aegilops tauschii subsp. strangulata -> Aegilops tauschii subsp. strangulata  (kept)
+    - Brassica oleracea var. oleracea -> Brassica oleracea var. oleracea  (kept)
+    Keeps genus + species for binomial names, but preserves infraspecific markers
+    (subsp., var., f., f. sp.).
+    """
     s = (name or "").strip()
+    # Remove subgenus in parentheses: Mus (Mus) musculus -> Mus musculus
     s = re.sub(r"\s+\([^)]*\)", "", s)
-    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # For binomial+ names, decide what to keep
+    parts = s.split()
+    if len(parts) > 2:
+        third = parts[2]
+        # Infraspecific markers: keep genus + species + marker + epithet
+        if third.lower().rstrip(".") in ("subsp", "var", "f"):
+            # "f. sp." is a special case (forma specialis): keep 4 words after genus+species
+            if third.lower() == "f." and len(parts) > 3 and parts[3].lower() == "sp.":
+                s = " ".join(parts[:5]) if len(parts) >= 5 else " ".join(parts[:4])
+            else:
+                s = " ".join(parts[:4]) if len(parts) >= 4 else s
+        elif third[0].isupper() or third[0].isdigit():
+            # Likely a strain suffix (G3, CD36, CBS 6074) - remove it
+            s = " ".join(parts[:2])
     return s
+
+
+# Infraspecific rank markers -> COL API rank value
+_INFRASPECIFIC_MARKERS = {
+    "subsp.": "subspecies",
+    "var.": "variety",
+    "f.": "form",
+    "f. sp.": "form",  # forma specialis
+}
+
+
+def detect_infraspecific_rank(name: str) -> Optional[str]:
+    """If the scientific name contains an infraspecific marker (subsp., var., f.),
+    return the corresponding COL rank (subspecies, variety, form).
+    Returns None for plain binomial names."""
+    lower = (name or "").lower()
+    # Check "f. sp." first (more specific)
+    if " f. sp. " in lower:
+        return "form"
+    for marker, rank in _INFRASPECIFIC_MARKERS.items():
+        if f" {marker} " in lower or lower.endswith(f" {marker}"):
+            return rank
+    return None
 
 
 def classification_list_normalized(classification: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -100,11 +146,21 @@ class ChecklistBankClient:
         rank: Optional[str] = None,
         kingdom: Optional[str] = None,
     ) -> COLMatchResult:
-        """Match a scientific name against COL."""
+        """Match a scientific name against COL.
+        
+        First tries the match endpoint. If no match found, falls back to search.
+        Automatically detects infraspecific markers (subsp., var., f.) in the name
+        and overrides the rank parameter accordingly.
+        """
+        # Detect infraspecific rank from the name itself (overrides NCBI rank)
+        infraspecific_rank = detect_infraspecific_rank(scientific_name)
+        effective_rank = infraspecific_rank or rank
+
+        # Try match endpoint first
         url = f"{self.base_url}/dataset/{dataset}/match/nameusage"
         params: Dict[str, str] = {"scientificName": scientific_name}
-        if rank:
-            params["rank"] = rank
+        if effective_rank:
+            params["rank"] = effective_rank
         if kingdom:
             params["kingdom"] = kingdom
 
@@ -117,7 +173,13 @@ class ChecklistBankClient:
             usage = payload if isinstance(payload, dict) else {}
 
         ext_id = usage.get("id")
+        
+        # If match endpoint didn't find anything, try search as fallback
         if not ext_id:
+            search_result = self._search_nameusage(dataset, scientific_name, effective_rank)
+            if search_result:
+                return search_result
+            # No match from either endpoint
             return COLMatchResult(
                 matched=False,
                 external_id=None,
@@ -145,6 +207,62 @@ class ChecklistBankClient:
             classification=cls_dict,
             raw=payload,
         )
+
+    def _search_nameusage(
+        self,
+        dataset: str,
+        scientific_name: str,
+        rank: Optional[str] = None,
+    ) -> Optional[COLMatchResult]:
+        """Search for a species in COL using the search endpoint (fallback)."""
+        url = f"{self.base_url}/dataset/{dataset}/nameusage/search"
+        params: Dict[str, str] = {"q": scientific_name, "limit": "1"}
+        if rank:
+            params["rank"] = rank
+
+        try:
+            r = self.session.get(url, params=params, timeout=self.timeout)
+            r.raise_for_status()
+            data: Dict[str, Any] = r.json() or {}
+            
+            results = data.get("result", [])
+            if not results:
+                return None
+            
+            hit = results[0]
+            # The search endpoint wraps data under "usage"
+            usage = hit.get("usage") or hit
+            ext_id = usage.get("id") or hit.get("id")
+            if not ext_id:
+                return None
+            
+            cls_raw = hit.get("classification") or usage.get("classification") or []
+            cls_path = classification_list_normalized(cls_raw)
+            cls_dict = classification_list_to_dict(cls_raw)
+            
+            # Get name/rank/status from nested usage.name or direct fields
+            name_obj = usage.get("name", {})
+            name = name_obj.get("scientificName") if isinstance(name_obj, dict) else None
+            if not name:
+                name = usage.get("label") or hit.get("label") or scientific_name
+            
+            result_rank = (name_obj.get("rank") if isinstance(name_obj, dict) else None) or usage.get("rank")
+            result_status = usage.get("status") or hit.get("status") or "unknown"
+            result_authorship = (name_obj.get("authorship") if isinstance(name_obj, dict) else None) or usage.get("authorship")
+            
+            return COLMatchResult(
+                matched=True,
+                external_id=str(ext_id),
+                name=name,
+                rank=result_rank,
+                status=result_status,
+                authorship=result_authorship,
+                classification_path=cls_path,
+                classification=cls_dict,
+                raw={"search_result": hit},
+            )
+        except Exception:
+            return None
 
 
 # Alias for backwards compatibility

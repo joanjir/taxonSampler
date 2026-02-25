@@ -355,7 +355,7 @@ class Command(BaseCommand):
                 ncbi_taxon=taxon,
                 external_taxon=ext_taxon,
                 defaults={
-                    "decision": "high" if result.status == "accepted" else "needs_review",
+                    "decision": "high",
                     "method": "exact" if result.status == "accepted" else "trigram",
                     "score": 1.0 if result.status == "accepted" else 0.8,
                     "is_active": True,

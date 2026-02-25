@@ -140,8 +140,8 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write("==> RESUMEN")
-        self.stdout.write(f"  high        : {n_high}")
-        self.stdout.write(f"  needs_review: {n_review}")
+        self.stdout.write(f"  matched     : {n_high}")
+        self.stdout.write(f"  low_score   : {n_review}")
         self.stdout.write(f"  no_match    : {n_nomatch}")
         if fetch_genomes:
             self.stdout.write(f"  genomas NCBI: {n_genomes}")
@@ -155,9 +155,9 @@ class Command(BaseCommand):
             return ("high", "exact_rank", 1.0)
 
         if st == "accepted":
-            return ("needs_review", "exact", 0.75)
+            return ("high", "exact", 0.75)
 
-        return ("needs_review", "exact", 0.60)
+        return ("high", "exact", 0.60)
 
     def _upsert_external(self, system: str, dataset: str, m):
         if m is None or not getattr(m, "external_id", None):

@@ -52,8 +52,11 @@
           <!-- Scope -->
           <div class="mb-3">
             <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge bg-success rounded-circle" style="width:22px;height:22px;line-height:18px;">1</span>
+              <span class="badge rounded-circle" style="width:22px;height:22px;line-height:18px;background-color:rgba(25,135,84,0.45);color:#fff;"><strong>1</strong></span>
               <span class="fw-semibold small">Select your sampling universe</span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Click a node in the taxonomic tree and press 'Use selected node' to define the root of your sampling. All descendant species will be included.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
             </div>
             
             <div class="border rounded-3 p-2 bg-white">
@@ -91,8 +94,11 @@
           <!-- STEP 1.2: Add Targets (optional) -->
           <div class="mb-3">
             <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge bg-primary rounded-circle" style="width:22px;height:22px;line-height:18px;">2</span>
+              <span class="badge rounded-circle" style="width:22px;height:22px;line-height:18px;background-color:rgba(13,202,240,0.45);color:#fff;"><strong>2</strong></span>
               <span class="fw-semibold small">Focus on specific groups <span class="text-muted fw-normal">(optional)</span></span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Optionally add specific clades within your scope. Sampling will only consider species belonging to these groups instead of the entire scope.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
             </div>
             
             <div class="border rounded-3 p-2 bg-white">
@@ -294,9 +300,12 @@
 
           <!-- Mode selection -->
           <div class="mb-3">
-            <label class="form-label small mb-1 fw-semibold">
+            <label class="form-label small mb-1 fw-semibold d-flex align-items-center gap-2">
               <i class="fa-solid fa-sliders me-1 text-muted"></i>
-              Filtering mode
+              <span>Filtering mode</span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Scoring: ranks assemblies by a weighted score and picks the best one per species. Hard filtering: removes any species whose best assembly doesn't meet the thresholds.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
             </label>
             <div class="form-check mb-1">
               <input class="form-check-input" type="radio" name="asmMode" id="asmModeScoring" value="scoring" checked>
@@ -321,7 +330,12 @@
               Assembly Info
             </div>
 
-            <label class="form-label small mb-1">Assembly Level</label>
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>Assembly Level</span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Filter by genome completeness: Complete Genome (fully assembled), Chromosome (chromosome-level), or Scaffold (draft scaffolds). Uncheck levels you want to exclude.">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
             <div id="asmLevelChecks" class="mb-2">
               <div class="form-check form-check-sm">
                 <input class="form-check-input asm-level" type="checkbox" value="Complete Genome" id="asmLvl1" checked>
@@ -337,7 +351,12 @@
               </div>
             </div>
 
-            <label class="form-label small mb-1">RefSeq Category</label>
+            <label class="form-label small mb-1 d-flex align-items-center gap-2">
+              <span>RefSeq Category</span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Filter by NCBI designation: Reference genome (gold standard), Representative genome (best available), or N/A (not yet categorized).">
+                <i class="fa-solid fa-circle-question"></i>
+              </span>
+            </label>
             <div id="asmRefseqChecks" class="mb-2">
               <div class="form-check form-check-sm">
                 <input class="form-check-input asm-refseq" type="checkbox" value="reference genome" id="asmRef1" checked>
@@ -366,7 +385,12 @@
 
             <div class="row g-2 mb-2">
               <div class="col-6">
-                <label class="form-label small mb-0">Coverage ≥</label>
+                <label class="form-label small mb-0 d-flex align-items-center gap-1">
+                  <span>Coverage ≥</span>
+                  <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Minimum sequencing coverage (depth). Higher values indicate more reliable assemblies. Leave empty to accept any coverage.">
+                    <i class="fa-solid fa-circle-question"></i>
+                  </span>
+                </label>
                 <input id="asmMinCoverage" type="number" min="0" step="1" value=""
                        class="form-control form-control-sm" placeholder="any">
               </div>

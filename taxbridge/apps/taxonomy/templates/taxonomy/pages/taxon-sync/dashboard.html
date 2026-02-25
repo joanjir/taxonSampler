@@ -35,12 +35,12 @@
                 <i class="ti ti-dna-2 fs-2"></i>
               </span>
               <div>
-                <div class="text-secondary fs-5">NCBI Taxa</div>
+                <div class="text-secondary fs-5">Species</div>
                 <div class="h1 mb-0">{{ stats.total_taxa|default:"0" }}</div>
               </div>
             </div>
             <div class="text-secondary">
-              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} species
+              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} genome assemblies
             </div>
           </div>
         </div>
@@ -50,15 +50,19 @@
           <div class="card-body">
             <div class="d-flex align-items-center mb-2">
               <span class="avatar bg-green-lt me-3">
-                <i class="ti ti-link fs-2"></i>
+                <i class="ti ti-percentage fs-2"></i>
               </span>
               <div>
-                <div class="text-secondary fs-5">COL Linked</div>
-                <div class="h1 mb-0">{{ stats.crosswalks|default:"0" }}</div>
+                <div class="text-secondary fs-5">COL Coverage</div>
+                {% if stats.total_taxa > 0 %}
+                <div class="h1 mb-0">{% widthratio stats.matched_taxa stats.total_taxa 100 %}%</div>
+                {% else %}
+                <div class="h1 mb-0">0%</div>
+                {% endif %}
               </div>
             </div>
             <div class="text-secondary">
-              <i class="ti ti-world me-1"></i> {{ stats.external_taxa|default:"0" }} external taxa
+              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} / {{ stats.total_taxa|default:"0" }} linked
             </div>
           </div>
         </div>
@@ -68,19 +72,20 @@
           <div class="card-body">
             <div class="d-flex align-items-center mb-2">
               <span class="avatar bg-yellow-lt me-3">
-                <i class="ti ti-percentage fs-2"></i>
+                <i class="ti ti-unlink fs-2"></i>
               </span>
               <div>
-                <div class="text-secondary fs-5">Coverage</div>
-                {% if stats.total_taxa > 0 %}
-                <div class="h1 mb-0">{% widthratio stats.matched_taxa stats.total_taxa 100 %}%</div>
-                {% else %}
-                <div class="h1 mb-0">0%</div>
-                {% endif %}
+                <div class="text-secondary fs-5">Unlinked</div>
+                <div class="h1 mb-0">{{ stats.unlinked_taxa|default:"0" }}</div>
               </div>
             </div>
             <div class="text-secondary">
-              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} linked taxa
+              {% if stats.not_in_col_taxa %}
+              <i class="ti ti-x me-1"></i> {{ stats.not_in_col_taxa }} not in COL
+              {% if stats.pending_taxa %} &middot; {{ stats.pending_taxa }} pending{% endif %}
+              {% else %}
+              <i class="ti ti-clock me-1"></i> pending COL match
+              {% endif %}
             </div>
           </div>
         </div>
@@ -118,7 +123,12 @@
           <div class="card-body py-2">
             <form id="sync-form">
               <div class="mb-2">
-                <label class="form-label required">Kingdom</label>
+                <label class="form-label required d-flex align-items-center gap-1">
+                  <span>Kingdom</span>
+                  <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Taxonomic group to download from NCBI. Genomes and species within this kingdom will be fetched and linked with the Catalogue of Life.">
+                    <i class="ti ti-info-circle"></i>
+                  </span>
+                </label>
                 <select class="form-select form-select-sm" name="kingdom" id="kingdom-select" {% if running_sync %}disabled{% endif %}>
                   <option value="metazoa" selected>🦁 Metazoa</option>
                   <option value="fungi">🍄 Fungi</option>
@@ -126,16 +136,39 @@
                   <option value="bacteria">🦠 Bacteria</option>
                   <option value="archaea">🧬 Archaea</option>
                 </select>
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-1" id="btn-toggle-other" {% if running_sync %}disabled{% endif %}>
+                  <i class="ti ti-search me-1"></i> Other...
+                </button>
+              </div>
+              <div class="mb-2" id="manual-kingdom-row" style="display:none;">
+                <label class="form-label d-flex align-items-center gap-1">
+                  <span>Name or TaxID</span>
+                  <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Enter any taxon name (e.g. Choanozoa, Rhodophyta) or a numeric NCBI TaxID. The system will search NCBI to resolve the name.">
+                    <i class="ti ti-info-circle"></i>
+                  </span>
+                </label>
+                <input type="text" class="form-control form-control-sm" id="manual-kingdom-input"
+                       placeholder="e.g. Choanozoa, Rhodophyta, 33208" {% if running_sync %}disabled{% endif %}>
+                <small class="text-muted">Type any taxon name or NCBI TaxID</small>
               </div>
               <div class="mb-2">
-                <label class="form-label">Limit</label>
+                <label class="form-label d-flex align-items-center gap-1">
+                  <span>Limit</span>
+                  <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Maximum number of genomes to download from NCBI. Set to 0 to download all available genomes for the selected kingdom.">
+                    <i class="ti ti-info-circle"></i>
+                  </span>
+                </label>
                 <input type="number" class="form-control form-control-sm" name="limit" id="limit-input" 
                        value="0" min="0" placeholder="0 = all" {% if running_sync %}disabled{% endif %}>
               </div>
               <div class="mb-3">
                 <label class="form-check form-switch form-check-sm">
                   <input class="form-check-input" type="checkbox" name="skip_quality" id="skip-quality" {% if running_sync %}disabled{% endif %}>
-                  <span class="form-check-label">Skip filters</span>
+                  <span class="form-check-label d-inline-flex align-items-center gap-1">Skip filters
+                    <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="When enabled, downloads all genomes without applying quality filters (assembly level, RefSeq category). Useful for exploratory syncs.">
+                      <i class="ti ti-info-circle"></i>
+                    </span>
+                  </span>
                 </label>
               </div>
               <button type="button" class="btn btn-primary btn-sm w-100" id="btn-start-sync" {% if running_sync %}disabled{% endif %}>
@@ -238,6 +271,17 @@
                                 <span class="text-secondary small">NCBI Downloaded</span>
                               </div>
                               <div class="h2 mb-0 text-dark" id="stat-ncbi-fetched">{{ running_sync.ncbi_fetched }}</div>
+                              {% if running_sync.ncbi_skipped > 0 %}
+                              <div class="text-secondary small mt-1" id="stat-ncbi-skipped-row">
+                                <i class="ti ti-database-check me-1"></i>
+                                <span id="stat-ncbi-skipped">{{ running_sync.ncbi_skipped }}</span> already in DB
+                              </div>
+                              {% else %}
+                              <div class="text-secondary small mt-1 d-none" id="stat-ncbi-skipped-row">
+                                <i class="ti ti-database-check me-1"></i>
+                                <span id="stat-ncbi-skipped">0</span> already in DB
+                              </div>
+                              {% endif %}
                             </div>
                           </div>
                         </div>
@@ -344,8 +388,20 @@
                         <th class="w-1">ID</th>
                         <th>Kingdom</th>
                         <th>Status</th>
-                        <th class="text-end">NCBI</th>
-                        <th class="text-end">COL</th>
+                        <th class="text-end">
+                          NCBI
+                          <span class="ms-1 text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help"
+                                data-bs-content="New taxa created in this sync / Total genomes available from NCBI for this kingdom">
+                            <i class="ti ti-info-circle" style="font-size:.85rem;cursor:pointer"></i>
+                          </span>
+                        </th>
+                        <th class="text-end">
+                          COL
+                          <span class="ms-1 text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help"
+                                data-bs-content="Taxa newly linked to Catalogue of Life / Total taxa attempted to match">
+                            <i class="ti ti-info-circle" style="font-size:.85rem;cursor:pointer"></i>
+                          </span>
+                        </th>
                         <th class="text-end">Date</th>
                       </tr>
                     </thead>
@@ -387,9 +443,12 @@
                           {% endif %}
                         </td>
                         <td class="text-end">
-                          <span class="text-blue fw-bold">{{ sync.ncbi_fetched }}</span>
+                          <span class="text-blue fw-bold">{{ sync.taxa_created }}</span>
                           <span class="text-secondary">/</span>
                           <span class="fw-medium">{{ sync.ncbi_total }}</span>
+                          {% if sync.ncbi_skipped > 0 %}
+                          <br><span class="text-muted small"><i class="ti ti-database-check"></i> {{ sync.ncbi_skipped }} in DB</span>
+                          {% endif %}
                         </td>
                         <td class="text-end">
                           <span class="text-green fw-bold">{{ sync.col_matched }}</span>
@@ -485,14 +544,14 @@
                     <select id="statusFilter" class="form-select form-select-sm" style="width: auto;">
                       <option value="">All Match Status</option>
                       <option value="matched">Linked</option>
-                      <option value="unmatched">Unlinked</option>
-                      <option value="needs_review">Needs review</option>
+                      <option value="unlinked">Unlinked</option>
+                      <option value="manual">Manual</option>
                     </select>
                     <select id="colStatusFilter" class="form-select form-select-sm" style="width: auto;">
                       <option value="">All COL Status</option>
                       <option value="accepted">Accepted</option>
                       <option value="synonym">Synonym</option>
-                      <option value="no_match">Not in COL</option>
+                      <option value="not_in_col">Not in COL</option>
                     </select>
                     <input type="search" id="searchInput" class="form-control form-select-sm" placeholder="Search organism..." style="width: 200px;">
                   </div>
@@ -560,91 +619,262 @@
 <!-- Edit Genome Modal (admin only) -->
 {% if is_admin %}
 <div class="modal modal-blur fade" id="editGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="ti ti-edit me-2"></i>Edit COL Match</h5>
+        <h5 class="modal-title"><i class="ti ti-edit me-2"></i>Manual COL Match</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         {% csrf_token %}
         <input type="hidden" id="editAccession">
-        
-        <!-- Current species info -->
-        <div class="mb-4">
-          <div class="subheader mb-2">Current Species</div>
-          <div class="card bg-light">
-            <div class="card-body py-2">
-              <div class="row">
-                <div class="col-6">
-                  <div class="text-muted small">Organism</div>
-                  <div class="fw-bold" id="editOrganismName">-</div>
+
+        <!-- ───────── STEP 1: Current Species (read-only context) ───────── -->
+        <div class="d-flex align-items-center gap-3 mb-3 p-2 bg-light rounded">
+          <div>
+            <i class="ti ti-dna-2 text-primary" style="font-size:1.5rem"></i>
+          </div>
+          <div class="flex-grow-1">
+            <div class="fw-bold" id="editOrganismName">-</div>
+            <div class="text-muted small"><code id="editAccessionDisplay">-</code></div>
+          </div>
+          <div id="currentMatchBadge"></div>
+        </div>
+
+        <!-- Current COL match (read only, only shown when exists) -->
+        <div class="mb-3" id="currentMatchSection" style="display: none;">
+          <div id="currentMatchInfo" class="alert alert-light mb-0 py-2">
+            <span class="text-muted">No COL match</span>
+          </div>
+        </div>
+
+        <!-- ───────── STEP 2: Search & Link COL ───────── -->
+        <div class="card mb-3">
+          <div class="card-header py-2">
+            <h4 class="card-title mb-0">
+              <i class="ti ti-search me-1"></i>1. Search &amp; Link COL Species
+            </h4>
+          </div>
+          <div class="card-body py-3">
+            <div class="mb-2">
+              <label class="form-label small mb-1">Species Name</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="editSpeciesName"
+                       placeholder="Type the species name to search...">
+                <button class="btn btn-primary" type="button" id="btnSearchCol">
+                  <i class="ti ti-search me-1"></i>COL
+                </button>
+                <button class="btn btn-lime" type="button" id="btnSearchGbif">
+                  <i class="ti ti-world me-1"></i>GBIF
+                </button>
+              </div>
+              <div class="form-text text-muted">Search in <strong>COL</strong> (local DB) or <strong>GBIF</strong> (online) — this also updates the taxon record.</div>
+            </div>
+
+            <!-- Search results -->
+            <div id="colSearchResults" class="list-group mb-0" style="max-height: 180px; overflow-y: auto;"></div>
+            
+            <!-- Selected COL taxon -->
+            <div id="selectedColSection" style="display: none;" class="mt-2">
+              <div class="alert alert-success d-flex align-items-center mb-0 py-2">
+                <i class="ti ti-check-circle me-2 text-success" style="font-size:1.2rem"></i>
+                <div class="flex-grow-1">
+                  <div class="fw-bold" id="selectedColName">-</div>
+                  <div class="small text-muted" id="selectedColClassification">-</div>
                 </div>
-                <div class="col-6">
-                  <div class="text-muted small">Accession</div>
-                  <div><code id="editAccessionDisplay">-</code></div>
+                <button type="button" class="btn btn-sm btn-ghost-danger" onclick="clearColSelection()">
+                  <i class="ti ti-x"></i>
+                </button>
+              </div>
+              <input type="hidden" id="selectedColId">
+            </div>
+          </div>
+        </div>
+
+        <!-- ───────── STEP 3: Taxonomy (auto-filled, editable) ───────── -->
+        <div class="card mb-3">
+          <div class="card-header py-2">
+            <h4 class="card-title mb-0">
+              <i class="ti ti-hierarchy-2 me-1"></i>2. Taxonomy
+              <span class="badge bg-azure-lt text-azure ms-2 fw-normal" id="taxFieldCount">0 fields</span>
+            </h4>
+          </div>
+          <div class="card-body py-3">
+            <!-- Primary ranks (always visible) -->
+            <div class="row g-2 mb-2">
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Domain</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="domain" id="editTaxDomain" placeholder="Eukaryota">
+              </div>
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Kingdom</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="kingdom" id="editTaxKingdom" placeholder="Plantae">
+              </div>
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Phylum</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="phylum" id="editTaxPhylum" placeholder="Chlorophyta">
+              </div>
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Class</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="class" id="editTaxClass" placeholder="Mamiellophyceae">
+              </div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Order</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="order" id="editTaxOrder" placeholder="Mamiellales">
+              </div>
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Family</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="family" id="editTaxFamily" placeholder="Mamiellaceae">
+              </div>
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Genus</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="genus" id="editTaxGenus" placeholder="Micromonas">
+              </div>
+              <div class="col-md-6 col-lg-3">
+                <label class="form-label small text-muted mb-0">Species</label>
+                <input type="text" class="form-control form-control-sm tax-field" data-rank="species" id="editTaxSpecies" placeholder="">
+              </div>
+            </div>
+
+            <!-- Extended ranks (collapsible) -->
+            <div class="mt-1">
+              <a class="text-muted small" data-bs-toggle="collapse" href="#extendedRanks" role="button" aria-expanded="false" id="toggleExtendedRanks">
+                <i class="ti ti-chevron-down me-1"></i>Show all COL ranks <span class="text-muted" id="extRankFilled"></span>
+              </a>
+              <div class="collapse" id="extendedRanks">
+                <div class="mt-2 pt-2 border-top">
+                  <!-- Sub-kingdom -->
+                  <div class="small text-muted fw-bold mb-1">Sub-ranks</div>
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subkingdom</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subkingdom" id="editTaxSubkingdom">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subphylum</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subphylum" id="editTaxSubphylum">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Infraphylum</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="infraphylum" id="editTaxInfraphylum">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Parvphylum</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="parvphylum" id="editTaxParvphylum">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subclass</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subclass" id="editTaxSubclass">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Suborder</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="suborder" id="editTaxSuborder">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subfamily</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subfamily" id="editTaxSubfamily">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subgenus</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subgenus" id="editTaxSubgenus">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subspecies</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subspecies" id="editTaxSubspecies">
+                    </div>
+                  </div>
+                  <!-- Super/Infra ranks -->
+                  <div class="small text-muted fw-bold mb-1">Super &amp; Infra ranks</div>
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Gigaclass</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="gigaclass" id="editTaxGigaclass">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Megaclass</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="megaclass" id="editTaxMegaclass">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Superclass</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="superclass" id="editTaxSuperclass">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Infraclass</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="infraclass" id="editTaxInfraclass">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subterclass</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subterclass" id="editTaxSubterclass">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Superorder</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="superorder" id="editTaxSuperorder">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Infraorder</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="infraorder" id="editTaxInfraorder">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Parvorder</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="parvorder" id="editTaxParvorder">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Superfamily</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="superfamily" id="editTaxSuperfamily">
+                    </div>
+                  </div>
+                  <!-- Tribe, series & other -->
+                  <div class="small text-muted fw-bold mb-1">Tribe &amp; Other</div>
+                  <div class="row g-2">
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Tribe</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="tribe" id="editTaxTribe">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subtribe</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subtribe" id="editTaxSubtribe">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Variety</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="variety" id="editTaxVariety">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Series</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="series" id="editTaxSeries">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Section (zoology)</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="section zoology" id="editTaxSectionZoology">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label small text-muted mb-0">Subsection (zoology)</label>
+                      <input type="text" class="form-control form-control-sm tax-field tax-ext" data-rank="subsection zoology" id="editTaxSubsectionZoology">
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        
-        <!-- Current COL match -->
-        <div class="mb-4" id="currentMatchSection">
-          <div class="subheader mb-2">Current COL Match</div>
-          <div id="currentMatchInfo" class="alert alert-light">
-            <span class="text-muted">No COL match</span>
-          </div>
-        </div>
-        
-        <!-- Search COL -->
-        <div class="mb-4">
-          <div class="subheader mb-2">Search COL Taxon</div>
-          <div class="input-group mb-2">
-            <span class="input-group-text"><i class="ti ti-search"></i></span>
-            <input type="text" class="form-control" id="colSearchInput" placeholder="Search by species name...">
-          </div>
-          <div id="colSearchResults" class="list-group" style="max-height: 200px; overflow-y: auto;">
-            <!-- Results will be populated here -->
-          </div>
-        </div>
-        
-        <!-- Selected COL taxon -->
-        <div class="mb-4" id="selectedColSection" style="display: none;">
-          <div class="subheader mb-2">Selected COL Taxon</div>
-          <div class="alert alert-success d-flex align-items-center" id="selectedColInfo">
-            <div class="flex-grow-1">
-              <div class="fw-bold" id="selectedColName">-</div>
-              <div class="small text-muted" id="selectedColClassification">-</div>
-            </div>
-            <button type="button" class="btn btn-sm btn-ghost-danger" onclick="clearColSelection()">
-              <i class="ti ti-x"></i>
-            </button>
-          </div>
-          <input type="hidden" id="selectedColId">
-        </div>
-        
-        <!-- Match status -->
-        <div class="mb-4">
-          <div class="subheader mb-2">Match Status</div>
-          <select id="editMatchStatus" class="form-select">
-            <option value="matched">Linked</option>
-            <option value="unmatched">Unlinked</option>
-            <option value="needs_review">Needs Review</option>
-            <option value="no_match">Not in COL</option>
-          </select>
-        </div>
-        
-        <!-- Notes -->
+
+        <!-- ───────── STEP 3: Notes ───────── -->
         <div class="mb-3">
-          <div class="subheader mb-2">Notes</div>
-          <textarea id="editMatchNotes" class="form-control" rows="3" placeholder="Add notes about this COL match..."></textarea>
+          <label class="form-label small mb-1"><i class="ti ti-notes me-1"></i>Notes</label>
+          <textarea id="editMatchNotes" class="form-control" rows="2" placeholder="Notes about this manual match..."></textarea>
+        </div>
+
+        <!-- Info badge -->
+        <div class="alert alert-info py-2 mb-0">
+          <i class="ti ti-info-circle me-1"></i>
+          Saving will mark this species as <span class="badge bg-purple-lt text-purple">Manual</span> match.
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="saveGenomeMatch()">
-          <i class="ti ti-check me-2"></i>Save Changes
+          <i class="ti ti-check me-2"></i>Save Manual Match
         </button>
       </div>
     </div>
@@ -665,7 +895,8 @@
       genomesList: "{% url 'taxonomy_api:genomes-list' %}",
       genomeDetail: "/api/v1/taxonomy/genomes/",
       genomeUpdate: "/api/v1/taxonomy/genomes/",
-      colSearch: "/api/v1/taxonomy/col/search/"
+      colSearch: "/api/v1/taxonomy/col/search/",
+      gbifSearch: "/api/v1/taxonomy/gbif/search/"
     }
   };
 </script>

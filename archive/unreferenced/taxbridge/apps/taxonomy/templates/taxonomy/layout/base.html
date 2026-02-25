@@ -1,0 +1,51 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <title>
+      {% block title %}
+        TaxBridge
+      {% endblock %}
+    </title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{% static 'taxonomy/img/favicon.ico' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'taxonomy/img/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'taxonomy/img/favicon-16x16.png' %}">
+    <!-- Tabler (Bootstrap-based) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="{% static 'taxonomy/css/tree.css' %}" />
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <!-- jQuery (necesario para Select2 4.x) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+
+    {% block extra_css %}
+
+    {% endblock %}
+  </head>
+
+  <body class="d-flex flex-column">
+    {% block body %}
+
+    {% endblock %}
+
+    <!-- Tabler JS (includes Bootstrap) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/js/tabler.min.js"></script>
+    <script>
+      // Tabler bundles Bootstrap but exposes it as tabler.bootstrap, not window.bootstrap
+      if (typeof bootstrap === 'undefined' && window.tabler && window.tabler.bootstrap) {
+        window.bootstrap = window.tabler.bootstrap;
+      }
+    </script>
+
+    {% block extra_js %}
+
+    {% endblock %}
+  </body>
+</html>

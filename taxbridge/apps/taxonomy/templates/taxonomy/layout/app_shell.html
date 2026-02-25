@@ -3,7 +3,9 @@
 {% block body %}
 <div class="page">
   <!-- Header -->
-  {% include "taxonomy/partials/head.html" %}
+{% if not is_error %}
+    {% include "taxonomy/partials/head.html" %}
+{% endif %}
 
   <div class="page-wrapper">
     <div class="page-body">

@@ -53,6 +53,9 @@ urlpatterns = [
     # COL Search API (for edit modal)
     path("col/search/", views.col_search, name="col-search"),
     
+    # GBIF Search API (for edit modal)
+    path("gbif/search/", views.gbif_search, name="gbif-search"),
+    
     # Taxon Sync API (NCBI + COL)
     path("taxon-sync/start/", api_start_taxon_sync, name="taxon-sync-start"),
     path("taxon-sync/<int:sync_id>/status/", api_taxon_sync_status, name="taxon-sync-status"),

@@ -749,6 +749,44 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       const reserve = VIS.BTN_W + 6;
       fitTextToWidth(t, VIS.MAX_W - (VIS.PAD_X + VIS.CB_SIZE + VIS.CB_GAP) - VIS.PAD_X - reserve);
 
+      // Source badge for species (A=Accepted, S=Synonym, M=Manual)
+      // Positioned outside the node box, at the top-left corner
+      const src = (d.data.source || "").toLowerCase();
+      const isSpecies = (d.data.rank || "").toLowerCase() === "species";
+      if (isSpecies && src) {
+        let letter, bgFill, fgFill;
+        if (src === "synonym") {
+          letter = "S"; bgFill = "#d1ecf1"; fgFill = "#0c5460";
+        } else if (src === "manual") {
+          letter = "M"; bgFill = "#f8d7e8"; fgFill = "#d63384";
+        } else {
+          letter = "A"; bgFill = "#d4edda"; fgFill = "#155724";
+        }
+        const bg = g.append("g").attr("class", "source-badge");
+        const txt = bg.append("text")
+          .text(letter)
+          .attr("x", 0)
+          .attr("y", 0)
+          .attr("dy", "0.35em")
+          .attr("text-anchor", "middle")
+          .style("font-size", "7px")
+          .style("font-weight", "700")
+          .style("fill", fgFill)
+          .style("font-family", "system-ui, -apple-system, sans-serif");
+        const tbb = txt.node().getBBox();
+        const pw = 3, ph = 1.5;
+        bg.insert("rect", ":first-child")
+          .attr("x", tbb.x - pw)
+          .attr("y", tbb.y - ph)
+          .attr("width", tbb.width + pw * 2)
+          .attr("height", tbb.height + ph * 2)
+          .attr("rx", 3).attr("ry", 3)
+          .style("fill", bgFill)
+          .style("stroke", "none");
+        // Position at top-left corner of the node box
+        bg.attr("transform", `translate(-3, ${-VIS.NODE_H / 2 - 2})`);
+      }
+
       const bbox = t.node().getBBox();
       const wBox = Math.max(VIS.MIN_W, Math.min(VIS.MAX_W, bbox.width + bbox.x + VIS.PAD_X + reserve));
       g.select("rect.node-box").attr("width", wBox);

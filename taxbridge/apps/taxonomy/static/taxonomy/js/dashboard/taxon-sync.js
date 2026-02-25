@@ -15,10 +15,16 @@
     const limitInput = document.getElementById('limit-input');
     const skipQuality = document.getElementById('skip-quality');
     const btnStartSync = document.getElementById('btn-start-sync');
+    const manualInput = document.getElementById('manual-kingdom-input');
+    const manualRow = document.getElementById('manual-kingdom-row');
+    const btnToggleOther = document.getElementById('btn-toggle-other');
     
-    if (kingdomSelect) kingdomSelect.value = 'metazoa';
+    if (kingdomSelect) { kingdomSelect.value = 'metazoa'; kingdomSelect.disabled = false; }
     if (limitInput) limitInput.value = '0';
     if (skipQuality) skipQuality.checked = false;
+    if (manualInput) manualInput.value = '';
+    if (manualRow) manualRow.style.display = 'none';
+    if (btnToggleOther) btnToggleOther.innerHTML = '<i class="ti ti-search me-1"></i> Other...';
     
     // Reset button state
     if (btnStartSync) {
@@ -34,10 +40,42 @@
     
     let pollInterval = null;
 
+    // Toggle manual input with "Other" button
+    const btnToggleOther = document.getElementById('btn-toggle-other');
+    const manualRow = document.getElementById('manual-kingdom-row');
+    const kingdomSelect = document.getElementById('kingdom-select');
+    if (btnToggleOther && manualRow) {
+      btnToggleOther.addEventListener('click', function() {
+        const isVisible = manualRow.style.display !== 'none';
+        manualRow.style.display = isVisible ? 'none' : '';
+        if (isVisible) {
+          // Closing: clear input, re-enable select
+          const input = document.getElementById('manual-kingdom-input');
+          if (input) input.value = '';
+          if (kingdomSelect) kingdomSelect.disabled = false;
+          btnToggleOther.innerHTML = '<i class="ti ti-search me-1"></i> Other...';
+        } else {
+          // Opening: disable select, focus input
+          if (kingdomSelect) kingdomSelect.disabled = true;
+          btnToggleOther.innerHTML = '<i class="ti ti-x me-1"></i> Use Kingdom';
+          const input = document.getElementById('manual-kingdom-input');
+          if (input) input.focus();
+        }
+      });
+    }
+
     // Start sync
     if (btnStartSync && !btnStartSync.disabled) {
       btnStartSync.addEventListener('click', async function() {
-        const kingdom = document.getElementById('kingdom-select').value;
+        const manualInput = document.getElementById('manual-kingdom-input');
+        let kingdom = document.getElementById('kingdom-select').value;
+        // Use manual input if visible and filled
+        if (manualRow && manualRow.style.display !== 'none' && manualInput && manualInput.value.trim()) {
+          kingdom = manualInput.value.trim();
+        } else if (manualRow && manualRow.style.display !== 'none') {
+          alert('Please enter a name or TaxID');
+          return;
+        }
         const limit = parseInt(document.getElementById('limit-input').value) || 0;
         const skipQuality = document.getElementById('skip-quality').checked;
 
@@ -162,9 +200,17 @@
             avatarCol?.classList.remove('opacity-50');
             stepCrosswalks.classList.add('border-purple');
             avatarCrosswalks?.classList.remove('opacity-50');
-            statusText.innerHTML = '<strong>Completed!</strong> All steps finished successfully.';
-            phaseBadge.textContent = 'Completed';
-            phaseBadge.className = 'badge bg-green-lt text-green text-uppercase fs-5 me-2';
+            
+            // Customize message: if all genomes were already in DB
+            if (data.genomes_created === 0 && data.ncbi_skipped > 0) {
+              statusText.innerHTML = `<strong>Completed!</strong> All ${data.ncbi_skipped} genome(s) from NCBI already exist in the database.`;
+              phaseBadge.textContent = 'No New Data';
+              phaseBadge.className = 'badge bg-azure-lt text-azure text-uppercase fs-5 me-2';
+            } else {
+              statusText.innerHTML = '<strong>Completed!</strong> All steps finished successfully.';
+              phaseBadge.textContent = 'Completed';
+              phaseBadge.className = 'badge bg-green-lt text-green text-uppercase fs-5 me-2';
+            }
           }
           
           // Update stats
@@ -172,6 +218,16 @@
           document.getElementById('stat-taxa-created').textContent = data.taxa_created;
           document.getElementById('stat-col-matched').textContent = data.col_matched;
           document.getElementById('stat-crosswalks').textContent = data.crosswalks_created;
+          
+          // Show "already in DB" count if any genomes were skipped
+          const skippedRow = document.getElementById('stat-ncbi-skipped-row');
+          const skippedSpan = document.getElementById('stat-ncbi-skipped');
+          if (skippedRow && skippedSpan) {
+            skippedSpan.textContent = data.ncbi_skipped || 0;
+            if (data.ncbi_skipped > 0) {
+              skippedRow.classList.remove('d-none');
+            }
+          }
 
           // Refresh if completed
           if (['completed', 'failed', 'cancelled'].includes(data.status)) {

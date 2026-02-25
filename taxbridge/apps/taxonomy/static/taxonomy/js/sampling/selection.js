@@ -142,7 +142,7 @@ export function createSelectionManager({ renderer }) {
       const quota = c.quota ?? "—";
       const sel = c.selected ?? "—";
       return `<tr>
-        <td title="${escapeHtml(name)}">${escapeHtml(name)}</td>
+        <td title="${escapeHtml(name)}" style="word-break:break-word;white-space:normal;">${escapeHtml(name)}</td>
         <td class="text-end">${avail}</td>
         <td class="text-end">${quota}</td>
         <td class="text-end fw-bold">${sel}</td>

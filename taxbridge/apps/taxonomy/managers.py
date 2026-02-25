@@ -105,8 +105,8 @@ class ExternalTaxonManager(models.Manager):
             Tree in D3 format ready for the frontend
         """
         qs = (
-            self.filter(system=system, rank="species", status="accepted")
-            .only("id", "external_id", "name", "rank", "classification_path")
+            self.filter(system=system, rank="species")
+            .only("id", "external_id", "name", "rank", "status", "classification_path")
             .order_by("id")
         )
         if limit is not None:
@@ -114,36 +114,49 @@ class ExternalTaxonManager(models.Manager):
         
         root = TrieNode(name="Root", rank="dataset")
         
-        for sp in qs:
-            path = normalize_classification_path(sp.classification_path)
-            # find superkingdom/domain name if present in the path
+        def _source_label(system, status):
+            """Return source label: accepted / synonym / manual."""
+            if system == "manual":
+                return "manual"
+            st = (status or "").lower()
+            if "synonym" in st:
+                return "synonym"
+            return "accepted"
+
+        def _insert_species(sp, path, source="accepted"):
+            """Insert a single species into the trie."""
             sk_name = None
             for r, n in path:
                 if (r or "").lower() in ("superkingdom", "domain"):
                     sk_name = n
                     break
 
-            # increment root species count
             root.meta["species_count"] = root.meta.get("species_count", 0) + 1
             if sk_name:
                 root.meta.setdefault("superkingdom", sk_name)
 
             cur = root
             for rank, name in path:
+                if rank == "species":
+                    continue
                 key = (rank, name)
                 if key not in cur.children:
                     cur.children[key] = TrieNode(name=name, rank=rank, meta={})
                     if sk_name:
                         cur.children[key].meta.setdefault("superkingdom", sk_name)
                 cur = cur.children[key]
-                # increment species count for this node (this species passes through)
                 cur.meta["species_count"] = cur.meta.get("species_count", 0) + 1
                 if sk_name:
                     cur.meta.setdefault("superkingdom", sk_name)
             
             sp_key = ("species", sp.name)
             if sp_key not in cur.children:
-                meta = {"id": sp.id, "external_id": sp.external_id, "species_count": 1}
+                meta = {
+                    "id": sp.id,
+                    "external_id": sp.external_id,
+                    "species_count": 1,
+                    "source": source,
+                }
                 if sk_name:
                     meta["superkingdom"] = sk_name
                 cur.children[sp_key] = TrieNode(
@@ -151,9 +164,35 @@ class ExternalTaxonManager(models.Manager):
                     rank="species",
                     meta=meta,
                 )
-        
+
+        # ── Insert COL species (accepted + synonyms) ──
+        for sp in qs:
+            path = normalize_classification_path(sp.classification_path)
+            _insert_species(sp, path, source=_source_label(sp.system, sp.status))
+
+        # ── Insert manual species (from manual edits) ──
+        manual_qs = (
+            self.filter(system="manual", rank="species")
+            .only("id", "external_id", "name", "rank", "classification")
+            .order_by("id")
+        )
+        primary_ranks = ["kingdom", "phylum", "class", "order", "family", "genus"]
+        for sp in manual_qs:
+            cls = sp.classification or {}
+            # Convert classification dict → path list of (rank, name)
+            path = []
+            # Add domain if present
+            domain_val = cls.get("domain") or cls.get("superkingdom")
+            if domain_val:
+                path.append(("domain", domain_val))
+            for r in primary_ranks:
+                val = cls.get(r)
+                if val:
+                    path.append((r, val))
+            _insert_species(sp, path, source="manual")
+
         tree = root.to_d3()
-        
+
         if rank_cut is not None:
             tree = cut_by_rank(tree, rank_cut)
         

@@ -59,8 +59,7 @@ class ResolutionItem(models.Model):
 
     DECISION_CHOICES = [
         ("high", "High confidence"),
-        ("needs_review", "Needs review"),
-        ("no_match", "No match"),
+        ("manual", "Manual curation"),
     ]
 
     run = models.ForeignKey(ResolutionRun, on_delete=models.CASCADE, related_name="items")

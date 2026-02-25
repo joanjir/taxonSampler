@@ -1,0 +1,119 @@
+﻿<!-- Selection content (dentro de tab) -->
+<div class="card-body p-0 border-bottom">
+  <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light">
+    <div>
+      <span id="selModeBadge" class="badge bg-secondary-lt text-secondary me-2">Manual</span>
+      <span id="selSubtitle" class="text-muted small">Taxa selected for sampling / export</span>
+    </div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Selection actions">
+      <!-- Export dropdown -->
+      <div class="btn-group btn-group-sm" role="group">
+        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export">
+          <i class="fa-solid fa-file-export me-1"></i>
+          Export
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <button id="exportSelJson" class="dropdown-item" type="button"><i class="fa-solid fa-code me-2"></i>JSON</button>
+          </li>
+          <li>
+            <button id="exportSelTxt" class="dropdown-item" type="button"><i class="fa-solid fa-file-lines me-2"></i>List (txt)</button>
+          </li>
+          <li>
+            <button id="exportSelNewick" class="dropdown-item" type="button"><i class="fa-solid fa-diagram-project me-2"></i>Newick (species)</button>
+          </li>
+          <li>
+            <hr class="dropdown-divider" />
+          </li>
+          <li>
+            <button id="copySel" class="dropdown-item" type="button"><i class="fa-solid fa-copy me-2"></i>Copy to clipboard</button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Clades breakdown (shown only after DB sampling) -->
+<div id="selCladesWrap" class="card-body p-0 border-bottom d-none">
+  <div class="px-3 py-2">
+    <div class="fw-semibold small mb-1">
+      <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
+      Clades allocation
+      <span id="selCladesHint" class="text-muted ms-2 fw-normal"></span>
+    </div>
+    <div style="max-height: 180px; overflow-y: auto;">
+      <table class="table table-sm table-striped mb-0" style="font-size: .8rem;">
+        <thead class="sticky-top bg-white">
+          <tr>
+            <th>Clade</th>
+            <th class="text-end">Available</th>
+            <th class="text-end">Quota</th>
+            <th class="text-end">Sampled</th>
+          </tr>
+        </thead>
+        <tbody id="selCladesBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Body: selection table -->
+<div class="card-body p-0">
+  <div class="table-responsive" style="max-height: 420px;">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light position-sticky" style="top: 0; z-index: 1;">
+        <tr>
+          <th class="ps-3">
+            <span>Taxon</span>
+            <span id="selHint" class="text-muted small ms-2"></span>
+          </th>
+          <th class="text-end pe-3" style="width: 64px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="selList">
+        <tr>
+          <td class="text-muted small ps-3" colspan="2">No selection.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Footer: metrics + state -->
+<div class="card-footer bg-white">
+  <div class="row g-2">
+    <div class="col-4">
+      <div class="border rounded-3 px-2 py-1 d-flex align-items-center justify-content-between">
+        <span class="text-muted small"><i class="fa-solid fa-hashtag me-1"></i>Total</span>
+        <span id="selCount" class="fw-semibold">0</span>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="border rounded-3 px-2 py-1 d-flex align-items-center justify-content-between">
+        <span class="text-muted small"><i class="fa-solid fa-sitemap me-1"></i>Ranks</span>
+        <span id="selRanks" class="fw-semibold">–</span>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="border rounded-3 px-2 py-1 d-flex align-items-center justify-content-between">
+        <span class="text-muted small"><i class="fa-solid fa-bullseye me-1"></i>Target</span>
+        <span id="selTarget" class="fw-semibold">–</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar (only when sampling result exists) -->
+  <div id="samplingStatus" class="mt-2 d-none">
+    <div class="d-flex align-items-center justify-content-between">
+      <div class="text-muted small">
+        <i class="fa-solid fa-seedling me-1"></i>
+        Sampling result currently active in the view
+      </div>
+      <div class="btn-group btn-group-sm">
+        <button id="applySamplingView" class="btn btn-outline-success" type="button" title="Apply view (expand to species)"><i class="fa-solid fa-eye me-1"></i>View in tree</button>
+        <button id="clearSamplingView" class="btn btn-outline-secondary" type="button" title="Restore full tree"><i class="fa-solid fa-rotate-left me-1"></i>Reset</button>
+      </div>
+    </div>
+  </div>
+</div>

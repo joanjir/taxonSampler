@@ -155,7 +155,7 @@ def run_db_sampling(
         species_names=species_names,
     )
 
-    total_available = qs.count()
+    total_available = qs.values("organism_name").distinct().count()
 
     if total_available == 0:
         return SamplingResult(
@@ -183,16 +183,20 @@ def run_db_sampling(
     # We group by the start_rank extracted from classification JSON
     rank_key = start_rank.lower()
 
-    # Build clade → genome mapping
+    # Build clade → genome mapping (deduplicated: best genome per species)
     clade_genomes: Dict[str, List] = defaultdict(list)
     no_clade_genomes: List = []
+
+    # First pass: collect all genomes per clade
+    _clade_all: Dict[str, List] = defaultdict(list)
+    _no_clade_all: List = []
 
     for genome in qs.iterator():
         cls = genome.external_taxon.classification or {}
         clade_name = cls.get(rank_key, "")
 
         if not clade_name:
-            no_clade_genomes.append(genome)
+            _no_clade_all.append(genome)
             continue
 
         # If end_rank != species, we group further down
@@ -205,7 +209,23 @@ def run_db_sampling(
         else:
             composite_key = clade_name
 
-        clade_genomes[composite_key].append(genome)
+        _clade_all[composite_key].append(genome)
+
+    # Second pass: deduplicate — keep best genome per organism_name
+    # (highest quality_score) within each clade
+    def _dedup_genomes(genomes_list):
+        best: Dict[str, Any] = {}
+        for g in genomes_list:
+            name = g.organism_name
+            if name not in best or (g.quality_score or 0) > (best[name].quality_score or 0):
+                best[name] = g
+        return list(best.values())
+
+    for key, genomes_list in _clade_all.items():
+        clade_genomes[key] = _dedup_genomes(genomes_list)
+
+    if _no_clade_all:
+        no_clade_genomes = _dedup_genomes(_no_clade_all)
 
     # Add unclassified genomes to a special group
     if no_clade_genomes:
@@ -250,11 +270,11 @@ def run_db_sampling(
         for _name in sorted(clade_genomes.keys()):
             all_genomes.extend(clade_genomes[_name])
         random.shuffle(all_genomes)
-        _random_selected = {g.accession for g in all_genomes[:effective_k]}
+        _random_selected = {g.organism_name for g in all_genomes[:effective_k]}
         # Set quotas per clade based on how many fell in each
         for clade in clades_info:
             cg = clade_genomes.get(clade.name, [])
-            clade.quota = sum(1 for g in cg if g.accession in _random_selected)
+            clade.quota = sum(1 for g in cg if g.organism_name in _random_selected)
 
     # ── 4. Select species within each clade ─────────────────
     selected_species: List[Dict[str, Any]] = []
@@ -264,8 +284,8 @@ def run_db_sampling(
         genomes = clade_genomes.get(clade.name, [])
 
         if strategy == "random":
-            # Global random: pick genomes that were pre-selected
-            picks = [g for g in genomes if g.accession in _random_selected]
+            # Global random: pick genomes whose organism was pre-selected
+            picks = [g for g in genomes if g.organism_name in _random_selected]
         elif strategy == "none":
             # Natural order (by accession)
             genomes.sort(key=lambda g: g.accession)
@@ -291,6 +311,23 @@ def run_db_sampling(
                 "genus": cls.get("genus", ""),
                 "col_name": g.external_taxon.name if g.external_taxon else "",
                 "clade_group": clade.name,
+                # Genome metadata for Excel export
+                "genome_level": g.genome_level or "",
+                "refseq_category": g.refseq_category or "",
+                "genome_coverage": g.genome_coverage,
+                "total_sequence_length": g.total_sequence_length,
+                "gc_percent": g.gc_percent,
+                "contig_n50_kb": g.contig_n50_kb,
+                "scaffold_n50_kb": g.scaffold_n50_kb,
+                "scaffold_count": g.scaffold_count,
+                "chromosome_count": g.chromosome_count,
+                "genes": g.genes,
+                "protein_coding": g.protein_coding,
+                "quality_score": g.quality_score,
+                "release_date": g.release_date or "",
+                "source_database": g.source_database or "",
+                "sequencing_tech": g.sequencing_tech or "",
+                "busco_complete": g.busco_complete,
             }
             clade_species.append(species_data)
             selected_species.append(species_data)

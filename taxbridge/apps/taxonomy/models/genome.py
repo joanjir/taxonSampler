@@ -274,8 +274,8 @@ class NCBIGenome(models.Model):
     COL_MATCH_STATUS_CHOICES = [
         ("unmatched", "Unmatched"),
         ("matched", "Matched"),
-        ("needs_review", "Needs review"),
-        ("no_match", "No match in CoL"),
+        ("not_in_col", "Not in COL"),
+        ("manual", "Manual"),
     ]
     col_match_status = models.CharField(
         max_length=32,

@@ -211,18 +211,18 @@ class Command(BaseCommand):
         
         updated_matched = NCBIGenome.objects.filter(
             taxon_id__in=matched_taxids,
-            col_match_status__in=["pending", "unmatched"]
+            col_match_status="unmatched"
         ).update(col_match_status="matched")
 
-        # Genomas sin crosswalk -> unmatched
+        # Genomas sin crosswalk -> not_in_col (skip manual)
         updated_unmatched = NCBIGenome.objects.exclude(
             taxon_id__in=matched_taxids
-        ).filter(
-            col_match_status="pending"
-        ).update(col_match_status="unmatched")
+        ).exclude(
+            col_match_status="manual"
+        ).update(col_match_status="not_in_col")
 
         self.stdout.write(f"  Marcados como matched: {updated_matched}")
-        self.stdout.write(f"  Marcados como unmatched: {updated_unmatched}")
+        self.stdout.write(f"  Marcados como not_in_col: {updated_unmatched}")
 
     def _print_summary(self):
         self.stdout.write("")

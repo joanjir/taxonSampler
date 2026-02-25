@@ -80,8 +80,19 @@ def taxon_sync_dashboard(request):
         "successful_syncs": TaxonSyncRun.objects.filter(status="completed").count(),
     }
     
-    # Calculate unlinked taxa
+    # Calculate unlinked taxa (never searched) vs not_in_col (searched, not found)
     stats["unlinked_taxa"] = stats["total_taxa"] - stats["matched_taxa"]
+    stats["not_in_col_taxa"] = (
+        Taxon.objects.filter(genomes__col_match_status="not_in_col")
+        .distinct()
+        .count()
+    )
+    # Truly pending = never searched (unmatched status)
+    stats["pending_taxa"] = (
+        Taxon.objects.filter(genomes__col_match_status="unmatched")
+        .distinct()
+        .count()
+    )
     
     # Sync status breakdown for chart
     sync_status_counts = {
@@ -133,9 +144,13 @@ def api_start_taxon_sync(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     kingdom = data.get("kingdom", "metazoa").lower()
-    if kingdom not in KINGDOMS:
+    
+    # Resolve taxid: known kingdoms, numeric taxid, or NCBI search by name
+    try:
+        taxid = get_kingdom_taxid(kingdom)
+    except ValueError as e:
         return JsonResponse({
-            "error": f"Unknown kingdom: {kingdom}",
+            "error": str(e),
             "available": list(KINGDOMS.keys()),
         }, status=400)
 
@@ -156,7 +171,7 @@ def api_start_taxon_sync(request):
             "limit": data.get("limit", 0),
             "skip_quality": data.get("skip_quality", False),
             "skip_existing": data.get("skip_existing", True),  # Skip existing by default
-            "taxid": KINGDOMS[kingdom],
+            "taxid": taxid,
         },
     )
 
@@ -220,6 +235,7 @@ def api_taxon_sync_status(request, sync_id: int):
         "progress_percent": run.progress_percent,
         "ncbi_total": run.ncbi_total,
         "ncbi_fetched": run.ncbi_fetched,
+        "ncbi_skipped": run.ncbi_skipped,
         "taxa_created": run.taxa_created,
         "genomes_created": run.genomes_created,
         "col_total": run.col_total,
@@ -315,7 +331,6 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         sync_run.add_log("INFO", f"Skipping {len(existing_accessions)} existing genomes")
     
     new_count = 0  # Only counts genuinely NEW genomes created
-    skipped_existing = 0
     for genome_data in _fetch_ncbi_genomes_paged(taxid):
         sync_run.ncbi_total += 1
         
@@ -328,7 +343,7 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         # Skip already synced genomes
         accession = genome_data.get("accession", "")
         if skip_existing and accession and accession in existing_accessions:
-            skipped_existing += 1
+            sync_run.ncbi_skipped += 1
             continue
 
         # Apply filters
@@ -360,9 +375,9 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
         if new_count % 50 == 0 and new_count > 0:
             sync_run.save(update_fields=[
                 "ncbi_total", "ncbi_fetched", "ncbi_filtered",
-                "taxa_created", "genomes_created",
+                "ncbi_skipped", "taxa_created", "genomes_created",
             ])
-            sync_run.add_log("INFO", f"NCBI progress: {new_count} new genomes (skipped {skipped_existing} existing)")
+            sync_run.add_log("INFO", f"NCBI progress: {new_count} new genomes ({sync_run.ncbi_skipped} already in DB)")
         
         # limit applies to NEW genomes only
         if limit and new_count >= limit:
@@ -371,10 +386,11 @@ def _phase_fetch_ncbi(sync_run: TaxonSyncRun):
     # Final save
     sync_run.save(update_fields=[
         "ncbi_total", "ncbi_fetched", "ncbi_filtered",
-        "taxa_created", "genomes_created",
+        "ncbi_skipped", "taxa_created", "genomes_created",
     ])
-    sync_run.add_log("INFO", f"Skipped {skipped_existing} genomes that already exist in DB")
-    sync_run.add_log("INFO", f"NCBI phase complete: {new_count} new genomes ({sync_run.ncbi_fetched} processed, {skipped_existing} skipped)")
+    if sync_run.ncbi_skipped:
+        sync_run.add_log("INFO", f"Skipped {sync_run.ncbi_skipped} genomes that already exist in DB")
+    sync_run.add_log("INFO", f"NCBI phase complete: {new_count} new genomes ({sync_run.ncbi_fetched} processed, {sync_run.ncbi_skipped} already in DB)")
 
 
 def _phase_match_col(sync_run: TaxonSyncRun):
@@ -411,6 +427,10 @@ def _phase_match_col(sync_run: TaxonSyncRun):
                 _create_col_crosswalk(taxon, result, sync_run)
             else:
                 sync_run.col_unmatched += 1
+                # Mark genomes as "not_in_col" — searched but not found
+                NCBIGenome.objects.filter(taxon=taxon).exclude(
+                    col_match_status="manual"
+                ).update(col_match_status="not_in_col")
 
         except Exception as e:
             logger.warning(f"COL match failed for {taxon.scientific_name}: {e}")
@@ -480,7 +500,7 @@ def _create_col_crosswalk(taxon: Taxon, result, sync_run: TaxonSyncRun):
             defaults={
                 "score": 1.0 if result.matched else 0.0,
                 "decision": "high",
-                "method": "exact" if result.matched else "no_match",
+                "method": "exact",
                 "is_active": True,
                 "evidence": {"source": "checklistbank", "matched": result.matched},
             },
@@ -493,10 +513,6 @@ def _create_col_crosswalk(taxon: Taxon, result, sync_run: TaxonSyncRun):
             NCBIGenome.objects.filter(taxon=taxon).update(
                 col_match_status="matched",
                 external_taxon=external,
-            )
-        else:
-            NCBIGenome.objects.filter(taxon=taxon).update(
-                col_match_status="no_match",
             )
 
 

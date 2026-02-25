@@ -207,6 +207,10 @@ class TaxonSyncRun(models.Model):
     ncbi_total = models.PositiveIntegerField(default=0)
     ncbi_fetched = models.PositiveIntegerField(default=0)
     ncbi_filtered = models.PositiveIntegerField(default=0)
+    ncbi_skipped = models.PositiveIntegerField(
+        default=0,
+        help_text="Genomes skipped because they already exist in the database",
+    )
     taxa_created = models.PositiveIntegerField(default=0)
     genomes_created = models.PositiveIntegerField(default=0)
 
