@@ -123,7 +123,9 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
    * Show ONLY the specified keys (and their ancestors).
    * This filters out siblings that are not in the list.
    * @param {string[]} keys - Array of keys to show
-   * @param {Object} opts - Options: { fit: boolean }
+   * @param {Object} opts - Options: { fit: boolean, preserveExpanded: boolean }
+   *                        preserveExpanded: keep current expanded state and add
+   *                        ancestor paths (user can still expand/collapse freely)
    */
   function showOnlyKeys(keys, opts = {}) {
     if (!fullData) return;
@@ -141,9 +143,12 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       filterKeys = new Set(keys);
     }
 
-    // Clear and expand paths to each key
-    expandedKeys.clear();
-    userHasInteracted = false;
+    // Expand paths to each key
+    if (!opts.preserveExpanded) {
+      // Default: clear and rebuild expand state from scratch
+      expandedKeys.clear();
+      userHasInteracted = false;
+    }
 
     if (keys && keys.length > 0) {
       keys.forEach((key) => {

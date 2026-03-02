@@ -488,8 +488,32 @@ export function initAdvancedSearch({ renderer }) {
     const entry = history[idx];
     if (!entry) return;
 
-    // Append history entry's rules to the current rules
-    entry.rules.forEach(r => addRule(r.rank, [...r.taxa], r.negate));
+    let added = 0;
+    entry.rules.forEach(r => {
+      // Check if an identical rule already exists
+      const duplicate = rules.some(existing =>
+        existing.rank === r.rank &&
+        existing.negate === r.negate &&
+        existing.taxa.length === r.taxa.length &&
+        existing.taxa.every(t => r.taxa.includes(t))
+      );
+      if (!duplicate) {
+        addRule(r.rank, [...r.taxa], r.negate);
+        added++;
+      }
+    });
+
+    if (added === 0) {
+      // Flash a subtle warning that all rules were duplicates
+      const badge = document.createElement("span");
+      badge.className = "badge bg-warning-lt text-warning ms-2 as-dup-toast";
+      badge.textContent = "Rules already present";
+      const btn = historyList?.querySelector(`.as-history-combine[data-idx="${idx}"]`);
+      if (btn) {
+        btn.parentElement.appendChild(badge);
+        setTimeout(() => badge.remove(), 2000);
+      }
+    }
   }
 
   function deleteFromHistory(idx) {
@@ -531,7 +555,7 @@ export function initAdvancedSearch({ renderer }) {
       renderer.collapseAll?.();
       updateFilterBadge(0);
     } else {
-      renderer.showOnlyKeys?.(keys, { fit: true });
+      renderer.showOnlyKeys?.(keys, { fit: true, preserveExpanded: true });
       const activeCount = rules.filter(r => r.rank && r.taxa.length > 0).length;
       updateFilterBadge(activeCount);
 

@@ -391,6 +391,9 @@ g.node.clade-path {
 .as-history-entry:hover .as-history-actions {
   display: flex;
 }
+.as-dup-toast {
+  animation: fadeSlideIn .3s ease;
+}
 #advancedSearchModal .select2-container {
   min-width: 100% !important;
 }
