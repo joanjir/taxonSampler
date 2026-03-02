@@ -1,0 +1,266 @@
+{% extends "taxonomy/layout/app_shell.html" %}
+
+{% block title %}Report Issue · TaxonSampler{% endblock %}
+
+{% block content %}
+<div class="page-header d-print-none mb-4">
+  <div class="row align-items-center">
+    <div class="col-auto">
+      <h2 class="page-title">
+        <i class="ti ti-bug me-2"></i>Report an Issue
+      </h2>
+      <p class="text-secondary mt-1">
+        Fill out the form below to report a bug, request a feature, or ask a question.
+        When you click <strong>"Submit on GitHub"</strong>, a new issue will be opened
+        in our repository with the information you provide.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">
+          <i class="ti ti-message-report me-2"></i>Issue Details
+        </h3>
+      </div>
+      <div class="card-body">
+        <form id="issueForm" onsubmit="return false;">
+          <!-- Issue Type -->
+          <div class="mb-3">
+            <label class="form-label required" for="issueType">Issue Type</label>
+            <select id="issueType" class="form-select" required>
+              <option value="" disabled selected>Select type…</option>
+              <option value="bug">🐛 Bug Report</option>
+              <option value="feature">✨ Feature Request</option>
+              <option value="question">❓ Question</option>
+              <option value="data">🗄️ Data Issue</option>
+              <option value="docs">📖 Documentation</option>
+            </select>
+          </div>
+
+          <!-- Severity (only for bugs) -->
+          <div class="mb-3" id="severityGroup" style="display:none;">
+            <label class="form-label" for="issueSeverity">Severity</label>
+            <div class="form-selectgroup">
+              <label class="form-selectgroup-item">
+                <input type="radio" name="severity" value="low" class="form-selectgroup-input" checked>
+                <span class="form-selectgroup-label">
+                  <i class="ti ti-arrow-down text-success me-1"></i>Low
+                </span>
+              </label>
+              <label class="form-selectgroup-item">
+                <input type="radio" name="severity" value="medium" class="form-selectgroup-input">
+                <span class="form-selectgroup-label">
+                  <i class="ti ti-minus text-warning me-1"></i>Medium
+                </span>
+              </label>
+              <label class="form-selectgroup-item">
+                <input type="radio" name="severity" value="high" class="form-selectgroup-input">
+                <span class="form-selectgroup-label">
+                  <i class="ti ti-arrow-up text-danger me-1"></i>High
+                </span>
+              </label>
+              <label class="form-selectgroup-item">
+                <input type="radio" name="severity" value="critical" class="form-selectgroup-input">
+                <span class="form-selectgroup-label">
+                  <i class="ti ti-alert-triangle text-danger me-1"></i>Critical
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Title -->
+          <div class="mb-3">
+            <label class="form-label required" for="issueTitle">Title</label>
+            <input id="issueTitle" type="text" class="form-control"
+                   placeholder="Short, descriptive summary of the issue" required maxlength="200">
+            <span class="form-hint" id="titleHint">0 / 200 characters</span>
+          </div>
+
+          <!-- Description -->
+          <div class="mb-3">
+            <label class="form-label required" for="issueDescription">Description</label>
+            <textarea id="issueDescription" class="form-control" rows="6"
+                      placeholder="Describe the issue in detail. For bugs: include steps to reproduce, expected vs. actual behavior."
+                      required></textarea>
+          </div>
+
+          <!-- Environment info (auto-filled) -->
+          <div class="mb-3">
+            <label class="form-label" for="issueEnvironment">Environment Info</label>
+            <textarea id="issueEnvironment" class="form-control font-monospace" rows="3" readonly
+                      style="font-size: 0.8rem; background-color: var(--tblr-bg-surface-secondary);"></textarea>
+            <span class="form-hint">Auto-detected. This helps us reproduce the issue.</span>
+          </div>
+
+          <!-- Screenshots hint -->
+          <div class="alert alert-info mb-3" role="alert">
+            <div class="d-flex">
+              <div><i class="ti ti-info-circle alert-icon"></i></div>
+              <div>
+                <strong>Tip:</strong> After opening the issue on GitHub you can
+                drag-and-drop screenshots or log files directly into the comment box.
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="mb-3">
+            <a class="btn btn-ghost-secondary btn-sm" data-bs-toggle="collapse"
+               href="#issuePreview" role="button" aria-expanded="false">
+              <i class="ti ti-eye me-1"></i>Preview Markdown
+            </a>
+            <div class="collapse mt-2" id="issuePreview">
+              <pre id="issuePreviewContent" class="card card-body bg-dark text-light p-3"
+                   style="white-space: pre-wrap; font-size: 0.8rem; max-height: 300px; overflow-y: auto;"></pre>
+            </div>
+          </div>
+
+        </form>
+      </div>
+      <div class="card-footer d-flex justify-content-between">
+        <a href="https://github.com/joanjir/taxonSampler/issues" target="_blank"
+           class="btn btn-ghost-secondary">
+          <i class="ti ti-list me-1"></i>View Existing Issues
+        </a>
+        <button id="submitIssueBtn" class="btn btn-primary" disabled>
+          <i class="ti ti-brand-github me-1"></i>Submit on GitHub
+        </button>
+      </div>
+    </div>
+
+    <!-- Recent issues hint -->
+    <div class="card mt-3">
+      <div class="card-header">
+        <h3 class="card-title"><i class="ti ti-info-circle me-2"></i>Before submitting</h3>
+      </div>
+      <div class="card-body">
+        <ol class="mb-0">
+          <li class="mb-2">
+            <strong>Check existing issues</strong> — your problem may already be reported.
+            <a href="https://github.com/joanjir/taxonSampler/issues" target="_blank">Browse issues →</a>
+          </li>
+          <li class="mb-2">
+            <strong>Be specific</strong> — include species names, page URLs, or error messages.
+          </li>
+          <li class="mb-2">
+            <strong>Attach evidence</strong> — screenshots and log excerpts help us fix issues faster.
+          </li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const GITHUB_REPO = 'https://github.com/joanjir/taxonSampler';
+
+  const typeEl     = document.getElementById('issueType');
+  const sevGroup   = document.getElementById('severityGroup');
+  const titleEl    = document.getElementById('issueTitle');
+  const descEl     = document.getElementById('issueDescription');
+  const envEl      = document.getElementById('issueEnvironment');
+  const previewEl  = document.getElementById('issuePreviewContent');
+  const submitBtn  = document.getElementById('submitIssueBtn');
+  const titleHint  = document.getElementById('titleHint');
+
+  // ── Auto-detect environment ──
+  const envInfo = [
+    'Browser: ' + navigator.userAgent.split(') ')[0].split('(').pop(),
+    'Platform: ' + navigator.platform,
+    'Screen: ' + screen.width + '×' + screen.height,
+    'Page: ' + location.pathname,
+    'Timestamp: ' + new Date().toISOString()
+  ].join('\n');
+  envEl.value = envInfo;
+
+  // ── Type change — show severity for bugs ──
+  typeEl.addEventListener('change', function () {
+    sevGroup.style.display = this.value === 'bug' ? '' : 'none';
+    validate();
+  });
+
+  // ── Title character counter ──
+  titleEl.addEventListener('input', function () {
+    titleHint.textContent = this.value.length + ' / 200 characters';
+    validate();
+  });
+  descEl.addEventListener('input', validate);
+
+  // ── Validation ──
+  function validate() {
+    const ok = typeEl.value && titleEl.value.trim().length >= 5 && descEl.value.trim().length >= 10;
+    submitBtn.disabled = !ok;
+    updatePreview();
+  }
+
+  // ── Label map ──
+  const LABELS = {
+    bug:      'bug',
+    feature:  'enhancement',
+    question: 'question',
+    data:     'data-issue',
+    docs:     'documentation'
+  };
+  const TYPE_TITLES = {
+    bug:      '🐛 Bug Report',
+    feature:  '✨ Feature Request',
+    question: '❓ Question',
+    data:     '🗄️ Data Issue',
+    docs:     '📖 Documentation'
+  };
+
+  // ── Build Markdown body ──
+  function buildBody() {
+    const type = typeEl.value;
+    const title = titleEl.value.trim();
+    const desc  = descEl.value.trim();
+    const env   = envEl.value.trim();
+
+    let body = '';
+    body += '## ' + (TYPE_TITLES[type] || 'Issue') + '\n\n';
+    body += '### Description\n' + desc + '\n\n';
+
+    if (type === 'bug') {
+      const sev = document.querySelector('input[name="severity"]:checked');
+      if (sev) body += '**Severity:** ' + sev.value + '\n\n';
+      body += '### Steps to Reproduce\n';
+      body += '1. \n2. \n3. \n\n';
+      body += '### Expected Behavior\n\n\n';
+      body += '### Actual Behavior\n\n\n';
+    }
+
+    body += '### Environment\n```\n' + env + '\n```\n';
+    return body;
+  }
+
+  // ── Preview ──
+  function updatePreview() {
+    previewEl.textContent = buildBody();
+  }
+
+  // ── Submit — opens GitHub new issue page ──
+  submitBtn.addEventListener('click', function () {
+    const type  = typeEl.value;
+    const title = titleEl.value.trim();
+    const body  = buildBody();
+    const label = LABELS[type] || '';
+
+    // Build the GitHub new-issue URL
+    const params = new URLSearchParams();
+    params.set('title', title);
+    params.set('body', body);
+    if (label) params.set('labels', label);
+
+    const url = GITHUB_REPO + '/issues/new?' + params.toString();
+    window.open(url, '_blank', 'noopener');
+  });
+})();
+</script>
+{% endblock %}

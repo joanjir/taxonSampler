@@ -143,3 +143,8 @@ def export_sampling(request, fmt: str):
         return resp
 
     return JsonResponse({"error": "Unsupported format"}, status=400)
+
+
+def report_issue(request):
+    """Render the GitHub issue report form."""
+    return render(request, "taxonomy/pages/report_issue.html")

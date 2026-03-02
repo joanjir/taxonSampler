@@ -5,7 +5,7 @@ Only HTML page routes are defined here. API routes are in api/urls.py.
 """
 from django.urls import path
 
-from .dashboard.views import home, export_sampling
+from .dashboard.views import home, export_sampling, report_issue
 from .ncbi.views import taxon_sync_dashboard
 from .tree.views import tree_page
 
@@ -21,4 +21,7 @@ urlpatterns = [
     
     # Export endpoints (POST)
     path("sampling/export/<str:fmt>/", export_sampling, name="sampling-export"),
+
+    # Report issue
+    path("report-issue/", report_issue, name="report-issue"),
 ]
