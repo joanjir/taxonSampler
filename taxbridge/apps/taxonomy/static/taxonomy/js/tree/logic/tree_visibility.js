@@ -5,13 +5,18 @@ import { pushPart, keyOf } from "./tree_keying.js";
 import { findInTreeByKey } from "./tree_services.js";
 
 /**
- * Check if a key is an ancestor of (or equal to) any of the filter keys.
- * A key is relevant if any filterKey starts with this key.
+ * Check if a key is relevant to the current filter.
+ * A key is relevant if:
+ *   - it IS one of the filter keys (exact match), OR
+ *   - it is an ANCESTOR of any filter key (path leads to a filter key), OR
+ *   - it is a DESCENDANT of any filter key (child of an already-shown node)
+ * The third condition allows the user to expand filter-matched nodes and
+ * see their children, enabling free navigation within the filtered subtree.
  */
 function isRelevantToFilter(key, filterKeys) {
   if (!filterKeys || filterKeys.size === 0) return true;
   for (const fk of filterKeys) {
-    if (fk === key || fk.startsWith(key + "|")) {
+    if (fk === key || fk.startsWith(key + "|") || key.startsWith(fk + "|")) {
       return true;
     }
   }
