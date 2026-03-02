@@ -12,6 +12,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.forms import AuthenticationForm
 from django.urls import path, include
+from django.views.generic import RedirectView
 
 
 class AdminOnlyLoginView(auth_views.LoginView):
@@ -25,6 +26,9 @@ class AdminOnlyLoginView(auth_views.LoginView):
 
 
 urlpatterns = [
+    # Redirect root to /taxonomy/
+    path("", RedirectView.as_view(url="/taxonomy/", permanent=False)),
+    
     path("admin/", admin.site.urls),
     
     # Authentication
