@@ -1,107 +1,110 @@
-{% extends "taxonomy/layout/app_shell.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>404 · Outside evolutionary scope</title>
+  <link rel="icon" type="image/x-icon" href="{% static 'taxonomy/img/favicon.ico' %}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+  <style>
+    body { background: #f4f6fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+  </style>
+</head>
+<body>
 
-{% block title %}404 · Outside evolutionary scope{% endblock %}
+<div class="container-tight py-4" style="max-width: 680px;">
+  <div class="card shadow-sm">
+    <div class="card-body p-4 p-lg-5">
 
-{% block content %}
-<div class="row justify-content-center my-5">
-  <div class="col-lg-8">
-    <div class="card shadow-sm">
-      <div class="card-body p-4 p-lg-5">
+      <div class="row g-4 align-items-center">
+        <div class="col-md-7">
 
-        <div class="row g-4 align-items-center">
-          <div class="col-md-7">
+          <h1 class="h3 mb-2">404 · Outside evolutionary scope</h1>
+          <p class="text-muted mb-3">
+            This lineage was not retained under the current sampling strategy.
+          </p>
 
-            <h1 class="h3 mb-2">404 · Outside evolutionary scope</h1>
-            <p class="text-muted mb-3">
-              This lineage was not retained under the current sampling strategy.
-            </p>
-
-            <div class="small text-muted mb-4">
-              <span class="me-2">Path:</span>
-              <code>{{ request.path }}</code>
-            </div>
-
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-              <a href="/" class="btn btn-primary">
-                Back to root
-              </a>
-              <a href="/taxonomy/" class="btn btn-outline-primary">
-                Open taxonomy
-              </a>
-              <div class="ms-md-auto text-muted small">
-                Redirecting to root in <span id="countdown">3</span>s…
-              </div>
-            </div>
-
+          <div class="small text-muted mb-4">
+            <span class="me-2">Path:</span>
+            <code>{{ request.path }}</code>
           </div>
 
-          <div class="col-md-5">
-            <div class="ratio ratio-16x9 border rounded-3 bg-light d-flex align-items-center justify-content-center">
-              <svg viewBox="0 0 640 360" role="img">
-
-                <!-- Main trunk -->
-                <line x1="140" y1="60" x2="140" y2="300"
-                      stroke="#6c757d" stroke-width="6" stroke-linecap="round"/>
-
-                <!-- Stable branch -->
-                <line x1="140" y1="140" x2="330" y2="100"
-                      stroke="#6c757d" stroke-width="5" stroke-linecap="round"/>
-
-                <rect x="330" y="75" width="140" height="50" rx="14"
-                      fill="#ffffff"
-                      stroke="#212529"
-                      stroke-width="4"/>
-                <text x="400" y="105"
-                      text-anchor="middle"
-                      font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
-                      font-size="18"
-                      fill="#212529">Clade A</text>
-
-                <!-- Cut branch -->
-                <line x1="140" y1="210" x2="280" y2="240"
-                      stroke="#6c757d" stroke-width="5" stroke-linecap="round"/>
-
-                <!-- Cut mark (X) -->
-                <line x1="260" y1="222" x2="290" y2="252"
-                      stroke="#dc3545" stroke-width="4" stroke-linecap="round"/>
-                <line x1="290" y1="222" x2="260" y2="252"
-                      stroke="#dc3545" stroke-width="4" stroke-linecap="round"/>
-
-                <!-- Filtered node -->
-                <rect x="300" y="215" width="170" height="55" rx="14"
-                      fill="#ffffff"
-                      stroke="#212529"
-                      stroke-width="4"
-                      stroke-dasharray="10 8"/>
-                <text x="385" y="248"
-                      text-anchor="middle"
-                      font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
-                      font-size="18"
-                      fill="#212529">Target taxon</text>
-
-                <!-- Subtle red stamp -->
-                <text x="310" y="200"
-                      font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
-                      font-size="16"
-                      fill="#dc3545">FILTERED</text>
-
-              </svg>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <a href="/" class="btn btn-primary">
+              Back to root
+            </a>
+            <a href="/taxonomy/" class="btn btn-outline-primary">
+              Open taxonomy
+            </a>
+            <div class="ms-md-auto text-muted small">
+              Redirecting in <span id="countdown">2:00</span>
             </div>
           </div>
+
         </div>
 
+        <div class="col-md-5">
+          <div class="ratio ratio-16x9 border rounded-3 bg-light d-flex align-items-center justify-content-center">
+            <svg viewBox="0 0 640 360" role="img">
+
+              <!-- Main trunk -->
+              <line x1="140" y1="60" x2="140" y2="300"
+                    stroke="#6c757d" stroke-width="6" stroke-linecap="round"/>
+
+              <!-- Stable branch -->
+              <line x1="140" y1="140" x2="330" y2="100"
+                    stroke="#6c757d" stroke-width="5" stroke-linecap="round"/>
+
+              <rect x="330" y="75" width="140" height="50" rx="14"
+                    fill="#ffffff" stroke="#212529" stroke-width="4"/>
+              <text x="400" y="105" text-anchor="middle"
+                    font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                    font-size="18" fill="#212529">Clade A</text>
+
+              <!-- Cut branch -->
+              <line x1="140" y1="210" x2="280" y2="240"
+                    stroke="#6c757d" stroke-width="5" stroke-linecap="round"/>
+
+              <!-- Cut mark (X) -->
+              <line x1="260" y1="222" x2="290" y2="252"
+                    stroke="#dc3545" stroke-width="4" stroke-linecap="round"/>
+              <line x1="290" y1="222" x2="260" y2="252"
+                    stroke="#dc3545" stroke-width="4" stroke-linecap="round"/>
+
+              <!-- Filtered node -->
+              <rect x="300" y="215" width="170" height="55" rx="14"
+                    fill="#ffffff" stroke="#212529" stroke-width="4"
+                    stroke-dasharray="10 8"/>
+              <text x="385" y="248" text-anchor="middle"
+                    font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                    font-size="18" fill="#212529">Target taxon</text>
+
+              <!-- Subtle red stamp -->
+              <text x="310" y="200"
+                    font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+                    font-size="16" fill="#dc3545">FILTERED</text>
+
+            </svg>
+          </div>
+        </div>
       </div>
+
     </div>
   </div>
 </div>
 
 <script>
 (function () {
-  let t = 3;
-  const el = document.getElementById("countdown");
-  const id = setInterval(function () {
+  var t = 120;
+  var el = document.getElementById("countdown");
+  var id = setInterval(function () {
     t -= 1;
-    if (el) el.textContent = t;
+    if (el) {
+      var m = Math.floor(t / 60);
+      var s = t % 60;
+      el.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+    }
     if (t <= 0) {
       clearInterval(id);
       window.location.href = "/";
@@ -109,4 +112,6 @@
   }, 1000);
 })();
 </script>
-{% endblock %}
+
+</body>
+</html>
