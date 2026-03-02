@@ -107,7 +107,7 @@ TEMPLATES = [
 # Database (PostgreSQL)
 # ======================
 DATABASES = {
-    "default": env.db("DATABASE_URL")
+    "default": env.db("DATABASE_URL", default="sqlite:///db.sqlite3")
 }
 
 # ======================
