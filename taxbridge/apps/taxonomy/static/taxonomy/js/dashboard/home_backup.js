@@ -15,9 +15,9 @@
 
   function showToast(title, message, type) {
     if (type === 'success') {
-      console.log(`${title}: ${message}`);
+      Swal.fire({ icon: 'success', title, text: message, timer: 2500, showConfirmButton: false });
     } else {
-      alert(`${title}: ${message}`);
+      Swal.fire({ icon: 'error', title, text: message, confirmButtonColor: '#206bc4' });
     }
   }
 

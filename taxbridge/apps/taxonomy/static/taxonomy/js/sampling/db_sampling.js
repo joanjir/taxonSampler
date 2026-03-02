@@ -257,26 +257,24 @@ export function initDbSampling() {
     const hasScope   = Object.keys(scopeFilters).length > 0;
     const hasTargets = Array.isArray(targetKeys) && targetKeys.length > 0;
 
-    if (hasScope || hasTargets) {
-      let html = '<i class="fa-solid fa-filter text-success me-1"></i>';
-      if (hasScope) {
-        const label = scopeLabel(scopeFilters);
-        html += `<span class="small fw-semibold">Scope:</span>
-                 <span class="badge bg-success-lt text-success ms-1">${esc(label)}</span>`;
-      }
-      if (hasTargets) {
-        html += `<span class="badge bg-azure-lt text-azure ms-1">${targetKeys.length} target${targetKeys.length > 1 ? "s" : ""}</span>`;
-      }
-      html += `<span class="badge bg-primary-lt text-primary ms-1">${total ?? 0} spp</span>`;
-      dom.scopeInfo.innerHTML = html;
-      dom.scopeInfo.classList.remove("d-none");
-    } else {
-      dom.scopeInfo.innerHTML = `
-        <i class="fa-solid fa-globe text-muted me-1"></i>
-        <span class="small text-muted">No scope selected — sampling all ${total ?? 0} matched species</span>
-      `;
-      dom.scopeInfo.classList.remove("d-none");
+    let parts = [];
+    if (hasScope) {
+      parts.push(esc(scopeLabel(scopeFilters)));
     }
+    if (hasTargets) {
+      parts.push(`${targetKeys.length} target${targetKeys.length > 1 ? 's' : ''}`);
+    }
+
+    let html;
+    if (parts.length) {
+      html = `<i class="fa-solid fa-crosshairs text-green me-1"></i>
+              <span class="small">${parts.join(' · ')}</span>`;
+    } else {
+      html = `<i class="fa-solid fa-crosshairs text-muted me-1"></i>
+              <span class="small text-muted">All species (${total ?? 0})</span>`;
+    }
+    dom.scopeInfo.innerHTML = html;
+    dom.scopeInfo.classList.remove("d-none");
   }
 
   // ── Execute ───────────────────────────────────────────────────────
@@ -324,10 +322,10 @@ export function initDbSampling() {
         const body = JSON.parse(err.body || "{}");
         msg = body.error || msg;
       } catch {}
-      alert(msg);
+      Swal.fire({ icon: 'error', title: 'Sampling failed', text: msg, confirmButtonColor: '#198754' });
     } finally {
       dom.runBtn.disabled = false;
-      dom.runBtn.innerHTML = '<i class="fa-solid fa-play me-1"></i>Execute sampling';
+      dom.runBtn.innerHTML = '<i class="fa-solid fa-play me-1"></i>Run sampling';
     }
   }
 

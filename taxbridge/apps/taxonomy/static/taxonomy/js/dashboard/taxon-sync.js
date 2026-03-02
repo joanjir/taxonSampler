@@ -73,7 +73,7 @@
         if (manualRow && manualRow.style.display !== 'none' && manualInput && manualInput.value.trim()) {
           kingdom = manualInput.value.trim();
         } else if (manualRow && manualRow.style.display !== 'none') {
-          alert('Please enter a name or TaxID');
+          Swal.fire({ icon: 'warning', text: 'Please enter a name or TaxID', confirmButtonColor: '#206bc4' });
           return;
         }
         const limit = parseInt(document.getElementById('limit-input').value) || 0;
@@ -97,13 +97,13 @@
           if (data.success) {
             window.location.reload();
           } else {
-            alert(data.error || 'Error starting synchronization');
+            Swal.fire({ icon: 'error', title: 'Sync error', text: data.error || 'Error starting synchronization', confirmButtonColor: '#206bc4' });
             btnStartSync.disabled = false;
             btnStartSync.innerHTML = '<i class="ti ti-rocket me-2"></i> Start Synchronization';
           }
         } catch (e) {
           console.error(e);
-          alert('Connection error');
+          Swal.fire({ icon: 'error', title: 'Connection error', text: 'Could not connect to the server.', confirmButtonColor: '#206bc4' });
           btnStartSync.disabled = false;
           btnStartSync.innerHTML = '<i class="ti ti-rocket me-2"></i> Start Synchronization';
         }
@@ -113,7 +113,17 @@
     // Cancel sync
     if (btnCancelSync) {
       btnCancelSync.addEventListener('click', async function() {
-        if (!confirm('Are you sure you want to cancel this sync?')) return;
+        const result = await Swal.fire({
+          title: 'Cancel sync?',
+          text: 'Are you sure you want to cancel this sync?',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, cancel it',
+          cancelButtonText: 'No, keep it',
+          confirmButtonColor: '#d63939',
+          cancelButtonColor: '#6c757d',
+        });
+        if (!result.isConfirmed) return;
         
         const syncId = runningCard.dataset.syncId;
         btnCancelSync.disabled = true;

@@ -159,7 +159,17 @@
 
   // ─── Actions ───────────────────────────────────────────
   async function startDiscovery() {
-    if (!confirm("Start scanning NCBI for new species with high-quality genomes?\nThis may take several minutes.")) return;
+    const result = await Swal.fire({
+      title: 'Start discovery scan?',
+      text: 'This will scan NCBI for new species with high-quality genomes. It may take several minutes.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Start scan',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#206bc4',
+      cancelButtonColor: '#6c757d',
+    });
+    if (!result.isConfirmed) return;
 
     btnStartDiscovery.disabled = true;
     btnStartDiscovery.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Scanning...';
@@ -180,12 +190,12 @@
         // Poll for completion
         pollDiscoveryStatus();
       } else {
-        alert(data.error || "Error starting discovery");
+        Swal.fire({ icon: 'error', title: 'Discovery error', text: data.error || 'Error starting discovery', confirmButtonColor: '#206bc4' });
         resetButton();
       }
     } catch (err) {
       console.error("Error starting discovery:", err);
-      alert("Error starting discovery scan");
+      Swal.fire({ icon: 'error', title: 'Connection error', text: 'Error starting discovery scan', confirmButtonColor: '#206bc4' });
       resetButton();
     }
   }
@@ -227,7 +237,17 @@
   }
 
   async function importDiscovery(speciesId) {
-    if (!confirm("Import this species and fetch its genome data?")) return;
+    const confirmResult = await Swal.fire({
+      title: 'Import species?',
+      text: 'This will import the species and fetch its genome data.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Import',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#206bc4',
+      cancelButtonColor: '#6c757d',
+    });
+    if (!confirmResult.isConfirmed) return;
     try {
       const resp = await fetch(`/api/v1/taxonomy/discovery/${speciesId}/import/`, {
         method: "POST",
@@ -238,10 +258,10 @@
         showToast(`${data.scientific_name} imported!`, "success");
         loadDiscoveries();
       } else {
-        alert(data.error || "Import failed");
+        Swal.fire({ icon: 'error', text: data.error || 'Import failed', confirmButtonColor: '#206bc4' });
       }
     } catch (err) {
-      alert("Error importing species");
+      Swal.fire({ icon: 'error', text: 'Error importing species', confirmButtonColor: '#206bc4' });
     }
   }
 
@@ -255,10 +275,10 @@
       if (data.success) {
         loadDiscoveries();
       } else {
-        alert(data.error || "Dismiss failed");
+        Swal.fire({ icon: 'error', text: data.error || 'Dismiss failed', confirmButtonColor: '#206bc4' });
       }
     } catch (err) {
-      alert("Error dismissing species");
+      Swal.fire({ icon: 'error', text: 'Error dismissing species', confirmButtonColor: '#206bc4' });
     }
   }
 

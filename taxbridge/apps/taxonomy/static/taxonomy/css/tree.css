@@ -110,6 +110,66 @@
   max-width: 240px;
 }
 
+/* ── Sampling filter clean UI ──────────────────────────────── */
+.sam-scope-box,
+.sam-target-box {
+  border: 1px solid #e6e7e9;
+  border-radius: .5rem;
+  padding: .5rem;
+  background: #fafbfc;
+}
+.sam-badge-scope {
+  font-size: .7rem;
+  font-weight: 600;
+  color: #198754;
+  background: rgba(25, 135, 84, .1);
+  border-radius: .25rem;
+  padding: 2px 6px;
+}
+.sam-scope-indicator {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .4rem .55rem;
+  border: 1px solid #e6e7e9;
+  border-radius: .5rem;
+  background: #fafbfc;
+}
+.sam-summary-line {
+  padding: .35rem 0;
+  border-top: 1px solid #f0f1f3;
+}
+.btn-green {
+  background-color: #198754;
+  border-color: #198754;
+  color: #fff;
+}
+.btn-green:hover {
+  background-color: #157347;
+  border-color: #146c43;
+  color: #fff;
+}
+.text-green { color: #198754 !important; }
+.btn-outline-azure {
+  border-color: #4299e1;
+  color: #4299e1;
+}
+.btn-outline-azure:hover {
+  background-color: #4299e1;
+  color: #fff;
+}
+.btn-azure {
+  background-color: #4299e1;
+  border-color: #4299e1;
+  color: #fff;
+}
+.btn-azure:hover {
+  background-color: #3182ce;
+  border-color: #3182ce;
+  color: #fff;
+}
+.text-azure { color: #4299e1 !important; }
+
 /* Ruta hacia el clado: muted text */
 g.node.clade-path text {
   opacity: 0.75;

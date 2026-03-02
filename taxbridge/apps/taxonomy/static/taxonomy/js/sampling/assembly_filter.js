@@ -129,15 +129,14 @@ export function initAssemblyFilter() {
 
     if (count > 0) {
       dom.inputInfo.innerHTML = `
-        <i class="fa-solid fa-dna text-primary me-1"></i>
-        <span class="small fw-semibold">Step 2 result:</span>
-        <span class="badge bg-primary-lt text-primary ms-1">${count} species</span>
+        <i class="fa-solid fa-dna text-azure me-1"></i>
+        <span class="small">${count} species from sampling</span>
       `;
       dom.inputInfo.classList.remove("d-none");
     } else {
       dom.inputInfo.innerHTML = `
         <i class="fa-solid fa-exclamation-triangle text-warning me-1"></i>
-        <span class="small text-warning">No species from Step 2</span>
+        <span class="small text-warning">No species from sampling</span>
       `;
       dom.inputInfo.classList.remove("d-none");
     }
@@ -169,7 +168,7 @@ export function initAssemblyFilter() {
 
   async function execute() {
     if (!inputAccessions.length) {
-      alert("No species to filter. Run Step 2 first.");
+      Swal.fire({ icon: 'warning', title: 'No data', text: 'No species to filter. Run Step 2 first.', confirmButtonColor: '#4299e1' });
       return;
     }
 
@@ -202,10 +201,10 @@ export function initAssemblyFilter() {
         const body = JSON.parse(err.body || "{}");
         msg = body.error || msg;
       } catch {}
-      alert(msg);
+      Swal.fire({ icon: 'error', title: 'Filter failed', text: msg, confirmButtonColor: '#4299e1' });
     } finally {
       dom.runBtn.disabled = false;
-      dom.runBtn.innerHTML = '<i class="fa-solid fa-filter me-1"></i>Apply assembly filter';
+      dom.runBtn.innerHTML = '<i class="fa-solid fa-filter me-1"></i>Apply filter';
     }
   }
 

@@ -15,9 +15,9 @@
 
   function showToast(title, message, type) {
     if (type === 'success') {
-      console.log(`${title}: ${message}`);
+      Swal.fire({ icon: 'success', title, text: message, timer: 2500, showConfirmButton: false });
     } else {
-      alert(`${title}: ${message}`);
+      Swal.fire({ icon: 'error', title, text: message, confirmButtonColor: '#206bc4' });
     }
   }
 
@@ -347,7 +347,7 @@
   // Global functions
   window.viewGenome = async function(accession) {
     if (!viewModal) {
-      alert('Modal not available');
+      Swal.fire({ icon: 'warning', text: 'Modal not available', confirmButtonColor: '#206bc4' });
       return;
     }
 
@@ -370,7 +370,7 @@
 
   window.editGenome = async function(accession) {
     if (!editModal) {
-      alert('Modal not available');
+      Swal.fire({ icon: 'warning', text: 'Modal not available', confirmButtonColor: '#206bc4' });
       return;
     }
 
@@ -849,7 +849,7 @@
     const notes = document.getElementById('editMatchNotes').value;
     
     if (!accession) {
-      alert('No genome selected for editing');
+      Swal.fire({ icon: 'warning', text: 'No genome selected for editing', confirmButtonColor: '#206bc4' });
       return;
     }
 

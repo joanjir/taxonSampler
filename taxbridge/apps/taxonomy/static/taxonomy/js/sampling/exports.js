@@ -43,8 +43,23 @@ function isDbSamplingResult(payload) {
  * @param {{ getExportPayload: Function, getLastSampling: Function }} deps
  */
 export function initExportHandlers({ getExportPayload, getLastSampling }) {
+
+  /** Guard: block export when there are no species */
+  function requireSpecies(last) {
+    if (!last) {
+      Swal.fire({ icon: 'info', title: 'Nothing to export', text: 'Run sampling first to generate results.', confirmButtonColor: '#198754' });
+      return false;
+    }
+    if (isDbSamplingResult(last) && !(last.species?.length)) {
+      Swal.fire({ icon: 'info', title: 'No species', text: 'The sampling returned 0 species. Adjust your scope or filters and try again.', confirmButtonColor: '#198754' });
+      return false;
+    }
+    return true;
+  }
+
   document.getElementById("exportSelJson")?.addEventListener("click", async () => {
     const last = getLastSampling();
+    if (!requireSpecies(last)) return;
 
     if (last && isDbSamplingResult(last)) {
       // DB sampling: export as client-side JSON
@@ -61,6 +76,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
   document.getElementById("exportSelTxt")?.addEventListener("click", async () => {
     const last = getLastSampling();
+    if (!requireSpecies(last)) return;
 
     if (last && isDbSamplingResult(last)) {
       // DB sampling: export species list as TXT
@@ -81,6 +97,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
   document.getElementById("exportSelNewick")?.addEventListener("click", async () => {
     const last = getLastSampling();
+    if (!requireSpecies(last)) return;
 
     if (last && isDbSamplingResult(last)) {
       // DB sampling: request server-generated Newick from the new endpoint
@@ -89,7 +106,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
         await postDownload(url, last, "sampling_taxonomic.newick");
       } catch (err) {
         console.error("[exports] Newick export error:", err);
-        alert("Newick export failed: " + (err.message || err));
+        Swal.fire({ icon: 'error', title: 'Export failed', text: 'Newick export failed: ' + (err.message || err), confirmButtonColor: '#198754' });
       }
       return;
     }
@@ -101,8 +118,9 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
   document.getElementById("exportSelExcel")?.addEventListener("click", async () => {
     const last = getLastSampling();
-    if (!last || !isDbSamplingResult(last)) {
-      alert("Excel export is only available after DB sampling.");
+    if (!requireSpecies(last)) return;
+    if (!isDbSamplingResult(last)) {
+      Swal.fire({ icon: 'info', title: 'Not available', text: 'Excel export is only available after DB sampling.', confirmButtonColor: '#198754' });
       return;
     }
 
@@ -174,12 +192,13 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       await saveAs(xlsxBlob, "sampling_report.xlsx", xlsxBlob.type);
     } catch (err) {
       console.error("[exports] Excel export error:", err);
-      alert("Excel export failed: " + (err.message || err));
+      Swal.fire({ icon: 'error', title: 'Export failed', text: 'Excel export failed: ' + (err.message || err), confirmButtonColor: '#198754' });
     }
   });
 
   document.getElementById("copySel")?.addEventListener("click", async () => {
     const last = getLastSampling();
+    if (!requireSpecies(last)) return;
 
     if (last && isDbSamplingResult(last)) {
       // DB sampling: copy species names

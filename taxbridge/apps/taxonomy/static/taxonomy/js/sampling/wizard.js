@@ -96,7 +96,7 @@ export function initSamplingWizard({ renderer }) {
   // ------------------------------------------------------------------
   function setStep(n) {
     state.step = n;
-    if (stepLabel) stepLabel.textContent = `${n}/3`;
+    if (stepLabel) stepLabel.textContent = `Step ${n} / 3`;
     if (prevBtn) prevBtn.disabled = n === 1;
     if (nextBtn) nextBtn.classList.toggle("d-none", n >= 3);
 
@@ -120,13 +120,10 @@ export function initSamplingWizard({ renderer }) {
     state.scopeLabel = label || "";
 
     if (scopeBadge) {
-      if (!state.scopeKey) {
-        scopeBadge.style.display = "none";
-        scopeBadge.textContent = "scope=—";
-      } else {
-        scopeBadge.style.display = "";
-        scopeBadge.textContent = `scope=${state.scopeLabel || "active node"}`;
-      }
+      // Hidden element, kept for JS compatibility only
+      scopeBadge.textContent = state.scopeKey
+        ? (state.scopeLabel || "active node")
+        : "";
     }
 
     // Update scope display in Step 1

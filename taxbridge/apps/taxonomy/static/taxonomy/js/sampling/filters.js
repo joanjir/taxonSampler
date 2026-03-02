@@ -116,7 +116,7 @@ export function createSamplingFiltersController({ renderer }) {
   function setStep(nextStep) {
     step = (nextStep === 2) ? 2 : 1;
 
-    if (dom.samStepLabel) dom.samStepLabel.textContent = step === 1 ? "1/2" : "2/2";
+    if (dom.samStepLabel) dom.samStepLabel.textContent = step === 1 ? "Step 1 / 3" : "Step 2 / 3";
     if (dom.samStep1) dom.samStep1.classList.toggle("d-none", step !== 1);
     if (dom.samStep2) dom.samStep2.classList.toggle("d-none", step !== 2);
 
@@ -264,18 +264,19 @@ export function createSamplingFiltersController({ renderer }) {
     
     // Quick update: Show loading state
     if (dom.scopeLabel) {
-      dom.scopeLabel.textContent = scopeKey ? "..." : "Click a node in the taxonomy";
+      dom.scopeLabel.textContent = scopeKey ? "..." : "Select a node from the tree";
     }
     if (dom.scopeSpeciesCount) {
-      dom.scopeSpeciesCount.textContent = scopeKey ? "..." : "— spp";
+      dom.scopeSpeciesCount.textContent = scopeKey ? "..." : "";
+      dom.scopeSpeciesCount.classList.add("d-none");
     }
     if (dom.richTargetsCount) {
-      dom.richTargetsCount.textContent = targetKeys.length > 0 ? `${targetKeys.length} clades (...)` : "—";
+      dom.richTargetsCount.textContent = targetKeys.length > 0 ? `${targetKeys.length} clades` : "";
     }
     if (dom.richActiveLine) {
       dom.richActiveLine.innerHTML = activeNode?.key
-        ? `<strong>${activeNode.name || "..."}</strong> <span class="text-muted">(loading...)</span>`
-        : '<span class="text-muted">Click a node</span>';
+        ? `<span class="small text-muted">Loading…</span>`
+        : '<span class="small text-muted">Click a node to see details</span>';
     }
     
     // Build request signature to detect duplicate requests
@@ -305,52 +306,47 @@ export function createSamplingFiltersController({ renderer }) {
       
       // Update Scope stats
       if (dom.scopeLabel) {
-        dom.scopeLabel.textContent = data.scope?.name || "Click a node in the taxonomy";
+        dom.scopeLabel.textContent = data.scope?.name || "Select a node from the tree";
       }
       if (dom.scopeSpeciesCount) {
         if (data.scope) {
           const count = data.scope.species_count ?? "?";
           dom.scopeSpeciesCount.textContent = `${count} spp`;
+          dom.scopeSpeciesCount.classList.remove("d-none");
         } else {
-          dom.scopeSpeciesCount.textContent = "— spp";
+          dom.scopeSpeciesCount.textContent = "";
+          dom.scopeSpeciesCount.classList.add("d-none");
         }
       }
       
-      // Also update richScopeBadge (Stats panel)
+      // Also update richScopeBadge (hidden, kept for compatibility)
       if (dom.richScopeBadge) {
-        if (data.scope) {
-          const count = data.scope.species_count ?? "?";
-          dom.richScopeBadge.textContent = `${count} spp`;
-        } else {
-          dom.richScopeBadge.textContent = "-";
-        }
+        dom.richScopeBadge.textContent = data.scope ? `${data.scope.species_count ?? "?"}` : "";
       }
 
-      // Update Targets stats
+      // Update Targets stats (hidden, kept for compatibility)
       if (dom.richTargetsCount) {
         if (data.targets?.length) {
           const total = data.targets.reduce((sum, t) => sum + (t.species_count || 0), 0);
-          dom.richTargetsCount.textContent = `${data.targets.length} clades (${total} spp)`;
+          dom.richTargetsCount.textContent = `${data.targets.length} (${total})`;
         } else {
-          dom.richTargetsCount.textContent = "— (entire scope)";
+          dom.richTargetsCount.textContent = "";
         }
       }
 
-      // Update Active/cursor stats
+      // Update Active line — clean, minimal
       if (dom.richActiveLine) {
         if (data.active) {
-          const count = data.active.species_count ?? "?";
           const name = data.active.name || "?";
           const rank = data.active.rank || "";
-          // Check if this node is already a target
           const isTarget = targetKeys.includes(activeKey);
           const isScope = activeKey === scopeKey;
-          let badge = "";
-          if (isScope) badge = ' <span class="badge bg-success">scope</span>';
-          else if (isTarget) badge = ' <span class="badge bg-primary">target</span>';
-          dom.richActiveLine.innerHTML = `<strong>${name}</strong> <span class="text-muted">[${rank}]</span> — ${count} spp${badge}`;
+          let tag = "";
+          if (isScope) tag = ' <span class="text-green fw-semibold">· scope</span>';
+          else if (isTarget) tag = ' <span class="text-azure fw-semibold">· target</span>';
+          dom.richActiveLine.innerHTML = `<span class="small"><strong>${name}</strong> <span class="text-muted">${rank}</span>${tag}</span>`;
         } else {
-          dom.richActiveLine.innerHTML = '<span class="text-muted">Click a node</span>';
+          dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
         }
       }
     } catch (err) {

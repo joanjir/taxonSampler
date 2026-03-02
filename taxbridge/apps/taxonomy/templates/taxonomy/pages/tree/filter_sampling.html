@@ -39,8 +39,7 @@
         <!-- ========== STEP HEADER ========== -->
         <div class="d-flex align-items-center justify-content-between mb-2">
           <div class="small">
-            <span class="badge bg-primary-lt text-primary me-1">Step</span>
-            <span id="samStepLabel" class="fw-semibold">1/3</span>
+            <span class="fw-semibold text-muted" id="samStepLabel">Step 1 / 3</span>
           </div>
 
           <div class="btn-group btn-group-sm">
@@ -59,15 +58,12 @@
         <div id="samStep1" style="display:block">
           <!-- Scope -->
           <div class="mb-3">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge rounded-circle" style="width:22px;height:22px;line-height:18px;background-color:rgba(25,135,84,0.45);color:#fff;"><strong>1</strong></span>
-              <span class="fw-semibold small">Select your sampling universe</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Click a node in the taxonomy and press 'Use selected node' to define the root of your sampling. All descendant species will be included.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </div>
+            <label class="form-label small mb-1 fw-semibold">
+              <i class="fa-solid fa-crosshairs me-1 text-green"></i>Scope
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Click a node in the tree and press 'Use selected node' to define the root of your sampling. All descendant species will be included."><i class="fa-solid fa-circle-question"></i></span>
+            </label>
             
-            <div class="border rounded-3 p-2 bg-white">
+            <div class="sam-scope-box">
               <!-- Hidden select for JS compatibility -->
               <select id="samplingRoot" class="d-none">
                 <option value="">Entire taxonomy</option>
@@ -75,97 +71,64 @@
               </select>
               
               <!-- Scope display -->
-              <div id="scopeDisplay" class="d-flex align-items-center justify-content-between">
-                <div>
-                  <i class="fa-solid fa-globe text-success me-1"></i>
-                  <span id="scopeLabel" class="small fw-semibold">Click a node in the taxonomy</span>
-                </div>
-                <span class="badge bg-success-lt text-success" id="scopeSpeciesCount">— spp</span>
+              <div id="scopeDisplay" class="d-flex align-items-center gap-2 mb-2">
+                <i class="fa-solid fa-sitemap text-green"></i>
+                <span id="scopeLabel" class="small">Select a node from the tree</span>
+                <span class="badge sam-badge-scope ms-auto d-none" id="scopeSpeciesCount"></span>
               </div>
               
               <!-- Scope actions -->
-              <div class="d-flex gap-2 mt-2">
-                <button id="scopeSetActive" type="button" class="btn btn-sm btn-success w-100" title="Use the clicked node as your sampling scope">
+              <div class="d-flex gap-2">
+                <button id="scopeSetActive" type="button" class="btn btn-sm btn-green w-100">
                   <i class="fa-solid fa-check me-1"></i>Use selected node
                 </button>
-                <button id="scopeClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear scope">
+                <button id="scopeClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
               </div>
             </div>
             
-            <div class="form-text small mt-1">
-              <span class="badge bg-success-lt text-success" id="scopeBadge">scope=—</span>
-            </div>
+            <span class="d-none" id="scopeBadge"></span>
           </div>
 
           <!-- STEP 1.2: Add Targets (optional) -->
           <div class="mb-3">
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <span class="badge rounded-circle" style="width:22px;height:22px;line-height:18px;background-color:rgba(13,202,240,0.45);color:#fff;"><strong>2</strong></span>
-              <span class="fw-semibold small">Focus on specific groups <span class="text-muted fw-normal">(optional)</span></span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Optionally add specific clades within your scope. Sampling will only consider species belonging to these groups instead of the entire scope.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </div>
+            <label class="form-label small mb-1 fw-semibold">
+              <i class="fa-solid fa-bullseye me-1 text-azure"></i>Targets
+              <span class="fw-normal text-muted">(optional)</span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Add specific clades within your scope. Sampling will only consider species belonging to these groups instead of the entire scope."><i class="fa-solid fa-circle-question"></i></span>
+            </label>
             
-            <div class="border rounded-3 p-2 bg-white">
+            <div class="sam-target-box">
               <div class="d-flex gap-2 mb-2">
-                <button id="targetAddActive" type="button" class="btn btn-sm btn-outline-primary w-100" title="Add the clicked node as a target group">
-                  <i class="fa-solid fa-plus me-1"></i>Add clicked node
+                <button id="targetAddActive" type="button" class="btn btn-sm btn-outline-azure w-100">
+                  <i class="fa-solid fa-plus me-1"></i>Add selected node
                 </button>
-                <button id="targetsClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear all targets">
+                <button id="targetsClear" type="button" class="btn btn-sm btn-outline-secondary" title="Clear">
                   <i class="fa-solid fa-broom"></i>
                 </button>
               </div>
               
               <!-- Target chips -->
-              <div id="targetsChips" class="d-flex flex-wrap gap-1" style="min-height: 28px;">
-                <span class="text-muted small" id="targetsEmptyHint">No groups selected - sampling will use entire scope</span>
+              <div id="targetsChips" class="d-flex flex-wrap gap-1" style="min-height: 24px;">
+                <span class="text-muted small" id="targetsEmptyHint">Entire scope will be used</span>
               </div>
             </div>
           </div>
 
-          <!-- Stats panel -->
-          <div class="border rounded-3 p-2 bg-light mb-3">
-            <div class="fw-semibold mb-2">
-              <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
-              Species count
-            </div>
-            
-            <div class="row g-2 text-center">
-              <div class="col-6">
-                <div class="border rounded bg-white p-2">
-                  <div class="small text-muted">Scope</div>
-                  <div class="fw-bold text-success" id="richScopeBadge">-</div>
-                </div>
-              </div>
-              <div class="col-6">
-                <div class="border rounded bg-white p-2">
-                  <div class="small text-muted">Targets</div>
-                  <div class="fw-bold text-primary" id="richTargetsCount">-</div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="mt-2 pt-2 border-top small" id="richActiveLine">
-              <i class="fa-solid fa-mouse-pointer me-1 text-muted"></i>
-              <span class="text-muted">Click a node to see its species count</span>
-            </div>
+          <!-- Minimal summary line -->
+          <div class="sam-summary-line" id="richActiveLine">
+            <span class="text-muted small">Click a node to see details</span>
           </div>
 
-          <div class="alert alert-warning py-2 px-2 d-none" id="targetsWarn">
+          <!-- Hidden elements kept for JS compatibility -->
+          <span class="d-none" id="richScopeBadge"></span>
+          <span class="d-none" id="richTargetsCount"></span>
+
+          <div class="alert alert-warning py-2 px-2 d-none mt-2" id="targetsWarn">
             <div class="small">
               <i class="fa-solid fa-triangle-exclamation me-1"></i>
               <span id="targetsWarnText">-</span>
-            </div>
-          </div>
-
-          <!-- Help tip -->
-          <div class="alert alert-light border py-2 px-2">
-            <div class="small text-muted">
-              <i class="fa-solid fa-lightbulb me-1 text-warning"></i>
-              <strong>How to use:</strong> Click nodes in the taxonomy. First set your <span class="text-success fw-semibold">scope</span> (green border), then optionally add <span class="text-primary fw-semibold">target groups</span> (blue border) within it.
             </div>
           </div>
         </div>
@@ -174,45 +137,22 @@
         <div id="samStep2" class="d-none" style="display:none">
 
           <!-- Step 1 scope indicator -->
-          <div id="dbScopeInfo" class="border rounded-3 p-2 bg-success-lt mb-3 d-none">
-            <i class="fa-solid fa-globe text-muted me-1"></i>
-            <span class="small text-muted">Loading scope…</span>
+          <div id="dbScopeInfo" class="sam-scope-indicator mb-3 d-none">
+            <i class="fa-solid fa-crosshairs text-green me-1"></i>
+            <span class="small text-muted">Loading…</span>
           </div>
 
-          <!-- DB stats banner (loaded on step entry) -->
-          <div id="dbSamStats" class="border rounded-3 p-2 bg-light mb-3">
-            <div class="fw-semibold small mb-1">
-              <i class="fa-solid fa-database me-1 text-primary"></i>
-              Genome database
-            </div>
-            <div class="row g-2 text-center">
-              <div class="col-6">
-                <div class="border rounded bg-white p-1">
-                  <div class="small text-muted">Matched spp.</div>
-                  <div class="fw-bold text-success" id="dbStatMatched">—</div>
-                </div>
-              </div>
-              <div class="col-6">
-                <div class="border rounded bg-white p-1">
-                  <div class="small text-muted">Kingdoms</div>
-                  <div class="fw-bold text-info" id="dbStatKingdoms">—</div>
-                </div>
-              </div>
-            </div>
+          <!-- Hidden stats kept for JS compatibility -->
+          <div id="dbSamStats" class="d-none">
+            <span id="dbStatMatched"></span>
+            <span id="dbStatKingdoms"></span>
           </div>
 
           <!-- Max Sample Size -->
           <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Max sample size</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Maximum number of species in the final sample. The strategy is applied within this budget.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
+            <label class="form-label small mb-1 fw-semibold">
+              Max sample size
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Maximum number of species in the final sample. The strategy distributes within this budget. Leave empty to include all."><i class="fa-solid fa-circle-question"></i></span>
             </label>
             <input id="dbMaxSampleSize" type="number" min="1" step="1"
                    class="form-control form-control-sm" placeholder="All" />
@@ -220,16 +160,9 @@
 
           <!-- Range Taxon (NCBI-style dual slider) -->
           <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Range taxon</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Drag the handles to set the taxonomic range. Start (left) = highest rank for grouping. End (right) = lowest rank in results. The range is limited to ranks at or below your scope selection.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
+            <label class="form-label small mb-1 fw-semibold">
+              Taxonomic range
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Drag the handles to set the taxonomic range. Left = highest rank for grouping, Right = lowest rank. Limited to ranks at or below your scope."><i class="fa-solid fa-circle-question"></i></span>
             </label>
             <!-- Dual range container -->
             <div class="range-taxon-wrap">
@@ -258,36 +191,24 @@
 
           <!-- Strategy -->
           <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Sampling strategy</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="none = all species (up to max); random = uniform random; proportional = quota ∝ clade size; equal sample size = equal quota per clade.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
+            <label class="form-label small mb-1 fw-semibold">
+              Strategy
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="All species = no sampling, take everything up to max. Random = uniform random pick. Proportional = quota proportional to clade size. Equal per group = same quota per clade."><i class="fa-solid fa-circle-question"></i></span>
             </label>
             <select id="dbStrategy" class="form-select form-select-sm">
-              <option value="none">None (all up to max)</option>
+              <option value="none">All species (up to max)</option>
               <option value="random">Random</option>
               <option value="proportional" selected>Proportional</option>
-              <option value="balanced">Equal Sample Size</option>
+              <option value="balanced">Equal per group</option>
             </select>
           </div>
 
           <!-- Action buttons -->
-          <div class="d-grid gap-2">
-            <button id="runDbSampling" class="btn btn-sm btn-success" type="button">
+          <div class="d-grid">
+            <button id="runDbSampling" class="btn btn-sm btn-green" type="button">
               <i class="fa-solid fa-play me-1"></i>
-              Execute sampling
+              Run sampling
             </button>
-          </div>
-
-          <div class="form-text small mt-2">
-            <i class="fa-solid fa-database me-1"></i>
-            Sampling runs on matched COL genomes in the local database.
           </div>
         </div>
 
@@ -295,19 +216,16 @@
         <div id="samStep3" class="d-none" style="display:none">
 
           <!-- Step 2 result indicator -->
-          <div id="asmInputInfo" class="border rounded-3 p-2 bg-primary-lt mb-3 d-none">
-            <i class="fa-solid fa-dna text-primary me-1"></i>
-            <span class="small text-primary">Loading…</span>
+          <div id="asmInputInfo" class="sam-scope-indicator mb-3 d-none">
+            <i class="fa-solid fa-dna text-azure me-1"></i>
+            <span class="small text-muted">Loading…</span>
           </div>
 
           <!-- Mode selection -->
           <div class="mb-3">
-            <label class="form-label small mb-1 fw-semibold d-flex align-items-center gap-2">
-              <i class="fa-solid fa-sliders me-1 text-muted"></i>
-              <span>Filtering mode</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Scoring: ranks assemblies by a weighted score and picks the best one per species. Hard filtering: removes any species whose best assembly doesn't meet the thresholds.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
+            <label class="form-label small mb-1 fw-semibold">
+              Filtering mode
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Scoring ranks assemblies by a weighted score and picks the best one per species. Hard filtering removes any species whose best assembly doesn't meet the thresholds."><i class="fa-solid fa-circle-question"></i></span>
             </label>
             <div class="form-check mb-1">
               <input class="form-check-input" type="radio" name="asmMode" id="asmModeScoring" value="scoring" checked>
@@ -327,16 +245,9 @@
 
           <!-- ── Assembly Info (categorical) ── -->
           <div class="mb-3">
-            <div class="fw-semibold small mb-2">
-              <i class="fa-solid fa-info-circle me-1 text-info"></i>
-              Assembly Info
-            </div>
-
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Assembly Level</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Filter by genome completeness: Complete Genome (fully assembled), Chromosome (chromosome-level), or Scaffold (draft scaffolds). Uncheck levels you want to exclude.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
+            <label class="form-label small mb-1 fw-semibold">
+              Assembly level
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Filter by genome completeness: Complete Genome (fully assembled), Chromosome (chromosome-level), or Scaffold (draft scaffolds). Uncheck levels to exclude."><i class="fa-solid fa-circle-question"></i></span>
             </label>
             <div id="asmLevelChecks" class="mb-2">
               <div class="form-check form-check-sm">
@@ -353,25 +264,11 @@
               </div>
             </div>
 
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>RefSeq Category</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Filter by NCBI designation: Reference genome (gold standard), Representative genome (best available), or N/A (not yet categorized).">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-            <div id="asmRefseqChecks" class="mb-2">
-              <div class="form-check form-check-sm">
-                <input class="form-check-input asm-refseq" type="checkbox" value="reference genome" id="asmRef1" checked>
-                <label class="form-check-label small" for="asmRef1">Reference genome</label>
-              </div>
-              <div class="form-check form-check-sm">
-                <input class="form-check-input asm-refseq" type="checkbox" value="representative genome" id="asmRef2" checked>
-                <label class="form-check-label small" for="asmRef2">Representative genome</label>
-              </div>
-              <div class="form-check form-check-sm">
-                <input class="form-check-input asm-refseq" type="checkbox" value="na" id="asmRef3">
-                <label class="form-check-label small" for="asmRef3">N/A</label>
-              </div>
+            <!-- RefSeq category hidden — kept for JS compatibility -->
+            <div id="asmRefseqChecks" class="d-none">
+              <input class="form-check-input asm-refseq" type="checkbox" value="reference genome" id="asmRef1" checked>
+              <input class="form-check-input asm-refseq" type="checkbox" value="representative genome" id="asmRef2" checked>
+              <input class="form-check-input asm-refseq" type="checkbox" value="na" id="asmRef3">
             </div>
 
           </div>
@@ -380,71 +277,33 @@
 
           <!-- ── Quality Metrics (numeric thresholds) ── -->
           <div class="mb-3">
-            <div class="fw-semibold small mb-2">
-              <i class="fa-solid fa-chart-bar me-1 text-success"></i>
-              Quality Metrics
-            </div>
-
-            <div class="row g-2 mb-2">
-              <div class="col-6">
-                <label class="form-label small mb-0 d-flex align-items-center gap-1">
-                  <span>Coverage ≥</span>
-                  <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Minimum sequencing coverage (depth). Higher values indicate more reliable assemblies. Leave empty to accept any coverage.">
-                    <i class="fa-solid fa-circle-question"></i>
-                  </span>
-                </label>
-                <input id="asmMinCoverage" type="number" min="0" step="1" value=""
-                       class="form-control form-control-sm" placeholder="any">
-              </div>
-            </div>
+            <label class="form-label small mb-1 fw-semibold">
+              Min. coverage
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Minimum sequencing coverage (depth). Higher values mean more reliable assemblies. Leave empty to accept any coverage."><i class="fa-solid fa-circle-question"></i></span>
+            </label>
+            <input id="asmMinCoverage" type="number" min="0" step="1" value=""
+                   class="form-control form-control-sm" placeholder="Any">
           </div>
 
           <hr class="my-2">
 
-          <!-- Assembly stats summary (loaded after stats call) -->
-          <div id="asmStatsSummary" class="border rounded-3 p-2 bg-light mb-3 d-none">
-            <div class="fw-semibold small mb-1">
-              <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
-              Assembly Overview
-            </div>
-            <div class="row g-2 text-center">
-              <div class="col-4">
-                <div class="border rounded bg-white p-1">
-                  <div class="small text-muted">Assemblies</div>
-                  <div class="fw-bold text-primary" id="asmStatTotal">—</div>
-                </div>
-              </div>
-              <div class="col-4">
-                <div class="border rounded bg-white p-1">
-                  <div class="small text-muted">Avg Score</div>
-                  <div class="fw-bold text-success" id="asmStatAvgScore">—</div>
-                </div>
-              </div>
-              <div class="col-4">
-                <div class="border rounded bg-white p-1">
-                  <div class="small text-muted">Avg Cov.</div>
-                  <div class="fw-bold text-info" id="asmStatAvgCov">—</div>
-                </div>
-              </div>
-            </div>
+          <!-- Hidden stats kept for JS compatibility -->
+          <div id="asmStatsSummary" class="d-none">
+            <span id="asmStatTotal"></span>
+            <span id="asmStatAvgScore"></span>
+            <span id="asmStatAvgCov"></span>
           </div>
 
           <!-- Action buttons -->
           <div class="d-grid gap-2">
-            <button id="runAsmFilter" class="btn btn-sm btn-primary" type="button">
+            <button id="runAsmFilter" class="btn btn-sm btn-azure" type="button">
               <i class="fa-solid fa-filter me-1"></i>
-              Apply assembly filter
+              Apply filter
             </button>
             <button id="skipAsmFilter" class="btn btn-sm btn-outline-secondary" type="button">
               <i class="fa-solid fa-forward me-1"></i>
-              Skip (use all assemblies)
+              Skip
             </button>
-          </div>
-
-          <div class="form-text small mt-2">
-            <i class="fa-solid fa-lightbulb me-1 text-warning"></i>
-            Scoring mode picks the best assembly per species.
-            Hard mode removes species that don't meet thresholds.
           </div>
         </div>
       </div>
