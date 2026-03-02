@@ -20,7 +20,7 @@ urllib3==2.6.2
 # Celery (runs in eager/sync mode on PA free tier)
 celery==5.4.0
 django-celery-results==2.5.1
-django-celery-beat==2.7.0
+django-celery-beat==2.9.0
 
 # Not needed on PA free tier:
 # psycopg2-binary  (using SQLite)
