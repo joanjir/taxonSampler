@@ -6,6 +6,7 @@
  *   - Each rule: [Rank] → [Taxon(s)]
  *   - Rules combined with AND / OR logic
  *   - Live preview of matching count
+ *   - NCBI-style search history with reload / combine / delete
  *
  * On "Apply", sends the matching keys to renderer.showOnlyKeys()
  *
@@ -27,6 +28,10 @@ export function initAdvancedSearch({ renderer }) {
   // ── State ──
   let rules = [];     // Array of { id, rank, taxa: string[], negate: bool }
   let ruleIdCounter = 0;
+  let history = [];   // Array of { num, query, logicOp, matchCount, ts, rules: serializable[] }
+  let historyCounter = 0;
+
+  const HISTORY_KEY = "taxbridge_as_history";
 
   // ── DOM refs ──
   const rulesContainer  = document.getElementById("asQueryRules");
@@ -39,8 +44,13 @@ export function initAdvancedSearch({ renderer }) {
   const filterCountEl   = document.getElementById("activeFilterCount");
   const clearAllBtn     = document.getElementById("clearAllFilters");
   const modal           = document.getElementById("advancedSearchModal");
+  const historyList     = document.getElementById("asHistoryList");
+  const clearHistoryBtn = document.getElementById("asClearHistory");
 
   if (!rulesContainer || !applyBtn) return {};  // Not on tree page
+
+  // Load persisted history from sessionStorage
+  loadHistory();
 
   // ═══════════════════════════════════════
   //  RULE MANAGEMENT
@@ -323,6 +333,192 @@ export function initAdvancedSearch({ renderer }) {
   }
 
   // ═══════════════════════════════════════
+  //  SEARCH HISTORY (NCBI-style)
+  // ═══════════════════════════════════════
+
+  function loadHistory() {
+    try {
+      const stored = sessionStorage.getItem(HISTORY_KEY);
+      if (stored) {
+        const data = JSON.parse(stored);
+        history = data.entries || [];
+        historyCounter = data.counter || 0;
+      }
+    } catch { /* ignore */ }
+    renderHistory();
+  }
+
+  function saveHistory() {
+    try {
+      sessionStorage.setItem(HISTORY_KEY, JSON.stringify({
+        entries: history,
+        counter: historyCounter,
+      }));
+    } catch { /* quota exceeded — ignore */ }
+  }
+
+  function addToHistory(matchCount) {
+    const activeRules = rules.filter(r => r.rank && r.taxa.length > 0);
+    if (activeRules.length === 0) return;
+
+    const logicOp = getLogicOperator();
+    const queryDesc = buildQueryDescription(activeRules, logicOp);
+
+    // Serialize rules for later reload
+    const serialized = activeRules.map(r => ({
+      rank: r.rank,
+      taxa: [...r.taxa],
+      negate: r.negate,
+    }));
+
+    historyCounter++;
+    history.unshift({
+      num: historyCounter,
+      query: queryDesc,
+      logicOp,
+      matchCount: matchCount ?? 0,
+      ts: new Date().toISOString(),
+      rules: serialized,
+    });
+
+    // Keep max 20 entries
+    if (history.length > 20) history = history.slice(0, 20);
+
+    saveHistory();
+    renderHistory();
+  }
+
+  function buildQueryDescription(activeRules, logicOp) {
+    const parts = activeRules.map(rule => {
+      const neg = rule.negate ? "NOT " : "";
+      const taxaLabel = rule.taxa.includes("__ALL__") ? "All" : rule.taxa.length + " selected";
+      return `${neg}${rule.rank} = [${taxaLabel}]`;
+    });
+    return parts.join(` ${logicOp} `);
+  }
+
+  function renderHistory() {
+    if (!historyList) return;
+
+    if (history.length === 0) {
+      historyList.innerHTML = `
+        <div class="text-center text-muted py-2 small as-history-empty">
+          <i class="fa-solid fa-clock me-1"></i>No searches yet. Apply a query to build your history.
+        </div>`;
+      if (clearHistoryBtn) clearHistoryBtn.style.display = "none";
+      return;
+    }
+
+    if (clearHistoryBtn) clearHistoryBtn.style.display = "";
+
+    historyList.innerHTML = history.map((entry, idx) => {
+      const time = formatTime(entry.ts);
+      const matchBadge = entry.matchCount > 0
+        ? `<span class="badge bg-success-lt text-success">${entry.matchCount}</span>`
+        : `<span class="badge bg-danger-lt text-danger">0</span>`;
+
+      return `
+        <div class="as-history-entry" data-history-idx="${idx}">
+          <div class="d-flex align-items-center gap-2">
+            <span class="as-history-num">#${entry.num}</span>
+            <code class="as-history-query flex-grow-1">${escapeHtml(entry.query)}</code>
+            ${matchBadge}
+            <span class="text-muted small text-nowrap">${time}</span>
+          </div>
+          <div class="as-history-actions mt-1">
+            <button class="btn btn-sm btn-ghost-primary as-history-load" data-idx="${idx}" type="button" title="Load this query">
+              <i class="fa-solid fa-rotate-right me-1"></i>Load
+            </button>
+            <button class="btn btn-sm btn-ghost-secondary as-history-combine" data-idx="${idx}" type="button" title="Add rules to current query">
+              <i class="fa-solid fa-code-merge me-1"></i>Add
+            </button>
+            <button class="btn btn-sm btn-ghost-danger as-history-delete" data-idx="${idx}" type="button" title="Remove from history">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>`;
+    }).join("");
+
+    bindHistoryEvents();
+  }
+
+  function bindHistoryEvents() {
+    if (!historyList) return;
+
+    historyList.querySelectorAll(".as-history-load").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = +btn.dataset.idx;
+        loadFromHistory(idx);
+      });
+    });
+
+    historyList.querySelectorAll(".as-history-combine").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = +btn.dataset.idx;
+        combineFromHistory(idx);
+      });
+    });
+
+    historyList.querySelectorAll(".as-history-delete").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = +btn.dataset.idx;
+        deleteFromHistory(idx);
+      });
+    });
+  }
+
+  function loadFromHistory(idx) {
+    const entry = history[idx];
+    if (!entry) return;
+
+    // Reset current rules and rebuild from history entry
+    rules = [];
+    ruleIdCounter = 0;
+    entry.rules.forEach(r => addRule(r.rank, [...r.taxa], r.negate));
+
+    // Set logic operator
+    const radio = document.getElementById(entry.logicOp === "OR" ? "asLogicOr" : "asLogicAnd");
+    if (radio) radio.checked = true;
+
+    renderRules();
+    updatePreview();
+  }
+
+  function combineFromHistory(idx) {
+    const entry = history[idx];
+    if (!entry) return;
+
+    // Append history entry's rules to the current rules
+    entry.rules.forEach(r => addRule(r.rank, [...r.taxa], r.negate));
+  }
+
+  function deleteFromHistory(idx) {
+    history.splice(idx, 1);
+    saveHistory();
+    renderHistory();
+  }
+
+  function clearHistory() {
+    history = [];
+    historyCounter = 0;
+    saveHistory();
+    renderHistory();
+  }
+
+  function formatTime(isoStr) {
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch { return ""; }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ═══════════════════════════════════════
   //  APPLY & RESET
   // ═══════════════════════════════════════
 
@@ -338,6 +534,9 @@ export function initAdvancedSearch({ renderer }) {
       renderer.showOnlyKeys?.(keys, { fit: true });
       const activeCount = rules.filter(r => r.rank && r.taxa.length > 0).length;
       updateFilterBadge(activeCount);
+
+      // Save to history
+      addToHistory(keys.length);
     }
 
     // Close modal
@@ -382,6 +581,9 @@ export function initAdvancedSearch({ renderer }) {
   // Clear all from navbar badge
   clearAllBtn?.addEventListener("click", clearFilters);
 
+  // Clear history
+  clearHistoryBtn?.addEventListener("click", clearHistory);
+
   // Logic operator change → update preview
   document.querySelectorAll('input[name="asLogicOp"]').forEach(radio => {
     radio.addEventListener("change", updatePreview);
@@ -413,5 +615,6 @@ export function initAdvancedSearch({ renderer }) {
     resetAll,
     clearFilters,
     applyFilters,
+    clearHistory,
   };
 }

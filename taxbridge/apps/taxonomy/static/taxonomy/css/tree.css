@@ -350,6 +350,47 @@ g.node.clade-path {
   color: #206bc4;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 }
+
+/* History list */
+.as-history-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid rgba(101,109,119,.16);
+  border-radius: .375rem;
+  padding: .25rem;
+}
+.as-history-entry {
+  padding: .5rem .625rem;
+  border-radius: .25rem;
+  transition: background .15s ease;
+  cursor: default;
+}
+.as-history-entry:hover {
+  background: rgba(32,107,196,.04);
+}
+.as-history-entry + .as-history-entry {
+  border-top: 1px solid rgba(101,109,119,.1);
+}
+.as-history-num {
+  font-weight: 700;
+  font-size: .8125rem;
+  color: #206bc4;
+  min-width: 2.2em;
+  text-align: center;
+}
+.as-history-query {
+  font-size: .75rem;
+  color: #495057;
+  word-break: break-all;
+  background: transparent;
+}
+.as-history-actions {
+  display: none;
+  gap: .25rem;
+}
+.as-history-entry:hover .as-history-actions {
+  display: flex;
+}
 #advancedSearchModal .select2-container {
   min-width: 100% !important;
 }

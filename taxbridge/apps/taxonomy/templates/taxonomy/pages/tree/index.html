@@ -149,6 +149,23 @@
             <code id="asQueryText" class="d-block mt-2 small" style="word-break:break-all;">No filters defined</code>
           </div>
 
+          <!-- Search History (NCBI-style) -->
+          <div class="mt-3" id="asHistorySection">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0 fw-semibold small text-uppercase text-muted">
+                <i class="fa-solid fa-clock-rotate-left me-1"></i>Search History
+              </label>
+              <button id="asClearHistory" class="btn btn-sm btn-ghost-danger" type="button" title="Clear all history" style="display:none;">
+                <i class="fa-solid fa-trash-can me-1"></i>Clear
+              </button>
+            </div>
+            <div id="asHistoryList" class="as-history-list">
+              <div class="text-center text-muted py-2 small as-history-empty">
+                <i class="fa-solid fa-clock me-1"></i>No searches yet. Apply a query to build your history.
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <!-- Footer -->
