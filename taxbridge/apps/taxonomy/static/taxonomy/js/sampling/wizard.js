@@ -129,6 +129,12 @@ export function initSamplingWizard({ renderer }) {
       }
     }
 
+    // Update scope display in Step 1
+    const scopeLabelEl = document.getElementById("scopeLabel");
+    if (scopeLabelEl && state.scopeKey) {
+      scopeLabelEl.textContent = state.scopeLabel || state.scopeKey;
+    }
+
     // Remove targets outside the new scope
     if (state.scopeKey && state.targetKeys.length) {
       const kept = [];
@@ -177,7 +183,7 @@ export function initSamplingWizard({ renderer }) {
   function addTargetFromActive() {
     const a = tryGetActiveNodeInfo();
     if (!a?.key) {
-      showWarn("No active node. Click a node in the tree first.");
+      showWarn("No active node. Click a node in the taxonomy first.");
       return;
     }
     if (!isDescendantPath(a.key, state.scopeKey)) {
@@ -212,7 +218,7 @@ export function initSamplingWizard({ renderer }) {
     if (v === "node") {
       const a = tryGetActiveNodeInfo();
       if (!a?.key) {
-        showWarn("No active node. Click a node in the tree first.");
+        showWarn("No active node. Click a node in the taxonomy first.");
         scopeSel.value = "";
         setScope("", "");
         return;
@@ -225,7 +231,7 @@ export function initSamplingWizard({ renderer }) {
   scopeSetActive?.addEventListener("click", () => {
     const a = tryGetActiveNodeInfo();
     if (!a?.key) {
-      showWarn("No active node. Click a node in the tree first.");
+      showWarn("No active node. Click a node in the taxonomy first.");
       return;
     }
     scopeSel.value = "node";
@@ -269,16 +275,25 @@ export function initSamplingWizard({ renderer }) {
       state.targetLabels.clear();
       renderTargets();
       showWarn("");
+      try { sessionStorage.removeItem("taxbridge_dbsampling"); } catch (_) {}
     } catch (_) {}
   }
 
-  // Init
+  // Init — always start at Step 1; wizard is disabled until tree loads
   setStep(1);
   setScope("", "");
   renderTargets();
   showWarn("");
 
-  const api = { state, reset, setStep };
+  // ── Disabled overlay until tree is loaded ──────────────────────
+  const overlay = document.getElementById("samLoadingOverlay");
+  function enableWizard() {
+    if (overlay) overlay.classList.add("d-none");
+  }
+  // Listen for tree loaded event
+  window.addEventListener("tree:loaded", enableWizard, { once: true });
+
+  const api = { state, reset, setStep, enableWizard };
 
   // Expose globally for integration with samplingCtl
   window.__samplingWizard = api;

@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}
-  Taxonomic Tree
+  Taxonomy
 {% endblock %}
 
 {% block extra_css %}
@@ -19,7 +19,7 @@
           <ul class="nav nav-tabs card-header-tabs" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="treeTab" data-bs-toggle="tab" data-bs-target="#treePane" type="button" role="tab" aria-controls="treePane" aria-selected="true">
-                <i class="fa-solid fa-sitemap me-1"></i>Tree
+                <i class="fa-solid fa-sitemap me-1"></i>Taxonomy
               </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -30,12 +30,12 @@
             </li>
             <li class="nav-item" role="presentation">
               <button class="nav-link" id="phyloTab" data-bs-toggle="tab" data-bs-target="#phyloPane" type="button" role="tab" aria-controls="phyloPane" aria-selected="false">
-                <i class="fa-solid fa-project-diagram me-1"></i>Phylo Tree
+                <i class="fa-solid fa-project-diagram me-1"></i>Newick
               </button>
             </li>
           </ul>
           <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-primary-lt text-primary" title="Total species in tree">
+            <span class="badge bg-primary-lt text-primary" title="Total species">
               <i class="fa-solid fa-dna me-1"></i><span id="speciesCount">0</span> species
             </span>
           </div>
@@ -58,17 +58,17 @@
             <div class="card-body" id="phyloContent">
               <div class="text-center text-muted py-5" id="phyloEmpty">
                 <i class="fa-solid fa-project-diagram fa-3x mb-3 opacity-25"></i>
-                <p>Run a sampling first to generate a taxonomic  tree.</p>
+                <p>Run a sampling first to generate the Newick output.</p>
               </div>
               <div id="phyloLoading" class="text-center py-5 d-none">
                 <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-2 text-muted">Generating tree with ETE3...</p>
+                <p class="mt-2 text-muted">Generating Newick with ETE3...</p>
               </div>
               <div id="phyloTreeWrap" class="d-none">
                 <div class="d-flex align-items-center justify-content-between mb-2">
                   <div class="small fw-semibold">
                     <i class="fa-solid fa-project-diagram me-1 text-success"></i>
-                    Taxonomic tree
+                    Taxonomic hierarchy
                     <span id="phyloSpeciesCount" class="badge bg-success-lt text-success ms-1"></span>
                   </div>
                   <div class="btn-group btn-group-sm">

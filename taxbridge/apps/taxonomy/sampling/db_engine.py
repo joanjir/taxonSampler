@@ -433,6 +433,8 @@ def get_sampling_stats(
     """
     Returns statistics about available species for sampling config UI.
     Accepts the same scope filters as run_db_sampling.
+
+    Optimised: single pass over the queryset instead of N iterations.
     """
     from apps.taxonomy.models import NCBIGenome
 
@@ -451,26 +453,26 @@ def get_sampling_stats(
 
     total = qs.count()
 
-    # Count by rank
-    rank_counts: Dict[str, Dict[str, int]] = {}
-    for rank in RANK_HIERARCHY[:-1]:  # Skip 'species'
-        groups: Dict[str, int] = defaultdict(int)
-        for genome in qs.iterator():
-            cls = genome.external_taxon.classification or {}
+    # Single pass: gather kingdoms, phyla and rank counts at once
+    ranks_of_interest = RANK_HIERARCHY[:-1]  # skip 'species'
+    rank_counts: Dict[str, Dict[str, int]] = {r: defaultdict(int) for r in ranks_of_interest}
+    kingdoms: set = set()
+    phyla: set = set()
+
+    for genome in qs.only(
+        "external_taxon__classification",
+    ).select_related("external_taxon").iterator():
+        cls = genome.external_taxon.classification or {}
+        k = cls.get("kingdom", "")
+        p = cls.get("phylum", "")
+        if k:
+            kingdoms.add(k)
+        if p:
+            phyla.add(p)
+        for rank in ranks_of_interest:
             val = cls.get(rank, "")
             if val:
-                groups[val] += 1
-        rank_counts[rank] = dict(sorted(groups.items()))
-
-    # Available kingdoms
-    kingdoms = set()
-    phyla = set()
-    for genome in qs.only("external_taxon").select_related("external_taxon").iterator():
-        cls = genome.external_taxon.classification or {}
-        if cls.get("kingdom"):
-            kingdoms.add(cls["kingdom"])
-        if cls.get("phylum"):
-            phyla.add(cls["phylum"])
+                rank_counts[rank][val] += 1
 
     return {
         "total_species": total,
@@ -479,7 +481,7 @@ def get_sampling_stats(
         "rank_breakdown": {
             rank: {
                 "num_groups": len(groups),
-                "groups": groups,
+                "groups": dict(sorted(groups.items())),
             }
             for rank, groups in rank_counts.items()
         },

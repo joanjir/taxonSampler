@@ -12,6 +12,13 @@
 
 import { apiDbSamplingStats, apiDbSamplingExecute } from "../shared/api.js";
 
+// ── Rank hierarchy (index 0 = highest) ──────────────────────────
+const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"];
+const RANK_LABELS = { kingdom:"Kingdom", phylum:"Phylum", "class":"Class", order:"Order", family:"Family", genus:"Genus", species:"Species" };
+
+function rankToIndex(r) { const i = RANKS.indexOf((r||"").toLowerCase()); return i >= 0 ? i : 0; }
+function indexToRank(i) { return RANKS[Math.max(0, Math.min(RANKS.length - 1, i))]; }
+
 /**
  * Escape HTML to prevent XSS in dynamic content.
  */
@@ -58,9 +65,15 @@ export function initDbSampling() {
 
     // Config inputs
     maxSampleSize: document.getElementById("dbMaxSampleSize"),
-    startRank:     document.getElementById("dbStartRank"),
-    endRank:       document.getElementById("dbEndRank"),
+    startRank:     document.getElementById("dbStartRank"),   // range input
+    endRank:       document.getElementById("dbEndRank"),       // range input
     strategy:      document.getElementById("dbStrategy"),
+    // Range slider UI
+    rangeLabelStart: document.getElementById("rangeLabelStart"),
+    rangeLabelEnd:   document.getElementById("rangeLabelEnd"),
+    rangeTrack:      document.getElementById("rangeTaxonTrack"),
+    rangeTicks:      document.getElementById("rangeTaxonTicks"),
+    rangeDots:       document.getElementById("rangeTaxonDots"),
     // Scope info display
     scopeInfo:     document.getElementById("dbScopeInfo"),
 
@@ -73,6 +86,124 @@ export function initDbSampling() {
 
   let lastResult = null;
   let statsCache = null;
+  let _minRankIdx = 0; // floor from scope rank
+
+  // ── Range slider helpers ──────────────────────────────────────────
+
+  function updateRangeUI() {
+    const s = parseInt(dom.startRank.value, 10);
+    const e = parseInt(dom.endRank.value, 10);
+    const max = RANKS.length - 1;
+    const joined = (s === e);
+
+    // Toggle joined class on inputs
+    dom.startRank.classList.toggle("joined", joined);
+    dom.endRank.classList.toggle("joined", joined);
+
+    // Track fill bar
+    if (dom.rangeTrack) {
+      const pctL = (s / max) * 100;
+      const pctR = (e / max) * 100;
+      const fill = dom.rangeTrack.querySelector(".range-fill");
+      if (fill) {
+        fill.style.left  = pctL + "%";
+        fill.style.width  = (pctR - pctL) + "%";
+        fill.classList.toggle("joined", joined);
+      }
+    }
+
+    // Dots at each position
+    if (dom.rangeDots) {
+      // Create dots once if not present
+      if (!dom.rangeDots.children.length) {
+        for (let i = 0; i <= max; i++) {
+          const dot = document.createElement("div");
+          dot.className = "rt-dot";
+          dot.style.left = (i / max * 100) + "%";
+          dom.rangeDots.appendChild(dot);
+        }
+      }
+      // Update dot classes
+      Array.from(dom.rangeDots.children).forEach((dot, i) => {
+        dot.classList.toggle("in-range", i > s && i < e);
+        dot.classList.toggle("is-start", i === s && !joined);
+        dot.classList.toggle("is-end",   i === e && !joined);
+        dot.classList.toggle("joined",   i === s && joined);
+        dot.classList.toggle("disabled-rank", i < _minRankIdx);
+      });
+    }
+
+    // Tick labels: highlight in-range, grey out disabled
+    if (dom.rangeTicks) {
+      const ticks = dom.rangeTicks.querySelectorAll("span");
+      ticks.forEach((tick, i) => {
+        tick.classList.toggle("in-range", i >= s && i <= e);
+        tick.classList.toggle("disabled-rank", i < _minRankIdx);
+      });
+    }
+  }
+
+  function enforceConstraints() {
+    const s = parseInt(dom.startRank.value, 10);
+    const e = parseInt(dom.endRank.value, 10);
+
+    // Start cannot go below floor
+    if (s < _minRankIdx) dom.startRank.value = _minRankIdx;
+
+    // End cannot be less than start
+    if (e < parseInt(dom.startRank.value, 10)) {
+      dom.endRank.value = dom.startRank.value;
+    }
+
+    updateRangeUI();
+  }
+
+  function applyScopeFloor(scopeFilters) {
+    // Find the lowest rank in the scope to set the floor
+    let maxIdx = 0;
+    for (const rank of Object.keys(scopeFilters)) {
+      const idx = rankToIndex(rank);
+      if (idx > maxIdx) maxIdx = idx;
+    }
+    _minRankIdx = maxIdx;
+
+    // Set min on both inputs
+    dom.startRank.min = _minRankIdx;
+    dom.endRank.min   = _minRankIdx;
+
+    // If current values are above floor, push them down
+    if (parseInt(dom.startRank.value, 10) < _minRankIdx) {
+      dom.startRank.value = _minRankIdx;
+    }
+    if (parseInt(dom.endRank.value, 10) < _minRankIdx) {
+      dom.endRank.value = RANKS.length - 1; // default end to species
+    }
+
+    enforceConstraints();
+  }
+
+  // Bind range slider events
+  if (dom.startRank) {
+    dom.startRank.addEventListener("input", () => {
+      const s = parseInt(dom.startRank.value, 10);
+      const e = parseInt(dom.endRank.value, 10);
+      if (s < _minRankIdx) dom.startRank.value = _minRankIdx;
+      if (s > e) dom.endRank.value = dom.startRank.value;
+      updateRangeUI();
+    });
+  }
+  if (dom.endRank) {
+    dom.endRank.addEventListener("input", () => {
+      const s = parseInt(dom.startRank.value, 10);
+      const e = parseInt(dom.endRank.value, 10);
+      if (e < _minRankIdx) dom.endRank.value = _minRankIdx;
+      if (e < s) dom.startRank.value = dom.endRank.value;
+      updateRangeUI();
+    });
+  }
+
+  // Initial UI
+  updateRangeUI();
 
   // ── Read wizard state ─────────────────────────────────────────────
   function getWizardScope() {
@@ -98,6 +229,9 @@ export function initDbSampling() {
 
       if (dom.statMatched)  dom.statMatched.textContent  = data.total_species ?? "—";
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;
+
+      // Apply scope floor to range slider
+      applyScopeFloor(scopeFilters);
 
       // Show scope info
       updateScopeDisplay(scopeFilters, data.total_species);
@@ -137,8 +271,8 @@ export function initDbSampling() {
 
   async function execute() {
     const maxSampleSize = Math.max(1, parseInt(dom.maxSampleSize?.value || "50", 10) || 50);
-    const startRank     = (dom.startRank?.value  || "phylum").trim();
-    const endRank       = (dom.endRank?.value    || "species").trim();
+    const startRank     = indexToRank(parseInt(dom.startRank?.value || "1", 10));
+    const endRank       = indexToRank(parseInt(dom.endRank?.value   || "6", 10));
     const strategy      = (dom.strategy?.value   || "proportional").trim();
     // Get Step 1 wizard scope
     const { scopeFilters, speciesNames } = getWizardScope();

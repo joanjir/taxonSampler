@@ -4,6 +4,8 @@
  * Keeps main.js and sub-modules free of duplicated helpers.
  */
 
+import { saveAs } from "./save_as.js";
+
 /**
  * Read a cookie value by name.
  */
@@ -16,7 +18,7 @@ export function getCookie(name) {
 
 /**
  * POST a payload to a backend endpoint and trigger a file download
- * from the response blob.
+ * from the response blob.  Shows Save-As dialog for filename.
  */
 export async function postDownload(url, payload, filenameFallback) {
   const csrf = getCookie("csrftoken");
@@ -39,14 +41,7 @@ export async function postDownload(url, payload, filenameFallback) {
   const m = /filename="([^"]+)"/.exec(cd);
   const filename = m && m[1] ? m[1] : filenameFallback || "download.txt";
 
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
+  await saveAs(blob, filename);
 }
 
 /**

@@ -200,3 +200,138 @@ g.node.clade-path {
 .select2-container--bootstrap-5 .select2-results__option--highlighted {
   background-color: #0d6efd;
 }
+
+/* ── Range Taxon dual slider (NCBI style) ──────────────────── */
+.range-taxon-wrap {
+  padding: 8px 0 0;
+}
+.range-taxon-container {
+  position: relative;
+  height: 28px;
+}
+/* Background track */
+.range-taxon-track {
+  position: absolute;
+  top: 50%; left: 6px; right: 6px;
+  height: 4px;
+  transform: translateY(-50%);
+  background: #c8cfd6;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+}
+/* Colored fill between handles */
+.range-taxon-track .range-fill {
+  position: absolute;
+  height: 100%;
+  background: linear-gradient(90deg, #198754, #0d6efd);
+  border-radius: 2px;
+  transition: left .05s, width .05s;
+}
+.range-taxon-track .range-fill.joined {
+  background: #6f42c1;
+}
+/* Dot layer */
+.range-taxon-dots {
+  position: absolute;
+  top: 50%; left: 6px; right: 6px;
+  height: 0;
+  transform: translateY(-50%);
+  z-index: 1;
+  pointer-events: none;
+}
+.range-taxon-dots .rt-dot {
+  position: absolute;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #c8cfd6;
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  top: 50%;
+  transition: background .15s;
+}
+.range-taxon-dots .rt-dot.in-range {
+  background: linear-gradient(135deg, #198754, #0d6efd);
+}
+.range-taxon-dots .rt-dot.is-start {
+  background: #198754;
+}
+.range-taxon-dots .rt-dot.is-end {
+  background: #0d6efd;
+}
+.range-taxon-dots .rt-dot.joined {
+  background: #6f42c1;
+}
+.range-taxon-dots .rt-dot.disabled-rank {
+  background: #e9ecef;
+}
+/* Range inputs (invisible thumb layer) */
+.range-taxon-input {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  z-index: 3;
+}
+.range-taxon-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  transition: background .15s;
+}
+/* Start = green, End = blue */
+.range-taxon-start::-webkit-slider-thumb { background: #198754; }
+.range-taxon-end::-webkit-slider-thumb   { background: #0d6efd; }
+/* When joined both turn purple */
+.range-taxon-start.joined::-webkit-slider-thumb { background: #6f42c1; }
+.range-taxon-end.joined::-webkit-slider-thumb   { background: #6f42c1; }
+
+.range-taxon-input::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  transition: background .15s;
+}
+.range-taxon-start::-moz-range-thumb { background: #198754; }
+.range-taxon-end::-moz-range-thumb   { background: #0d6efd; }
+.range-taxon-start.joined::-moz-range-thumb { background: #6f42c1; }
+.range-taxon-end.joined::-moz-range-thumb   { background: #6f42c1; }
+.range-taxon-input:focus { outline: none; }
+/* Tick labels below */
+.range-taxon-ticks {
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+  margin-top: 6px;
+}
+.range-taxon-ticks span {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6c757d;
+  text-align: center;
+  flex: 1;
+  cursor: default;
+  transition: color .15s, font-weight .15s;
+  user-select: none;
+}
+.range-taxon-ticks span.in-range {
+  color: #0d6efd;
+  font-weight: 700;
+}
+.range-taxon-ticks span.disabled-rank {
+  color: #ced4da;
+  font-weight: 400;
+}

@@ -277,14 +277,8 @@ export async function copyToClipboard(text) {
   }
 }
 
-export function downloadText(filename, text, mime = "text/plain;charset=utf-8") {
-  const blob = new Blob([text || ""], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+import { saveAs } from "../shared/save_as.js";
+
+export async function downloadText(filename, text, mime = "text/plain;charset=utf-8") {
+  await saveAs(text || "", filename, mime);
 }

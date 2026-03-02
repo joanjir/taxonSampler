@@ -9,7 +9,15 @@
         </h5>
       </div>
 
-      <div class="card-body">
+      <div class="card-body" style="position:relative;">
+        <!-- Loading overlay — hidden once tree finishes loading -->
+        <div id="samLoadingOverlay" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;border-radius:0 0 .375rem .375rem;">
+          <div class="text-center">
+            <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+            <div class="small text-muted fw-semibold">Loading taxonomy…</div>
+          </div>
+        </div>
+
         <div class="text-muted small fw-semibold mb-2">
           <i class="fa-solid fa-seedling me-1"></i>
           Taxon sampling
@@ -54,7 +62,7 @@
             <div class="d-flex align-items-center gap-2 mb-2">
               <span class="badge rounded-circle" style="width:22px;height:22px;line-height:18px;background-color:rgba(25,135,84,0.45);color:#fff;"><strong>1</strong></span>
               <span class="fw-semibold small">Select your sampling universe</span>
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Click a node in the taxonomic tree and press 'Use selected node' to define the root of your sampling. All descendant species will be included.">
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Click a node in the taxonomy and press 'Use selected node' to define the root of your sampling. All descendant species will be included.">
                 <i class="fa-solid fa-circle-question"></i>
               </span>
             </div>
@@ -62,7 +70,7 @@
             <div class="border rounded-3 p-2 bg-white">
               <!-- Hidden select for JS compatibility -->
               <select id="samplingRoot" class="d-none">
-                <option value="">Entire tree</option>
+                <option value="">Entire taxonomy</option>
                 <option value="node">Use active node</option>
               </select>
               
@@ -70,7 +78,7 @@
               <div id="scopeDisplay" class="d-flex align-items-center justify-content-between">
                 <div>
                   <i class="fa-solid fa-globe text-success me-1"></i>
-                  <span id="scopeLabel" class="small fw-semibold">Click a node in the tree</span>
+                  <span id="scopeLabel" class="small fw-semibold">Click a node in the taxonomy</span>
                 </div>
                 <span class="badge bg-success-lt text-success" id="scopeSpeciesCount">— spp</span>
               </div>
@@ -157,7 +165,7 @@
           <div class="alert alert-light border py-2 px-2">
             <div class="small text-muted">
               <i class="fa-solid fa-lightbulb me-1 text-warning"></i>
-              <strong>How to use:</strong> Click nodes in the tree. First set your <span class="text-success fw-semibold">scope</span> (green border), then optionally add <span class="text-primary fw-semibold">target groups</span> (blue border) within it.
+              <strong>How to use:</strong> Click nodes in the taxonomy. First set your <span class="text-success fw-semibold">scope</span> (green border), then optionally add <span class="text-primary fw-semibold">target groups</span> (blue border) within it.
             </div>
           </div>
         </div>
@@ -210,48 +218,42 @@
                    class="form-control form-control-sm" />
           </div>
 
-          <!-- Start Rank -->
+          <!-- Range Taxon (NCBI-style dual slider) -->
           <div class="mb-3">
             <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>Start rank</span>
+              <span>Range taxon</span>
               <span class="help-icon text-muted"
                     data-bs-toggle="popover"
                     data-bs-trigger="hover"
                     data-bs-placement="top"
                     data-bs-custom-class="popover-help"
-                    data-bs-content="Highest taxonomic rank to consider. Species are grouped by this rank for strategy allocation.">
+                    data-bs-content="Drag the handles to set the taxonomic range. Start (left) = highest rank for grouping. End (right) = lowest rank in results. The range is limited to ranks at or below your scope selection.">
                 <i class="fa-solid fa-circle-question"></i>
               </span>
             </label>
-            <select id="dbStartRank" class="form-select form-select-sm">
-              <option value="kingdom">Kingdom</option>
-              <option value="phylum" selected>Phylum</option>
-              <option value="class">Class</option>
-              <option value="order">Order</option>
-              <option value="family">Family</option>
-              <option value="genus">Genus</option>
-            </select>
-          </div>
-
-          <!-- End Rank -->
-          <div class="mb-3">
-            <label class="form-label small mb-1 d-flex align-items-center gap-2">
-              <span>End rank</span>
-              <span class="help-icon text-muted"
-                    data-bs-toggle="popover"
-                    data-bs-trigger="hover"
-                    data-bs-placement="top"
-                    data-bs-custom-class="popover-help"
-                    data-bs-content="Lowest rank returned. Usually 'species'. Results always resolve down to species.">
-                <i class="fa-solid fa-circle-question"></i>
-              </span>
-            </label>
-            <select id="dbEndRank" class="form-select form-select-sm">
-              <option value="species" selected>Species</option>
-              <option value="genus">Genus</option>
-              <option value="family">Family</option>
-              <option value="order">Order</option>
-            </select>
+            <!-- Dual range container -->
+            <div class="range-taxon-wrap">
+              <div class="range-taxon-container">
+                <div class="range-taxon-track" id="rangeTaxonTrack">
+                  <div class="range-fill"></div>
+                </div>
+                <!-- Dots -->
+                <div class="range-taxon-dots" id="rangeTaxonDots"></div>
+                <!-- Hidden range inputs -->
+                <input type="range" id="dbStartRank" class="range-taxon-input range-taxon-start" min="0" max="6" value="1" step="1" />
+                <input type="range" id="dbEndRank" class="range-taxon-input range-taxon-end" min="0" max="6" value="6" step="1" />
+              </div>
+              <!-- Tick labels -->
+              <div class="range-taxon-ticks" id="rangeTaxonTicks">
+                <span data-rank="kingdom" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Kingdom">K</span>
+                <span data-rank="phylum" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Phylum">P</span>
+                <span data-rank="class" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Class">C</span>
+                <span data-rank="order" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Order">O</span>
+                <span data-rank="family" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Family">F</span>
+                <span data-rank="genus" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Genus">G</span>
+                <span data-rank="species" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Species">S</span>
+              </div>
+            </div>
           </div>
 
           <!-- Strategy -->

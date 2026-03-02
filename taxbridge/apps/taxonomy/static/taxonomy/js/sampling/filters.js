@@ -179,7 +179,7 @@ export function createSamplingFiltersController({ renderer }) {
         dom.scopeBadge.classList.add("bg-secondary-lt", "text-secondary");
       }
       if (dom.scopeLabel) {
-        dom.scopeLabel.textContent = "Click a node in the tree";
+        dom.scopeLabel.textContent = "Click a node in the taxonomy";
       }
     }
   }
@@ -215,7 +215,7 @@ export function createSamplingFiltersController({ renderer }) {
 
     if (!rootModeIsNode()) {
       if (currentTargetKeys().length) {
-        setWarn("Targets selected but scope is Entire tree. Either set scope to node or clear targets.");
+        setWarn("Targets selected but scope is Entire taxonomy. Either set scope to node or clear targets.");
         return false;
       }
       return true;
@@ -264,7 +264,7 @@ export function createSamplingFiltersController({ renderer }) {
     
     // Quick update: Show loading state
     if (dom.scopeLabel) {
-      dom.scopeLabel.textContent = scopeKey ? "..." : "Click a node in the tree";
+      dom.scopeLabel.textContent = scopeKey ? "..." : "Click a node in the taxonomy";
     }
     if (dom.scopeSpeciesCount) {
       dom.scopeSpeciesCount.textContent = scopeKey ? "..." : "— spp";
@@ -305,7 +305,7 @@ export function createSamplingFiltersController({ renderer }) {
       
       // Update Scope stats
       if (dom.scopeLabel) {
-        dom.scopeLabel.textContent = data.scope?.name || "Click a node in the tree";
+        dom.scopeLabel.textContent = data.scope?.name || "Click a node in the taxonomy";
       }
       if (dom.scopeSpeciesCount) {
         if (data.scope) {
@@ -542,7 +542,7 @@ export function createSamplingFiltersController({ renderer }) {
       const a = activeNode;
       console.log("[sampling_filters] active node for scope:", a);
       if (!a?.key) {
-        setWarn("No active node. Click a node in the tree to make it active, then set scope.");
+        setWarn("No active node. Click a node in the taxonomy to make it active, then set scope.");
         return;
       }
       if (normRank(a.rank) === "species") {
@@ -586,7 +586,7 @@ export function createSamplingFiltersController({ renderer }) {
 
       const a = activeNode;
       if (!a?.key) {
-        setWarn("No active node. Click a node in the tree to make it active, then add it as target.");
+        setWarn("No active node. Click a node in the taxonomy to make it active, then add it as target.");
         return;
       }
       const rk = normRank(a.rank);

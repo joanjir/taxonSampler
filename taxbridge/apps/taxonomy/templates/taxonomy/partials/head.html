@@ -1,7 +1,10 @@
+{% load static %}
 <header class="navbar navbar-expand-md d-print-none" data-bs-theme="light">
   <div class="container-xl">
     <!-- Brand -->
-    <a class="navbar-brand navbar-brand-autodark me-4" href="{% url 'taxonomy:home' %}"><span class="fw-bold">TaxaBridge</span></a>
+    <a class="navbar-brand navbar-brand-autodark me-4" href="{% url 'taxonomy:home' %}">
+      <img src="{% static 'taxonomy/img/taxonlogo.png' %}" alt="TaxonSampler" height="22" style="max-width:150px; object-fit:contain;">
+    </a>
     <!-- Mobile toggler -->
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
 
@@ -11,7 +14,7 @@
           <a class="nav-link" href="{% url 'taxonomy:home' %}"><i class="ti ti-home me-1"></i> Home</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{% url 'taxonomy:tree' %}"><i class="ti ti-binary-tree me-1"></i> Taxonomy Tree</a>
+          <a class="nav-link" href="{% url 'taxonomy:tree' %}"><i class="ti ti-hierarchy-2 me-1"></i> Taxonomy</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="{% url 'taxonomy:taxon-sync-dashboard' %}"><i class="ti ti-arrows-exchange me-1"></i> Taxon Sync</a>

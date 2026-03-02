@@ -1,9 +1,10 @@
+{% load static %}
 <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
   <div class="container-fluid">
     <!-- Brand -->
     <h1 class="navbar-brand navbar-brand-autodark">
       <a href="{% url 'taxonomy:home' %}">
-        <span class="text-white fw-bold">TaxaBridge</span>
+        <img src="{% static 'taxonomy/img/taxonlogo.png' %}" alt="TaxonSampler" height="40" style="filter: brightness(0) invert(1);">
       </a>
     </h1>
     
@@ -24,13 +25,13 @@
           </a>
         </li>
         
-        <!-- Taxonomy Tree -->
+        <!-- Taxonomy -->
         <li class="nav-item">
           <a class="nav-link" href="{% url 'taxonomy:tree' %}">
             <span class="nav-link-icon d-md-none d-lg-inline-block">
-              <i class="ti ti-binary-tree"></i>
+              <i class="ti ti-hierarchy-2"></i>
             </span>
-            <span class="nav-link-title">Taxonomy Tree</span>
+            <span class="nav-link-title">Taxonomy</span>
           </a>
         </li>
         

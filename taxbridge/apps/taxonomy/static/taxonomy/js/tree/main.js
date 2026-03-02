@@ -348,9 +348,12 @@ async function load() {
     }
 
     selMgr.repaintSelection();
+
+    // Signal that the tree is fully loaded — enables the wizard panel
+    window.dispatchEvent(new CustomEvent("tree:loaded"));
   } catch (err) {
     console.error(err);
-    showLoadError(ui.mount, `Error loading tree: ${err?.message || err}`);
+    showLoadError(ui.mount, `Error loading taxonomy: ${err?.message || err}`);
   }
 }
 
@@ -389,9 +392,9 @@ ui.clearSel?.addEventListener("click", () => {
 });
 
 // Local export (client-side, useful for debugging)
-ui.exportSel?.addEventListener("click", () => {
+ui.exportSel?.addEventListener("click", async () => {
   const payload = selMgr.getExportPayload({ allowManualFallback: true });
-  downloadText(
+  await downloadText(
     "selection.json",
     JSON.stringify(payload, null, 2),
     "application/json;charset=utf-8",

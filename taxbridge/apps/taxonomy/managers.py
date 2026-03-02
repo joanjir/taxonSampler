@@ -170,25 +170,114 @@ class ExternalTaxonManager(models.Manager):
             path = normalize_classification_path(sp.classification_path)
             _insert_species(sp, path, source=_source_label(sp.system, sp.status))
 
+        # ── Helpers for merging manual species into the existing COL trie ──
+
+        def _find_chain_to(node, target_rank, target_name):
+            """
+            DFS search in node's subtree for (target_rank, target_name).
+            Returns list of intermediate (rank, name) keys to traverse
+            (NOT including the target itself), or None if not found.
+            """
+            key = (target_rank, target_name)
+            if key in node.children:
+                return []                       # direct child
+            for child_key, child_node in node.children.items():
+                result = _find_chain_to(child_node, target_rank, target_name)
+                if result is not None:
+                    return [child_key] + result
+            return None
+
+        def _expand_manual_path(trie_root, path):
+            """
+            Fill in intermediate trie nodes that already exist in the COL
+            trie between consecutive ranks of a manual species' path.
+
+            Example: manual path [subphylum:Vertebrata, class:Reptilia]
+            and the COL trie has Vertebrata → Gnathostomata → Osteichthyes →
+            Tetrapoda → Reptilia.  Result:
+              [Vertebrata, Gnathostomata, Osteichthyes, Tetrapoda, Reptilia]
+            """
+            if not path:
+                return path
+            expanded: list[tuple[str, str]] = []
+            cur = trie_root
+            for i, (rank, name) in enumerate(path):
+                key = (rank, name)
+                if key in cur.children:
+                    # Direct child — no expansion needed
+                    expanded.append((rank, name))
+                    cur = cur.children[key]
+                else:
+                    chain = _find_chain_to(cur, rank, name)
+                    if chain is not None:
+                        # Insert the intermediate COL nodes, then the target
+                        expanded.extend(chain)
+                        expanded.append((rank, name))
+                        for ck in chain:
+                            cur = cur.children[ck]
+                        cur = cur.children[key]
+                    else:
+                        # Not found in the trie — keep this and all
+                        # remaining ranks as-is; _insert_species will
+                        # create them.
+                        expanded.extend(path[i:])
+                        break
+            return expanded
+
         # ── Insert manual species (from manual edits) ──
         manual_qs = (
             self.filter(system="manual", rank="species")
             .only("id", "external_id", "name", "rank", "classification")
             .order_by("id")
         )
-        primary_ranks = ["kingdom", "phylum", "class", "order", "family", "genus"]
+        # Comprehensive root→leaf rank ordering to match COL trie nodes
+        _ALL_RANKS_ORDERED = [
+            "domain", "superkingdom",
+            "kingdom",
+            "phylum",
+            "subphylum",
+            "infraphylum",
+            "parvphylum",
+            "gigaclass",
+            "megaclass",
+            "superclass",
+            "class",
+            "subclass",
+            "subterclass",
+            "infraclass",
+            "superorder",
+            "order",
+            "suborder",
+            "infraorder",
+            "superfamily",
+            "family",
+            "subfamily",
+            "tribe",
+            "subtribe",
+            "genus",
+            "subgenus",
+        ]
+        _rank_sort = {r: i for i, r in enumerate(_ALL_RANKS_ORDERED)}
+
         for sp in manual_qs:
             cls = sp.classification or {}
-            # Convert classification dict → path list of (rank, name)
+            # Convert classification dict → sorted path of (rank, name)
             path = []
-            # Add domain if present
-            domain_val = cls.get("domain") or cls.get("superkingdom")
-            if domain_val:
-                path.append(("domain", domain_val))
-            for r in primary_ranks:
-                val = cls.get(r)
-                if val:
-                    path.append((r, val))
+            for rank_key, name_val in cls.items():
+                r = rank_key.strip().lower()
+                if r in ("species",):
+                    continue  # species is added separately
+                if not name_val or not name_val.strip():
+                    continue
+                # Normalize domain/superkingdom to "domain"
+                if r == "superkingdom":
+                    r = "domain"
+                if r in _rank_sort:
+                    path.append((r, name_val.strip()))
+            # Sort by the canonical rank ordering (root → leaf)
+            path.sort(key=lambda x: _rank_sort.get(x[0], 999))
+            # Expand path with intermediate COL nodes to avoid duplicate branches
+            path = _expand_manual_path(root, path)
             _insert_species(sp, path, source="manual")
 
         tree = root.to_d3()

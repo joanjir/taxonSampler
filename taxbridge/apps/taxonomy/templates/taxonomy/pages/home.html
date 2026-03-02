@@ -16,7 +16,7 @@
       </div>
       <div class="col-auto">
         <a href="{% url 'taxonomy:tree' %}" class="btn btn-primary">
-          <i class="ti ti-binary-tree me-1"></i> View Tree
+          <i class="ti ti-hierarchy-2 me-1"></i> View Taxonomy
         </a>
       </div>
     </div>
@@ -85,14 +85,14 @@
         <div class="card">
           <div class="card-body">
             <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-purple-lt me-3"><i class="ti ti-binary-tree fs-2"></i></span>
+              <span class="avatar bg-purple-lt me-3"><i class="ti ti-hierarchy-2 fs-2"></i></span>
               <div>
-                <div class="subheader">COL Tree</div>
+                <div class="subheader">COL Taxonomy</div>
                 <div class="h1 mb-0">{{ total_col_species|default:0 }}</div>
               </div>
             </div>
             <div class="text-secondary small">
-              <i class="ti ti-leaf me-1"></i> accepted species in tree
+              <i class="ti ti-leaf me-1"></i> accepted species in taxonomy
             </div>
           </div>
         </div>

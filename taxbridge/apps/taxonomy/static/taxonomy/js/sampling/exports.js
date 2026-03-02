@@ -11,6 +11,7 @@
 
 import { postDownload } from "../shared/helpers.js";
 import { copyToClipboard } from "../tree/ui.js";
+import { saveAs } from "../shared/save_as.js";
 
 /**
  * Dynamically load SheetJS (xlsx) from CDN if not already loaded.
@@ -39,21 +40,6 @@ function isDbSamplingResult(payload) {
 }
 
 /**
- * Client-side download helper — saves a blob directly without posting to server.
- */
-function clientDownload(content, filename, mimeType = "text/plain;charset=utf-8") {
-  const blob = new Blob([content], { type: mimeType });
-  const href = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
-}
-
-/**
  * @param {{ getExportPayload: Function, getLastSampling: Function }} deps
  */
 export function initExportHandlers({ getExportPayload, getLastSampling }) {
@@ -63,7 +49,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
     if (last && isDbSamplingResult(last)) {
       // DB sampling: export as client-side JSON
       const data = JSON.stringify(last, null, 2);
-      clientDownload(data, "sampling.json", "application/json;charset=utf-8");
+      await saveAs(data, "sampling.json", "application/json;charset=utf-8");
       return;
     }
 
@@ -84,7 +70,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       );
       const header = "#\torganism_name\ttaxid\taccession\tclade";
       const txt = header + "\n" + lines.join("\n") + "\n";
-      clientDownload(txt, "sampling.txt");
+      await saveAs(txt, "sampling.txt");
       return;
     }
 
@@ -182,8 +168,10 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
         XLSX.utils.book_append_sheet(wb, wsClades, "Clades");
       }
 
-      // Download
-      XLSX.writeFile(wb, "sampling_report.xlsx");
+      // Download with Save-As dialog
+      const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const xlsxBlob = new Blob([wbOut], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      await saveAs(xlsxBlob, "sampling_report.xlsx", xlsxBlob.type);
     } catch (err) {
       console.error("[exports] Excel export error:", err);
       alert("Excel export failed: " + (err.message || err));
