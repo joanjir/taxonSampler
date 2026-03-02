@@ -293,10 +293,9 @@ flowchart LR
 
 | Level | Assembly Level | Description |
 |---|---|---|
-| 1 | Contig | Raw assembled contigs |
-| 2 | Scaffold | Contigs joined into scaffolds |
-| 3 | Chromosome | Assembled to chromosome level |
-| 4 | Complete Genome | Fully assembled genome |
+| 1 | Scaffold | Contigs joined into scaffolds |
+| 2 | Chromosome | Assembled to chromosome level |
+| 3 | Complete Genome | Fully assembled genome |
 
 ---
 
@@ -311,11 +310,6 @@ flowchart LR
 | Redis | ≥ 7.0 |
 
 ### Setup
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd ProyectoNCBI_COL
 
 # Create and activate a virtual environment
 python -m venv .venv
