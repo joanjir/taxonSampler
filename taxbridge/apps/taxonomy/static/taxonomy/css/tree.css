@@ -339,9 +339,6 @@ g.node.clade-path {
 /* ═══════════════════════════════════════
    Advanced Search Modal
    ═══════════════════════════════════════ */
-#advancedSearchModal .as-preset.active {
-  box-shadow: 0 0 0 3px rgba(32,107,196,.25);
-}
 #advancedSearchModal .card-sm {
   transition: border-color .2s ease, box-shadow .2s ease;
 }

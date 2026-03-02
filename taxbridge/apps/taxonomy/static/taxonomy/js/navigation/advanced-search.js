@@ -5,7 +5,6 @@
  * Opens a modal where the user can build filter rules:
  *   - Each rule: [Rank] → [Taxon(s)]
  *   - Rules combined with AND / OR logic
- *   - Quick presets for common kingdoms
  *   - Live preview of matching count
  *
  * On "Apply", sends the matching keys to renderer.showOnlyKeys()
@@ -24,14 +23,6 @@ export function initAdvancedSearch({ renderer }) {
     { value: "genus",    label: "Genus" },
     { value: "species",  label: "Species" },
   ];
-
-  const PRESETS = {
-    animalia:      [{ rank: "kingdom", taxa: ["Animalia"] }],
-    plantae:       [{ rank: "kingdom", taxa: ["Plantae"] }],
-    fungi:         [{ rank: "kingdom", taxa: ["Fungi"] }],
-    bacteria:      [{ rank: "domain",  taxa: ["Bacteria"] }],
-    "species-only": [{ rank: "species", taxa: ["__ALL__"] }],
-  };
 
   // ── State ──
   let rules = [];     // Array of { id, rank, taxa: string[], negate: bool }
@@ -94,7 +85,7 @@ export function initAdvancedSearch({ renderer }) {
       rulesContainer.innerHTML = `
         <div class="text-center text-muted py-3 small">
           <i class="fa-solid fa-info-circle me-1"></i>
-          No filters yet. Add a rule or select a preset above.
+          No filters yet. Add a rule to start filtering.
         </div>`;
       return;
     }
@@ -332,31 +323,6 @@ export function initAdvancedSearch({ renderer }) {
   }
 
   // ═══════════════════════════════════════
-  //  PRESETS
-  // ═══════════════════════════════════════
-
-  function applyPreset(presetName) {
-    const preset = PRESETS[presetName];
-    if (!preset) return;
-
-    // Clear current rules
-    rules = [];
-    ruleIdCounter = 0;
-
-    // Add preset rules
-    preset.forEach(p => {
-      addRule(p.rank, p.taxa, false);
-    });
-
-    // Highlight preset button
-    document.querySelectorAll(".as-preset").forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.preset === presetName);
-      btn.classList.toggle("btn-primary", btn.dataset.preset === presetName);
-      btn.classList.toggle("btn-outline-secondary", btn.dataset.preset !== presetName);
-    });
-  }
-
-  // ═══════════════════════════════════════
   //  APPLY & RESET
   // ═══════════════════════════════════════
 
@@ -384,12 +350,6 @@ export function initAdvancedSearch({ renderer }) {
     ruleIdCounter = 0;
     renderRules();
     updatePreview();
-
-    // Clear preset highlights
-    document.querySelectorAll(".as-preset").forEach(btn => {
-      btn.classList.remove("active", "btn-primary");
-      btn.classList.add("btn-outline-secondary");
-    });
   }
 
   function clearFilters() {
@@ -422,11 +382,6 @@ export function initAdvancedSearch({ renderer }) {
   // Clear all from navbar badge
   clearAllBtn?.addEventListener("click", clearFilters);
 
-  // Preset buttons
-  document.querySelectorAll(".as-preset").forEach(btn => {
-    btn.addEventListener("click", () => applyPreset(btn.dataset.preset));
-  });
-
   // Logic operator change → update preview
   document.querySelectorAll('input[name="asLogicOp"]').forEach(radio => {
     radio.addEventListener("change", updatePreview);
@@ -458,6 +413,5 @@ export function initAdvancedSearch({ renderer }) {
     resetAll,
     clearFilters,
     applyFilters,
-    applyPreset,
   };
 }
