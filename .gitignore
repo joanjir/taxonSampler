@@ -93,3 +93,4 @@ htmlcov/
 taxbridge/data/taxdump/
 *.dmp
 *.tar.gz
+ESPECIES_SIN_DUPLICADOS.md
