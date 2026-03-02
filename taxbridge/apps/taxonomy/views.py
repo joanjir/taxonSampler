@@ -1,20 +1,30 @@
 from django.shortcuts import render
 
 
+# ────────────────────────────────────────────
+# Custom error handlers (used when DEBUG=False)
+# ────────────────────────────────────────────
+
+def custom_400_view(request, exception=None):
+    """400 Bad Request."""
+    return render(request, "400.html", status=400)
+
+
+def custom_403_view(request, exception=None):
+    """403 Forbidden."""
+    return render(request, "403.html", status=403)
+
+
 def custom_404_view(request, exception=None):
-    """Render consistent 404 page using project layout.
-
-    This is intended to be registered as the project's handler404.
-    Note: Django only uses handler404 when DEBUG is False. For preview
-    during development use the `preview_404` view below.
-    """
+    """404 Not Found."""
     return render(request, "404.html", status=404)
 
 
-def preview_404(request):
-    """Render the 404 template for preview in development.
+def custom_500_view(request):
+    """500 Internal Server Error.
 
-    This route can be mounted only when DEBUG is True so developers can
-    preview the page without toggling settings.
+    NOTE: The 500 handler receives only `request` (no `exception`).
+    The 500.html template uses NO Django template tags because the
+    template engine itself may be broken during a 500 error.
     """
-    return render(request, "404.html", status=404)
+    return render(request, "500.html", status=500)

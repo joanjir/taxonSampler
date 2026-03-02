@@ -46,14 +46,19 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-# Preview 404 in development and register handler
+# Preview error pages in development and register handlers
 if settings.DEBUG:
-    # Use TemplateView to avoid importing app views during URL setup
     from django.views.generic import TemplateView
     urlpatterns += [
+        path("__preview_400__", TemplateView.as_view(template_name="400.html"), name="preview-400"),
+        path("__preview_403__", TemplateView.as_view(template_name="403.html"), name="preview-403"),
         path("__preview_404__", TemplateView.as_view(template_name="404.html"), name="preview-404"),
         path("__preview_404__/", TemplateView.as_view(template_name="404.html"), name="preview-404-slash"),
+        path("__preview_500__", TemplateView.as_view(template_name="500.html"), name="preview-500"),
     ]
 
-# Use custom handler404 (used when DEBUG=False)
+# Custom error handlers (used when DEBUG=False)
+handler400 = 'apps.taxonomy.views.custom_400_view'
+handler403 = 'apps.taxonomy.views.custom_403_view'
 handler404 = 'apps.taxonomy.views.custom_404_view'
+handler500 = 'apps.taxonomy.views.custom_500_view'

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>500 · Mass extinction event</title>
+  <!--
+    NOTE: This template uses NO Django template tags on purpose.
+    During a 500 error the template engine itself may be broken,
+    so everything is plain HTML with CDN resources.
+  -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    body { background: #f4f6fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .error-code { font-size: 6rem; font-weight: 800; color: #ae3ec9; line-height: 1; letter-spacing: -2px; }
+    @media (max-width: 767px) {
+      .error-code { font-size: 4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container py-4" style="max-width: 960px;">
+  <div class="card shadow-sm">
+    <div class="card-body p-4 p-lg-5">
+
+      <!-- SVG: fallen phylogenetic tree — mass extinction -->
+      <div class="border rounded-3 bg-light mb-4" style="padding: 1.5rem;">
+        <svg viewBox="0 0 640 300" role="img" style="width:100%; height:auto; max-height: 260px;">
+
+          <!-- Ground line -->
+          <line x1="40" y1="262" x2="600" y2="262"
+                stroke="#adb5bd" stroke-width="2" stroke-dasharray="6 4"/>
+
+          <!-- Broken stump (still standing) -->
+          <line x1="110" y1="262" x2="110" y2="210"
+                stroke="#6c757d" stroke-width="7" stroke-linecap="round"/>
+          <!-- Jagged break at top of stump -->
+          <polyline points="102,212 107,202 110,214 114,200 118,212"
+                    stroke="#ae3ec9" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+          <!-- Fallen trunk (tilted to the right) -->
+          <line x1="110" y1="210" x2="380" y2="120"
+                stroke="#6c757d" stroke-width="6" stroke-linecap="round"
+                opacity="0.5"/>
+
+          <!-- Dead branch A (hanging limp) -->
+          <line x1="200" y1="180" x2="260" y2="250"
+                stroke="#adb5bd" stroke-width="4" stroke-linecap="round"/>
+          <rect x="260" y="230" width="120" height="40" rx="10"
+                fill="#fff" stroke="#adb5bd" stroke-width="3"
+                stroke-dasharray="6 4"/>
+          <text x="320" y="248" text-anchor="middle"
+                font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                font-size="14" fill="#adb5bd"><tspan text-decoration="line-through">Clade A</tspan></text>
+          <text x="320" y="263" text-anchor="middle"
+                font-family="ui-monospace, Menlo, monospace"
+                font-size="10" fill="#ae3ec9">EXTINCT</text>
+
+          <!-- Dead branch B (fallen upward from trunk) -->
+          <line x1="300" y1="145" x2="410" y2="80"
+                stroke="#adb5bd" stroke-width="4" stroke-linecap="round"/>
+          <rect x="410" y="58" width="120" height="40" rx="10"
+                fill="#fff" stroke="#adb5bd" stroke-width="3"
+                stroke-dasharray="6 4"/>
+          <text x="470" y="76" text-anchor="middle"
+                font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                font-size="14" fill="#adb5bd"><tspan text-decoration="line-through">Clade B</tspan></text>
+          <text x="470" y="91" text-anchor="middle"
+                font-family="ui-monospace, Menlo, monospace"
+                font-size="10" fill="#ae3ec9">EXTINCT</text>
+
+          <!-- Impact crack lines at stump -->
+          <line x1="96" y1="200" x2="80" y2="190" stroke="#ae3ec9" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="124" y1="198" x2="140" y2="188" stroke="#ae3ec9" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="100" y1="190" x2="88" y2="178" stroke="#ae3ec9" stroke-width="2.5" stroke-linecap="round"/>
+
+          <!-- Meteor / asteroid (the crash cause) -->
+          <circle cx="520" cy="180" r="32" fill="#ae3ec9" opacity="0.12"/>
+          <circle cx="520" cy="180" r="18" fill="#ae3ec9" opacity="0.3"/>
+          <!-- Tail -->
+          <line x1="538" y1="165" x2="590" y2="120" stroke="#ae3ec9" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+          <line x1="535" y1="170" x2="580" y2="130" stroke="#ae3ec9" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+          <!-- Crater symbol -->
+          <text x="520" y="188" text-anchor="middle"
+                font-family="system-ui" font-size="24" fill="#ae3ec9">&#9776;</text>
+
+          <!-- K-Pg label -->
+          <text x="520" y="230" text-anchor="middle"
+                font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+                font-size="13" fill="#ae3ec9" font-weight="700">K-Pg EVENT</text>
+
+        </svg>
+      </div>
+
+      <!-- Text content -->
+      <div class="text-center">
+        <div class="error-code mb-2">500</div>
+        <h1 class="h2 mb-2">Mass extinction event</h1>
+        <p class="text-muted fs-4 mb-4">
+          A catastrophic failure brought down the entire phylogenetic tree.
+          Our paleontologists are already excavating the crash site.
+        </p>
+
+        <div class="d-flex flex-wrap gap-3 justify-content-center align-items-center">
+          <a href="/taxonomy/" class="btn btn-primary btn-lg px-4">
+            <i class="fa-solid fa-house me-2"></i>Back to home
+          </a>
+          <button onclick="location.reload()" class="btn btn-outline-primary btn-lg px-4">
+            <i class="fa-solid fa-arrows-rotate me-2"></i>Try again
+          </button>
+        </div>
+
+        <div class="text-muted mt-3 fs-5">
+          Redirecting in <strong id="countdown">2:00</strong>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var t = 120;
+  var el = document.getElementById("countdown");
+  var id = setInterval(function () {
+    t -= 1;
+    if (el) {
+      var m = Math.floor(t / 60);
+      var s = t % 60;
+      el.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+    }
+    if (t <= 0) {
+      clearInterval(id);
+      window.location.href = "/taxonomy/";
+    }
+  }, 1000);
+})();
+</script>
+
+</body>
+</html>

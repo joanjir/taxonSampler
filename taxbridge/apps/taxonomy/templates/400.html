@@ -1,0 +1,130 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>400 · Ambiguous classification</title>
+  <link rel="icon" type="image/x-icon" href="{% static 'taxonomy/img/favicon.ico' %}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    body { background: #f4f6fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .error-code { font-size: 6rem; font-weight: 800; color: #f76707; line-height: 1; letter-spacing: -2px; }
+    @media (max-width: 767px) {
+      .error-code { font-size: 4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container py-4" style="max-width: 960px;">
+  <div class="card shadow-sm">
+    <div class="card-body p-4 p-lg-5">
+
+      <!-- SVG: tree node with conflicting arrows — ambiguous placement -->
+      <div class="border rounded-3 bg-light mb-4" style="padding: 1.5rem;">
+        <svg viewBox="0 0 640 300" role="img" style="width:100%; height:auto; max-height: 260px;">
+
+          <!-- Main trunk -->
+          <line x1="120" y1="40" x2="120" y2="260"
+                stroke="#6c757d" stroke-width="6" stroke-linecap="round"/>
+
+          <!-- Branch A -->
+          <line x1="120" y1="100" x2="300" y2="65"
+                stroke="#6c757d" stroke-width="5" stroke-linecap="round"/>
+          <rect x="300" y="40" width="150" height="50" rx="14"
+                fill="#fff" stroke="#212529" stroke-width="4"/>
+          <text x="375" y="71" text-anchor="middle"
+                font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                font-size="18" fill="#212529">Clade A</text>
+
+          <!-- Branch B -->
+          <line x1="120" y1="200" x2="300" y2="230"
+                stroke="#6c757d" stroke-width="5" stroke-linecap="round"/>
+          <rect x="300" y="207" width="150" height="50" rx="14"
+                fill="#fff" stroke="#212529" stroke-width="4"/>
+          <text x="375" y="238" text-anchor="middle"
+                font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                font-size="18" fill="#212529">Clade B</text>
+
+          <!-- Mystery specimen floating between both clades -->
+          <rect x="480" y="110" width="140" height="55" rx="14"
+                fill="#fff" stroke="#f76707" stroke-width="4"
+                stroke-dasharray="8 6"/>
+          <text x="550" y="133" text-anchor="middle"
+                font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+                font-size="16" fill="#212529">Unknown sp.</text>
+          <text x="550" y="154" text-anchor="middle"
+                font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+                font-size="13" fill="#f76707" font-weight="700">INCERTAE SEDIS</text>
+
+          <!-- Conflicting dashed arrows from specimen to both clades -->
+          <line x1="480" y1="125" x2="450" y2="78"
+                stroke="#f76707" stroke-width="3" stroke-dasharray="6 4"
+                marker-end="url(#arrowOrange)"/>
+          <line x1="480" y1="150" x2="450" y2="220"
+                stroke="#f76707" stroke-width="3" stroke-dasharray="6 4"
+                marker-end="url(#arrowOrange)"/>
+
+          <!-- Question marks -->
+          <text x="460" y="105" font-size="22" fill="#f76707" font-weight="700"
+                font-family="system-ui">?</text>
+          <text x="458" y="200" font-size="22" fill="#f76707" font-weight="700"
+                font-family="system-ui">?</text>
+
+          <defs>
+            <marker id="arrowOrange" viewBox="0 0 10 10" refX="8" refY="5"
+                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#f76707"/>
+            </marker>
+          </defs>
+
+        </svg>
+      </div>
+
+      <!-- Text content -->
+      <div class="text-center">
+        <div class="error-code mb-2">400</div>
+        <h1 class="h2 mb-2">Ambiguous classification</h1>
+        <p class="text-muted fs-4 mb-4">
+          Your request couldn't be placed on the tree — like a specimen
+          with contradictory characters. <em>Incertae sedis</em> indeed.
+        </p>
+
+        <div class="d-flex flex-wrap gap-3 justify-content-center align-items-center">
+          <a href="/taxonomy/" class="btn btn-primary btn-lg px-4">
+            <i class="fa-solid fa-house me-2"></i>Back to home
+          </a>
+        </div>
+
+        <div class="text-muted mt-3 fs-5">
+          Redirecting in <strong id="countdown">2:00</strong>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var t = 120;
+  var el = document.getElementById("countdown");
+  var id = setInterval(function () {
+    t -= 1;
+    if (el) {
+      var m = Math.floor(t / 60);
+      var s = t % 60;
+      el.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+    }
+    if (t <= 0) {
+      clearInterval(id);
+      window.location.href = "/taxonomy/";
+    }
+  }, 1000);
+})();
+</script>
+
+</body>
+</html>
