@@ -411,6 +411,11 @@ def _allocate_proportional(clades: List[CladeAllocation], k: int) -> None:
     Distribute K proportionally to species richness.
     n_i = (size_i / total_size) * K
     Uses largest-remainder method for fair rounding.
+
+    Tie-breaking: when two clades have the same fractional remainder,
+    the *smaller* clade gets priority.  This guarantees minimum
+    representation for rare lineages (e.g. 152+8 with K=50 → 47+3,
+    not 48+2).
     """
     total = sum(c.species_count for c in clades) or 1
 
@@ -420,10 +425,15 @@ def _allocate_proportional(clades: List[CladeAllocation], k: int) -> None:
     # Floor values
     floors = [int(math.floor(r)) for r in raw]
 
-    # Distribute remainder by highest fractional part
+    # Distribute remainder by highest fractional part.
+    # Secondary sort: prefer smaller clades (fewer species) in ties
+    # so rare lineages get the rounding bump.
     remainder = k - sum(floors)
-    fracs = [(i, raw[i] - floors[i]) for i in range(len(raw))]
-    fracs.sort(key=lambda x: x[1], reverse=True)
+    fracs = [
+        (i, raw[i] - floors[i], clades[i].species_count)
+        for i in range(len(raw))
+    ]
+    fracs.sort(key=lambda x: (x[1], -x[2]), reverse=True)
 
     for j in range(min(remainder, len(fracs))):
         floors[fracs[j][0]] += 1

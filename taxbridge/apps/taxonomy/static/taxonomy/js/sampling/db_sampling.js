@@ -159,24 +159,32 @@ export function initDbSampling() {
   }
 
   function applyScopeFloor(scopeFilters) {
-    // Find the lowest rank in the scope to set the floor
+    // Find the lowest rank in the scope to set the floor.
+    // The start_rank must be ONE LEVEL BELOW the scope rank because
+    // grouping by the scope rank itself produces a single useless group.
+    // E.g. scope = phylum:Chordata → start_rank defaults to class (idx 2).
     let maxIdx = 0;
     for (const rank of Object.keys(scopeFilters)) {
       const idx = rankToIndex(rank);
       if (idx > maxIdx) maxIdx = idx;
     }
-    _minRankIdx = maxIdx;
+
+    // Floor = next rank below scope (capped at species)
+    const hasScope = Object.keys(scopeFilters).length > 0;
+    _minRankIdx = hasScope
+      ? Math.min(maxIdx + 1, RANKS.length - 1)
+      : 0;
 
     // Set min on both inputs
     dom.startRank.min = _minRankIdx;
     dom.endRank.min   = _minRankIdx;
 
-    // If current values are above floor, push them down
-    if (parseInt(dom.startRank.value, 10) < _minRankIdx) {
-      dom.startRank.value = _minRankIdx;
-    }
+    // Auto-set startRank to the floor (next rank below scope)
+    dom.startRank.value = _minRankIdx;
+
+    // End rank defaults to species
     if (parseInt(dom.endRank.value, 10) < _minRankIdx) {
-      dom.endRank.value = RANKS.length - 1; // default end to species
+      dom.endRank.value = RANKS.length - 1;
     }
 
     enforceConstraints();
