@@ -138,7 +138,7 @@ class SamplingConfiguration(models.Model):
         ("none", "None (natural order)"),
         ("random", "Random"),
         ("proportional", "Proportional"),
-        ("balanced", "Balanced"),
+        ("balanced", "Equal Sample Size"),
     ]
 
     RANK_CHOICES = [
