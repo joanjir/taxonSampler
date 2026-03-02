@@ -68,6 +68,7 @@ def _apply_scope_filters(
     scope_kingdom: str = "",
     scope_phylum: str = "",
     scope_filters: Optional[Dict[str, str]] = None,
+    target_keys: Optional[List[str]] = None,
     species_names: Optional[List[str]] = None,
 ):
     """
@@ -76,6 +77,11 @@ def _apply_scope_filters(
     scope_filters is a dict like {"kingdom": "Animalia", "phylum": "Chordata",
     "class": "Mammalia"} — each key is a rank, value is the taxon name.
     Filters are intersected (AND).
+
+    target_keys is a list of tree path keys like
+    ["kingdom:Animalia|phylum:Chordata", "kingdom:Animalia|phylum:Arthropoda"].
+    Each key is parsed into rank→name pairs and the species must belong to
+    at least ONE of the target clades (OR).
 
     species_names is a list of organism names to restrict the queryset to
     (e.g., from Step 1 target selection).
@@ -94,6 +100,24 @@ def _apply_scope_filters(
                 lookup = f"external_taxon__classification__{rank_lower}"
                 qs = qs.filter(**{lookup: taxon_name})
 
+    # Target clades: species must belong to at least one target (OR)
+    if target_keys:
+        combined_q = Q()
+        for tk in target_keys:
+            target_q = Q()
+            for seg in str(tk).split("|"):
+                idx = seg.find(":")
+                if idx < 0:
+                    continue
+                rank = seg[:idx].strip().lower()
+                name = seg[idx + 1:].strip()
+                if rank in RANK_HIERARCHY and name:
+                    target_q &= Q(**{f"external_taxon__classification__{rank}": name})
+            if target_q:
+                combined_q |= target_q
+        if combined_q:
+            qs = qs.filter(combined_q)
+
     # Restrict to specific species if provided (from Step 1 targets)
     if species_names:
         qs = qs.filter(organism_name__in=species_names)
@@ -109,6 +133,7 @@ def run_db_sampling(
     scope_kingdom: str = "",
     scope_phylum: str = "",
     scope_filters: Optional[Dict[str, str]] = None,
+    target_keys: Optional[List[str]] = None,
     species_names: Optional[List[str]] = None,
     config_id: Optional[int] = None,
 ) -> SamplingResult:
@@ -123,13 +148,14 @@ def run_db_sampling(
       5. Limit total to max_sample_size
 
     Args:
-        max_sample_size: Maximum number of species to return
+        max_sample_size: Maximum number of species to return (0 = all)
         start_rank: Top grouping rank (e.g. phylum)
         end_rank: Bottom grouping rank before selecting species
         strategy: none | random | proportional | balanced
         scope_kingdom: Filter by kingdom (optional, legacy)
         scope_phylum: Filter by phylum (optional, legacy)
         scope_filters: Dict of rank→taxon filters from Step 1 scope
+        target_keys: List of tree path keys for target clades
         species_names: List of specific organism names from Step 1 targets
         config_id: SamplingConfiguration PK (optional)
 
@@ -152,6 +178,7 @@ def run_db_sampling(
         scope_kingdom=scope_kingdom,
         scope_phylum=scope_phylum,
         scope_filters=scope_filters,
+        target_keys=target_keys,
         species_names=species_names,
     )
 
@@ -171,7 +198,9 @@ def run_db_sampling(
             warnings=["No matched species found in the database."],
         )
 
-    # Validate max_sample_size
+    # Validate max_sample_size (0 = use all available)
+    if max_sample_size <= 0:
+        max_sample_size = total_available
     effective_k = min(max_sample_size, total_available)
     if max_sample_size > total_available:
         warnings.append(
@@ -428,6 +457,7 @@ def get_sampling_stats(
     scope_kingdom: str = "",
     scope_phylum: str = "",
     scope_filters: Optional[Dict[str, str]] = None,
+    target_keys: Optional[List[str]] = None,
     species_names: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
@@ -448,6 +478,7 @@ def get_sampling_stats(
         scope_kingdom=scope_kingdom,
         scope_phylum=scope_phylum,
         scope_filters=scope_filters,
+        target_keys=target_keys,
         species_names=species_names,
     )
 

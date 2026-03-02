@@ -1328,6 +1328,15 @@ def sampling_stats(request):
         except json.JSONDecodeError:
             pass
 
+    # Parse target_keys from query param (JSON string)
+    target_keys = None
+    tk_raw = request.GET.get("target_keys", "")
+    if tk_raw:
+        try:
+            target_keys = json.loads(tk_raw)
+        except json.JSONDecodeError:
+            pass
+
     # Parse species_names from query param (JSON string)
     species_names = None
     sn_raw = request.GET.get("species_names", "")
@@ -1341,6 +1350,7 @@ def sampling_stats(request):
         scope_kingdom=kingdom,
         scope_phylum=phylum,
         scope_filters=scope_filters,
+        target_keys=target_keys,
         species_names=species_names,
     )
 
@@ -1359,6 +1369,7 @@ def sampling_execute(request):
         - strategy: none | random | proportional | balanced (default: proportional)
         - kingdom: str (optional scope filter)
         - phylum: str (optional scope filter)
+        - target_keys: list of tree path keys for target clades (optional)
         - save: bool (if true, saves a SamplingConfiguration record)
         - name: str (optional name for saved config)
     """
@@ -1370,10 +1381,12 @@ def sampling_execute(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    # Validate max_sample_size
+    # Validate max_sample_size (0 = all available)
     max_sample_size = data.get("max_sample_size")
-    if not max_sample_size or not isinstance(max_sample_size, int) or max_sample_size < 1:
-        return JsonResponse({"error": "max_sample_size must be a positive integer"}, status=400)
+    if max_sample_size is None:
+        max_sample_size = 0  # "All"
+    if not isinstance(max_sample_size, int) or max_sample_size < 0:
+        return JsonResponse({"error": "max_sample_size must be a non-negative integer (0 = all)"}, status=400)
 
     start_rank = data.get("start_rank", "phylum").lower()
     end_rank = data.get("end_rank", "species").lower()
@@ -1381,6 +1394,7 @@ def sampling_execute(request):
     kingdom = data.get("scope_kingdom") or data.get("kingdom", "")
     phylum = data.get("scope_phylum") or data.get("phylum", "")
     scope_filters = data.get("scope_filters") or None
+    target_keys = data.get("target_keys") or None
     species_names = data.get("species_names") or None
     save_config = data.get("save", False)
     config_name = data.get("name", "")
@@ -1426,6 +1440,7 @@ def sampling_execute(request):
             scope_kingdom=kingdom,
             scope_phylum=phylum,
             scope_filters=scope_filters,
+            target_keys=target_keys,
             species_names=species_names,
             config_id=config_id,
         )

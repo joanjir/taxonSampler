@@ -208,23 +208,30 @@ export function initDbSampling() {
   // ── Read wizard state ─────────────────────────────────────────────
   function getWizardScope() {
     const wiz = window.__samplingWizard?.state;
-    if (!wiz) return { scopeFilters: {}, speciesNames: null };
+    if (!wiz) {
+      console.warn("[db_sampling] No wizard state found (window.__samplingWizard is null)");
+      return { scopeFilters: {}, targetKeys: [], speciesNames: null };
+    }
 
     const scopeFilters = parseScopeKey(wiz.scopeKey || "");
+    const targetKeys   = Array.isArray(wiz.targetKeys) ? wiz.targetKeys : [];
 
-    // If targets are set, we could extract finer scope — for now targets
-    // are tree keys that don't directly map to DB organism names.
-    // The scope_filters from scopeKey already constrain the DB query.
-    return { scopeFilters, speciesNames: null };
+    console.log("[db_sampling] getWizardScope →", {
+      rawScopeKey: wiz.scopeKey,
+      scopeFilters,
+      targetKeys,
+    });
+
+    return { scopeFilters, targetKeys, speciesNames: null };
   }
 
   // ── Stats ─────────────────────────────────────────────────────────
 
   async function loadStats() {
-    const { scopeFilters, speciesNames } = getWizardScope();
+    const { scopeFilters, targetKeys, speciesNames } = getWizardScope();
 
     try {
-      const data = await apiDbSamplingStats({ scopeFilters, speciesNames });
+      const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames });
       statsCache = data;
 
       if (dom.statMatched)  dom.statMatched.textContent  = data.total_species ?? "—";
@@ -234,7 +241,7 @@ export function initDbSampling() {
       applyScopeFloor(scopeFilters);
 
       // Show scope info
-      updateScopeDisplay(scopeFilters, data.total_species);
+      updateScopeDisplay(scopeFilters, targetKeys, data.total_species);
 
 
     } catch (err) {
@@ -244,19 +251,24 @@ export function initDbSampling() {
     }
   }
 
-  function updateScopeDisplay(scopeFilters, total) {
+  function updateScopeDisplay(scopeFilters, targetKeys, total) {
     if (!dom.scopeInfo) return;
 
-    const hasScope = Object.keys(scopeFilters).length > 0;
+    const hasScope   = Object.keys(scopeFilters).length > 0;
+    const hasTargets = Array.isArray(targetKeys) && targetKeys.length > 0;
 
-    if (hasScope) {
-      const label = scopeLabel(scopeFilters);
-      dom.scopeInfo.innerHTML = `
-        <i class="fa-solid fa-filter text-success me-1"></i>
-        <span class="small fw-semibold">Scope from Step 1:</span>
-        <span class="badge bg-success-lt text-success ms-1">${esc(label)}</span>
-        <span class="badge bg-primary-lt text-primary ms-1">${total ?? 0} spp</span>
-      `;
+    if (hasScope || hasTargets) {
+      let html = '<i class="fa-solid fa-filter text-success me-1"></i>';
+      if (hasScope) {
+        const label = scopeLabel(scopeFilters);
+        html += `<span class="small fw-semibold">Scope:</span>
+                 <span class="badge bg-success-lt text-success ms-1">${esc(label)}</span>`;
+      }
+      if (hasTargets) {
+        html += `<span class="badge bg-azure-lt text-azure ms-1">${targetKeys.length} target${targetKeys.length > 1 ? "s" : ""}</span>`;
+      }
+      html += `<span class="badge bg-primary-lt text-primary ms-1">${total ?? 0} spp</span>`;
+      dom.scopeInfo.innerHTML = html;
       dom.scopeInfo.classList.remove("d-none");
     } else {
       dom.scopeInfo.innerHTML = `
@@ -270,12 +282,17 @@ export function initDbSampling() {
   // ── Execute ───────────────────────────────────────────────────────
 
   async function execute() {
-    const maxSampleSize = Math.max(1, parseInt(dom.maxSampleSize?.value || "50", 10) || 50);
+    const rawVal     = (dom.maxSampleSize?.value || "").trim();
+    const maxSampleSize = rawVal === "" ? 0 : Math.max(1, parseInt(rawVal, 10) || 1);
     const startRank     = indexToRank(parseInt(dom.startRank?.value || "1", 10));
     const endRank       = indexToRank(parseInt(dom.endRank?.value   || "6", 10));
     const strategy      = (dom.strategy?.value   || "proportional").trim();
     // Get Step 1 wizard scope
-    const { scopeFilters, speciesNames } = getWizardScope();
+    const { scopeFilters, targetKeys, speciesNames } = getWizardScope();
+
+    console.log("[db_sampling] execute() payload →", {
+      maxSampleSize, startRank, endRank, strategy, scopeFilters, targetKeys,
+    });
 
     // Disable button while running
     dom.runBtn.disabled = true;
@@ -289,6 +306,7 @@ export function initDbSampling() {
           end_rank:        endRank,
           strategy,
           scope_filters:   Object.keys(scopeFilters).length ? scopeFilters : null,
+          target_keys:     targetKeys.length ? targetKeys : null,
           species_names:   speciesNames || null,
           save:            false,
         },
