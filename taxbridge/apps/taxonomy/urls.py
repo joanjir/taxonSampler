@@ -5,7 +5,7 @@ Only HTML page routes are defined here. API routes are in api/urls.py.
 """
 from django.urls import path
 
-from .dashboard.views import home, export_sampling, report_issue
+from .dashboard.views import home, export_sampling, report_issue, create_github_issue
 from .ncbi.views import taxon_sync_dashboard
 from .tree.views import tree_page
 
@@ -24,4 +24,5 @@ urlpatterns = [
 
     # Report issue
     path("report-issue/", report_issue, name="report-issue"),
+    path("report-issue/create/", create_github_issue, name="create-github-issue"),
 ]

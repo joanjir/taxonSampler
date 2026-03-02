@@ -63,6 +63,7 @@
 {% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div class="page-header d-print-none mb-2">
   <div class="row align-items-center">
     <div class="col">
@@ -227,7 +228,7 @@
               <i class="ti ti-bulb alert-icon me-2" style="font-size:1.2rem;"></i>
               <div class="small">
                 <strong>Tip:</strong> Be specific — include species names, page URLs, or error messages.
-                After submitting on GitHub you can drag-and-drop screenshots directly.
+                You can add screenshots later on the GitHub issue page.
               </div>
             </div>
           </div>
@@ -294,7 +295,7 @@
           <div class="d-flex align-items-center">
             <span class="text-secondary small me-3 d-none d-md-inline"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to submit</span>
             <button class="btn btn-primary btn-lg" id="submitIssueBtn">
-              <i class="ti ti-brand-github me-2"></i>Submit on GitHub
+              <i class="ti ti-brand-github me-2"></i>Submit Issue
             </button>
           </div>
         </div>
@@ -556,20 +557,98 @@
 
   function submitIssue() {
     const meta = TYPES[selectedType] || {};
+    const body = buildMarkdown();
+
+    // Disable button and show spinner
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending…';
+
+    fetch('{% url "taxonomy:create-github-issue" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: JSON.stringify({
+        title: titleEl.value.trim(),
+        body: body,
+        labels: meta.ghLabel ? [meta.ghLabel] : [],
+      }),
+    })
+    .then(r => r.json().then(data => ({ status: r.status, data })))
+    .then(({ status, data }) => {
+      if (data.success) {
+        // ✅ Issue created successfully — show success toast with link
+        showToast(
+          '<i class="ti ti-check me-1"></i>Issue <strong>#' + data.issue_number + '</strong> created! ' +
+          '<a href="' + data.issue_url + '" target="_blank" class="alert-link">View on GitHub →</a>',
+          'success', 8000
+        );
+        // Clear draft and reset form to Step 1
+        localStorage.removeItem(STORAGE_KEY);
+        resetForm();
+      } else if (data.fallback) {
+        // Token not configured — fall back to opening GitHub in new tab
+        fallbackToGitHub(meta, body);
+      } else {
+        showToast('<i class="ti ti-alert-circle me-1"></i>Error: ' + (data.error || 'Unknown error'), 'danger', 6000);
+      }
+    })
+    .catch(err => {
+      // Network or other error — fall back to GitHub URL
+      console.error('Submit error:', err);
+      fallbackToGitHub(meta, body);
+    })
+    .finally(() => {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="ti ti-brand-github me-2"></i>Submit Issue';
+    });
+  }
+
+  function fallbackToGitHub(meta, body) {
     const params = new URLSearchParams();
     params.set('title', titleEl.value.trim());
-    params.set('body', buildMarkdown());
+    params.set('body', body);
     if (meta.ghLabel) params.set('labels', meta.ghLabel);
-
     const url = GITHUB_REPO + '/issues/new?' + params.toString();
     const win = window.open(url, '_blank', 'noopener');
-
     if (win) {
-      showToast('Issue opened in GitHub! You can add screenshots there.', 'success');
+      showToast('Opened in GitHub — click "Submit new issue" there.', 'info');
       localStorage.removeItem(STORAGE_KEY);
+      resetForm();
     } else {
       showToast('Pop-up blocked! Please allow pop-ups for this site.', 'danger');
     }
+  }
+
+  function resetForm() {
+    // Reset all fields
+    selectedType = '';
+    titleEl.value = '';
+    descEl.value = '';
+    if (stepsEl) stepsEl.value = '';
+    if (expectedEl) expectedEl.value = '';
+    if (actualEl) actualEl.value = '';
+    titleEl.classList.remove('is-valid', 'is-invalid');
+    descEl.classList.remove('is-valid', 'is-invalid');
+    setFieldStatus(titleStatus, '', '');
+    setFieldStatus(descStatus, '', '');
+    titleHint.textContent = '0 / 200';
+    descHint.textContent = 'Minimum 20 characters';
+    typeCards.forEach(c => c.classList.remove('selected'));
+    btnNext1.disabled = true;
+    btnNext2.disabled = true;
+    sevGroup.style.display = 'none';
+    stepsGroup.style.display = 'none';
+    eaGroup.style.display = 'none';
+
+    // Go back to Step 1
+    goToStep(1);
+  }
+
+  function getCsrfToken() {
+    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return cookie ? cookie.split('=')[1] : '';
   }
 
   // ═══════════════════════════════════════

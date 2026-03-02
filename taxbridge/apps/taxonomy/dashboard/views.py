@@ -148,3 +148,75 @@ def export_sampling(request, fmt: str):
 def report_issue(request):
     """Render the GitHub issue report form."""
     return render(request, "taxonomy/pages/report_issue.html")
+
+
+@require_POST
+def create_github_issue(request):
+    """
+    Create an issue directly on GitHub via API.
+    Requires GITHUB_TOKEN in settings/env.
+    Falls back to opening GitHub in a new tab if token not configured.
+    """
+    import urllib.request
+    import urllib.error
+    from django.conf import settings
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
+
+    title = payload.get("title", "").strip()
+    body = payload.get("body", "").strip()
+    labels = payload.get("labels", [])
+
+    if not title or not body:
+        return JsonResponse({"error": "Title and body are required"}, status=400)
+
+    token = getattr(settings, "GITHUB_TOKEN", "") or ""
+    repo = getattr(settings, "GITHUB_REPO", "joanjir/taxonSampler")
+
+    if not token:
+        return JsonResponse({
+            "error": "GITHUB_TOKEN not configured",
+            "fallback": True,
+        }, status=503)
+
+    # Build GitHub API request
+    api_url = f"https://api.github.com/repos/{repo}/issues"
+    data = json.dumps({
+        "title": title,
+        "body": body,
+        "labels": labels if isinstance(labels, list) else [labels],
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        api_url,
+        data=data,
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+            "User-Agent": "TaxonSampler-App",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            return JsonResponse({
+                "success": True,
+                "issue_url": result.get("html_url", ""),
+                "issue_number": result.get("number", 0),
+            })
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        return JsonResponse({
+            "error": f"GitHub API error ({e.code})",
+            "detail": error_body,
+        }, status=502)
+    except Exception as e:
+        return JsonResponse({
+            "error": f"Request failed: {str(e)}",
+        }, status=502)

@@ -150,6 +150,10 @@ NCBI_API_KEY = env("NCBI_API_KEY", default="")
 NCBI_USER_AGENT = env("NCBI_USER_AGENT", default="taxbridge/0.1")
 COL_DATASET_KEY = env.int("COL_DATASET_KEY", default=3)
 
+# GitHub Integration (for automated issue creation)
+GITHUB_TOKEN = env("GITHUB_TOKEN", default="")
+GITHUB_REPO = env("GITHUB_REPO", default="joanjir/taxonSampler")
+
 # ======================
 # Logging
 # ======================
