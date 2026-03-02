@@ -514,14 +514,7 @@ python manage.py migrate
 python manage.py check --deploy
 ```
 
-### Git workflow
 
-```bash
-git checkout -b feature/<name>    # Create a feature branch
-git add -A                        # Stage changes
-git commit -m "<message>"         # Commit
-git push origin HEAD              # Push to remote
-```
 
 ### Frontend development
 
@@ -550,7 +543,7 @@ If you use TaxonSampler in your research, please cite:
 
 ```bibtex
 @software{taxonsampler2026,
-  author       = {Jim\'{e}nez, Joan},
+  author       = {Izquerdo, Joan},
   title        = {{TaxonSampler}: A web platform for taxonomic sampling
                   and genome data integration},
   year         = {2026},

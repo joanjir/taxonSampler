@@ -86,3 +86,10 @@ htmlcov/
 *.pickle
 *.csv
 *.tsv
+
+# ===============================
+# NCBI taxdump (too large for GitHub)
+# ===============================
+taxbridge/data/taxdump/
+*.dmp
+*.tar.gz
