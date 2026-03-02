@@ -1,6 +1,6 @@
 ﻿// taxonomy/static/taxonomy/js/tree/logic/renderer.js
 import { VIS, AUTOFIT, rankStyle, isSciName } from "../../shared/config.js";
-import { normRank, rankIndex } from "./tree_keying.js";
+import { normRank, rankIndex, getKids, pushPart, keyOf } from "./tree_keying.js";
 
 // Helpers (delegate a /trees/)
 import {
@@ -73,6 +73,36 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     }
   }
 
+  /**
+   * Auto-expand through single-child chains.
+   * Starting from `key`, if the node in fullData has exactly 1 child,
+   * expand it and continue until hitting a node with 0 or 2+ children.
+   * This skips long linear taxonomic paths (e.g., Eukaryota→Opisthokonta→Fungi)
+   * and opens them all at once.
+   */
+  function expandThroughChain(key) {
+    if (!fullData || !key) return;
+    const hit = findInFullDataByKey(key);
+    if (!hit) return;
+
+    let currentNode = hit.node;
+    let currentParts = hit.parts;
+
+    // Safety limit to avoid infinite loops
+    for (let i = 0; i < 50; i++) {
+      const kids = getKids(currentNode);
+      if (kids.length !== 1) break; // Stop: 0 or 2+ children = branching point
+
+      const child = kids[0];
+      const childParts = pushPart(currentParts, child);
+      const childKey = keyOf(childParts);
+
+      expandedKeys.add(childKey);
+      currentNode = child;
+      currentParts = childParts;
+    }
+  }
+
   // ---------------- Reveal helpers (for "View in tree") ----------------
   function revealKeys(keys, opts = {}) {
     if (!Array.isArray(keys) || !keys.length) return;
@@ -104,6 +134,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     // 2) exit clade mode if it was active
     samplingMode = "";
     samplingRootKey = null;
+
+    // 2.5) Auto-expand single-child chains at each revealed key
+    keys.forEach(key => {
+      if (key) expandThroughChain(key);
+    });
 
     // 3) rebuild view
     if (root) rebuildHierarchyAndUpdate(root);
@@ -165,6 +200,13 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     // Exit clade mode
     samplingMode = "";
     samplingRootKey = null;
+
+    // Auto-expand single-child chains at each filter key
+    if (keys && keys.length > 0) {
+      keys.forEach(key => {
+        if (key) expandThroughChain(key);
+      });
+    }
 
     // Rebuild
     if (root) rebuildHierarchyAndUpdate(root);
@@ -838,6 +880,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
             collapseDescendants(key);
           } else {
             expandedKeys.add(key);
+            expandThroughChain(key);
           }
 
           rebuildHierarchyAndUpdate(d);
@@ -851,6 +894,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
           collapseDescendants(key);
         } else {
           expandedKeys.add(key);
+          // Auto-expand through single-child chains
+          expandThroughChain(key);
         }
 
         rebuildHierarchyAndUpdate(d);
@@ -1043,6 +1088,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
     // Populate expandedKeys with nodes up to MAX_INITIAL_DEPTH levels deep
     seedExpandedKeysFromData(fullData, VIS.MAX_INITIAL_DEPTH);
+
+    // Auto-expand single-child chains at the frontier of the initial expand
+    for (const key of [...expandedKeys]) {
+      expandThroughChain(key);
+    }
 
     // sampling
     samplingMode = "";
