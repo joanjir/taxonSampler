@@ -175,9 +175,12 @@ export function initDbSampling() {
       ? Math.min(maxIdx + 1, RANKS.length - 1)
       : 0;
 
-    // Set min on both inputs
-    dom.startRank.min = _minRankIdx;
-    dom.endRank.min   = _minRankIdx;
+    // IMPORTANT: Do NOT change the `min` attribute on the range inputs.
+    // Changing `min` shifts the thumb→pixel mapping so that value=1 with
+    // min=1 lands at 0% of the track, but the ticks/dots are placed at
+    // i/6*100%.  Instead we keep min=0 always and clamp via JS events.
+    dom.startRank.min = 0;
+    dom.endRank.min   = 0;
 
     // Auto-set startRank to the floor (next rank below scope)
     dom.startRank.value = _minRankIdx;
@@ -190,22 +193,22 @@ export function initDbSampling() {
     enforceConstraints();
   }
 
-  // Bind range slider events
+  // Bind range slider events — clamp to _minRankIdx via JS, not min attr
   if (dom.startRank) {
     dom.startRank.addEventListener("input", () => {
-      const s = parseInt(dom.startRank.value, 10);
+      let s = parseInt(dom.startRank.value, 10);
       const e = parseInt(dom.endRank.value, 10);
-      if (s < _minRankIdx) dom.startRank.value = _minRankIdx;
-      if (s > e) dom.endRank.value = dom.startRank.value;
+      if (s < _minRankIdx) { s = _minRankIdx; dom.startRank.value = s; }
+      if (s > e) dom.endRank.value = s;
       updateRangeUI();
     });
   }
   if (dom.endRank) {
     dom.endRank.addEventListener("input", () => {
       const s = parseInt(dom.startRank.value, 10);
-      const e = parseInt(dom.endRank.value, 10);
-      if (e < _minRankIdx) dom.endRank.value = _minRankIdx;
-      if (e < s) dom.startRank.value = dom.endRank.value;
+      let e = parseInt(dom.endRank.value, 10);
+      if (e < _minRankIdx) { e = _minRankIdx; dom.endRank.value = e; }
+      if (e < s) { dom.startRank.value = e; }
       updateRangeUI();
     });
   }
