@@ -24,26 +24,16 @@
         </li>
       </ul>
       {% if show_tree_controls %}
-        <!-- Rank-based navigation -->
+        <!-- Advanced Search button -->
         <div class="d-flex align-items-center ms-md-auto mt-2 mt-md-0 me-3" id="rankNavContainer">
-          <!-- Rank selector -->
-          <select id="rankSelect" class="form-select form-select-sm me-2" style="width: 130px;" autocomplete="off">
-            <option value="">Rank...</option>
-            <option value="domain">Domain</option>
-            <option value="kingdom">Kingdom</option>
-            <option value="phylum">Phylum</option>
-            <option value="class">Class</option>
-            <option value="order">Order</option>
-            <option value="family">Family</option>
-            <option value="genus">Genus</option>
-            <option value="species">Species</option>
-          </select>
-
-          <!-- Taxa multi-select (Select2) with "All" option -->
-          <select id="taxaSelect" multiple style="width: 250px;" autocomplete="off"></select>
-
-          <!-- Reset button -->
-          <button id="rankNavReset" class="btn btn-sm btn-outline-secondary ms-2" title="Reset to Root"><i class="fa-solid fa-rotate-left"></i></button>
+          <button id="advancedSearchBtn" class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#advancedSearchModal">
+            <i class="fa-solid fa-filter me-1"></i>Advanced Search
+          </button>
+          <!-- Active filter badge -->
+          <span id="activeFilterBadge" class="badge bg-primary-lt text-primary ms-2" style="display:none;">
+            <span id="activeFilterCount">0</span> filters
+            <button id="clearAllFilters" class="btn-close btn-close-sm ms-1" style="font-size:.5rem;" title="Clear all filters"></button>
+          </span>
         </div>
 
         <!-- SEARCH -->

@@ -335,3 +335,41 @@ g.node.clade-path {
   color: #ced4da;
   font-weight: 400;
 }
+
+/* ═══════════════════════════════════════
+   Advanced Search Modal
+   ═══════════════════════════════════════ */
+#advancedSearchModal .as-preset.active {
+  box-shadow: 0 0 0 3px rgba(32,107,196,.25);
+}
+#advancedSearchModal .card-sm {
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+#advancedSearchModal .card-sm:hover {
+  border-color: rgba(32,107,196,.4) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+#asQueryPreview code {
+  color: #206bc4;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+#advancedSearchModal .select2-container {
+  min-width: 100% !important;
+}
+#advancedSearchModal .select2-selection--multiple {
+  min-height: 31px !important;
+  border-color: #d9dbde !important;
+}
+/* Filter badge in navbar */
+#activeFilterBadge {
+  cursor: default;
+  animation: fadeSlideIn .3s ease;
+}
+#activeFilterBadge .btn-close {
+  cursor: pointer;
+  filter: brightness(0) saturate(100%) invert(27%) sepia(90%) saturate(1600%) hue-rotate(206deg);
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}

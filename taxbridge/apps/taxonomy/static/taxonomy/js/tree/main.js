@@ -40,6 +40,7 @@ import { createSelectionManager } from "../sampling/selection.js";
 import { createSearchController } from "../search/search.js";
 import { initSamplingWizard } from "../sampling/wizard.js";
 import { initRankNav } from "../navigation/rank-nav.js";
+import { initAdvancedSearch } from "../navigation/advanced-search.js";
 import { initExportHandlers } from "../sampling/exports.js";
 import { initDbSampling } from "../sampling/db_sampling.js";
 import { initPhyloTree } from "../sampling/phylo_tree.js";
@@ -76,26 +77,9 @@ initExportHandlers({
   getLastSampling: () => selMgr.getLastSampling(),
 });
 
-// ---- 6) Rank navigation (Select2) ----
+// ---- 6) Advanced Search (replaces old rank-nav) ----
 const rankNav = initRankNav({ renderer });
-
-// jQuery-based Select2 init
-$(document).ready(function () {
-  $("#rankSelect").select2({
-    theme: "bootstrap-5",
-    width: "style",
-    placeholder: "Select rank...",
-    allowClear: true,
-  });
-  $("#taxaSelect").select2({
-    theme: "bootstrap-5",
-    width: "style",
-    placeholder: "Select taxa...",
-    multiple: true,
-    closeOnSelect: false,
-    allowClear: true,
-  });
-});
+const advancedSearch = initAdvancedSearch({ renderer });
 
 // ---- 7) Sampling wizard ----
 const wizard = initSamplingWizard({ renderer });

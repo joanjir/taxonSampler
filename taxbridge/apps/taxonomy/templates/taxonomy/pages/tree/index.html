@@ -92,6 +92,103 @@
     {% include 'taxonomy/pages/tree/filter_sampling.html' %}
     <!-- /col -->
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- ADVANCED SEARCH MODAL — Query Builder                            -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <div class="modal modal-blur fade" id="advancedSearchModal" tabindex="-1" role="dialog" aria-labelledby="advancedSearchLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+
+        <!-- Header -->
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="advancedSearchLabel">
+              <i class="fa-solid fa-filter me-2"></i>Advanced Search
+            </h5>
+            <div class="text-muted small">Build a query to filter what appears in the taxonomy tree</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <!-- Body -->
+        <div class="modal-body">
+
+          <!-- Preset quick filters -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small text-uppercase text-muted">Quick Presets</label>
+            <div class="d-flex flex-wrap gap-2">
+              <button class="btn btn-sm btn-outline-secondary as-preset" data-preset="animalia" type="button">
+                <i class="fa-solid fa-paw me-1"></i>Animalia
+              </button>
+              <button class="btn btn-sm btn-outline-secondary as-preset" data-preset="plantae" type="button">
+                <i class="fa-solid fa-leaf me-1"></i>Plantae
+              </button>
+              <button class="btn btn-sm btn-outline-secondary as-preset" data-preset="fungi" type="button">
+                <i class="fa-solid fa-mushroom me-1"></i>Fungi
+              </button>
+              <button class="btn btn-sm btn-outline-secondary as-preset" data-preset="bacteria" type="button">
+                <i class="fa-solid fa-bacterium me-1"></i>Bacteria
+              </button>
+              <button class="btn btn-sm btn-outline-secondary as-preset" data-preset="species-only" type="button">
+                <i class="fa-solid fa-dna me-1"></i>Species only
+              </button>
+            </div>
+          </div>
+
+          <hr class="my-3">
+
+          <!-- Query rules -->
+          <label class="form-label fw-semibold small text-uppercase text-muted">Filter Rules</label>
+          <div id="asQueryRules">
+            <!-- Rules will be dynamically added here -->
+          </div>
+
+          <!-- Add rule button -->
+          <button id="asAddRule" class="btn btn-sm btn-ghost-primary mt-2" type="button">
+            <i class="fa-solid fa-plus me-1"></i>Add Filter Rule
+          </button>
+
+          <hr class="my-3">
+
+          <!-- Logic operator -->
+          <div class="d-flex align-items-center gap-3">
+            <label class="form-label mb-0 fw-semibold small text-uppercase text-muted">Combine rules with:</label>
+            <div class="btn-group btn-group-sm" role="group">
+              <input type="radio" class="btn-check" name="asLogicOp" id="asLogicAnd" value="AND" checked autocomplete="off">
+              <label class="btn btn-outline-primary" for="asLogicAnd">AND <span class="text-muted small">(all match)</span></label>
+              <input type="radio" class="btn-check" name="asLogicOp" id="asLogicOr" value="OR" autocomplete="off">
+              <label class="btn btn-outline-primary" for="asLogicOr">OR <span class="text-muted small">(any match)</span></label>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="mt-3 p-3 bg-light rounded border" id="asQueryPreview">
+            <div class="d-flex align-items-center justify-content-between">
+              <span class="small fw-semibold text-muted">
+                <i class="fa-solid fa-eye me-1"></i>Query Preview
+              </span>
+              <span id="asMatchCount" class="badge bg-primary-lt text-primary">— matches</span>
+            </div>
+            <code id="asQueryText" class="d-block mt-2 small" style="word-break:break-all;">No filters defined</code>
+          </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+          <button id="asResetAll" class="btn btn-ghost-secondary me-auto" type="button">
+            <i class="fa-solid fa-rotate-left me-1"></i>Reset All
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="asApplyBtn" class="btn btn-primary" type="button">
+            <i class="fa-solid fa-check me-1"></i>Apply Filters
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block extra_js %}
