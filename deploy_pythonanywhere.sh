@@ -49,8 +49,7 @@ if [ "$1" = "--init" ]; then
     echo -e "\n${YELLOW}[3/6] Installing dependencies...${NC}"
     cd "$PROJECT_DIR"
     pip install --upgrade pip
-    # Install without psycopg2 (no PostgreSQL on free tier)
-    pip install $(grep -v psycopg2 requirements.txt | grep -v redis | tr '\n' ' ')
+    pip install -r requirements_pythonanywhere.txt
 
     echo -e "\n${YELLOW}[4/6] Setting up environment...${NC}"
     cd "$APP_DIR"
@@ -105,7 +104,7 @@ else
 
     echo -e "\n${YELLOW}[2/3] Installing new dependencies...${NC}"
     source "$VENV_DIR/bin/activate"
-    pip install $(grep -v psycopg2 requirements.txt | grep -v redis | tr '\n' ' ')
+    pip install -r requirements_pythonanywhere.txt
 
     echo -e "\n${YELLOW}[3/3] Migrations & static files...${NC}"
     cd "$APP_DIR"
