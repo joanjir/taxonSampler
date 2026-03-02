@@ -31,11 +31,8 @@
           </div>
 
           <div class="d-flex flex-wrap gap-2 align-items-center">
-            <a href="/" class="btn btn-primary">
-              Back to root
-            </a>
-            <a href="/taxonomy/" class="btn btn-outline-primary">
-              Open taxonomy
+            <a href="/taxonomy/" class="btn btn-primary">
+              <i class="fa-solid fa-house me-1"></i>Back to home
             </a>
             <div class="ms-md-auto text-muted small">
               Redirecting in <span id="countdown">2:00</span>
@@ -107,7 +104,7 @@
     }
     if (t <= 0) {
       clearInterval(id);
-      window.location.href = "/";
+      window.location.href = "/taxonomy/";
     }
   }, 1000);
 })();
