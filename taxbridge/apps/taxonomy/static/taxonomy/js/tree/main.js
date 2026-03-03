@@ -215,8 +215,8 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     console.log("[applySamplingView] sampled names:", sampledNames.size,
                 "tree species matched:", keys.length);
 
-    if (keys.length && typeof renderer.showOnlyKeys === "function") {
-      renderer.showOnlyKeys(keys, { fit: true });
+    if (keys.length && typeof renderer.revealKeys === "function") {
+      renderer.revealKeys(keys, { clearExpanded: true });
     }
 
     // Switch to Taxonomy tab
@@ -237,10 +237,8 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     .map((x) => x?.key)
     .filter(Boolean);
 
-  if (typeof renderer.showOnlyKeys === "function" && keys.length) {
-    renderer.showOnlyKeys(keys, { fit: true });
-  } else if (typeof renderer.revealKeys === "function" && keys.length) {
-    renderer.revealKeys(keys, { fit: true });
+  if (typeof renderer.revealKeys === "function" && keys.length) {
+    renderer.revealKeys(keys, { clearExpanded: true });
   }
 
   // Switch to Taxonomy tab
