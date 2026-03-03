@@ -329,6 +329,14 @@ export function initDbSampling() {
 
       lastResult = result;
 
+      console.log("[db_sampling] execute() result →", {
+        total_available: result.total_available,
+        total_selected: result.total_selected,
+        speciesCount: (result.species || []).length,
+        cladesCount: (result.clades || []).length,
+        warnings: result.warnings,
+      });
+
       // Dispatch event so Selection tab picks up the results
       window.dispatchEvent(new CustomEvent("db-sampling:final", { detail: result }));
 

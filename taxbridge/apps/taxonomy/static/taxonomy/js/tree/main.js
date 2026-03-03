@@ -97,6 +97,13 @@ const assemblyFilter = initAssemblyFilter();
 const searchCtl = createSearchController({ renderer, searchEndpoint });
 searchCtl.bindUI();
 
+// ---- 12) Bootstrap popovers (HTML help icons) ----
+if (typeof bootstrap !== "undefined" && bootstrap.Popover) {
+  document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+    new bootstrap.Popover(el);
+  });
+}
+
 // =========================================================================
 // Sampling result (global event from samplingCtl)
 // =========================================================================
@@ -126,6 +133,25 @@ window.addEventListener("db-sampling:final", (ev) => {
 // Assembly Filter result → Selection tab + Phylo tree
 function handleAssemblyResult(result, label) {
   if (!result?.species?.length) return;
+
+  // Merge species_score from Step 2 into Step 3 result so Quality column persists
+  const prev = selMgr.getLastSampling();
+  if (prev?.species?.length) {
+    const scoreMap = new Map();
+    for (const sp of prev.species) {
+      const key = sp.accession || sp.organism_name || "";
+      if (key && sp.species_score !== undefined) scoreMap.set(key, sp.species_score);
+    }
+    for (const sp of result.species) {
+      if (sp.species_score === undefined) {
+        const key = sp.accession || sp.organism_name || "";
+        if (scoreMap.has(key)) sp.species_score = scoreMap.get(key);
+      }
+    }
+    // Also preserve clades from Step 2 if Step 3 doesn't have them
+    if (!result.clades && prev.clades) result.clades = prev.clades;
+    if (!result.strategy && prev.strategy) result.strategy = prev.strategy;
+  }
 
   selMgr.setLastSampling(result);
   selMgr.setBadgeMode(label, true);

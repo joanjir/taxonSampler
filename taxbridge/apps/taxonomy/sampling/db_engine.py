@@ -13,6 +13,7 @@ Strategies:
 """
 from __future__ import annotations
 
+import logging
 import math
 import random
 from collections import defaultdict
@@ -21,6 +22,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from django.db.models import Q, Count
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 # Canonical rank hierarchy (coarse to fine)
@@ -255,6 +258,12 @@ def run_db_sampling(
 
     total_available = qs.values("organism_name").distinct().count()
 
+    logger.info(
+        "[run_db_sampling] scope applied → total_available=%d, "
+        "max_sample_size=%d, strategy=%s, start_rank=%s, end_rank=%s",
+        total_available, max_sample_size, strategy, start_rank, end_rank,
+    )
+
     if total_available == 0:
         return SamplingResult(
             config_id=config_id,
@@ -445,12 +454,35 @@ def run_db_sampling(
             "species": clade_species,
         })
 
+    # ── 4b. Global dedup (same species may appear in multiple clades) ──
+    _seen_names: set = set()
+    _deduped: List[Dict[str, Any]] = []
+    for sp in selected_species:
+        oname = sp.get("organism_name", "")
+        if oname not in _seen_names:
+            _seen_names.add(oname)
+            _deduped.append(sp)
+    if len(_deduped) < len(selected_species):
+        warnings.append(
+            f"Removed {len(selected_species) - len(_deduped)} cross-clade "
+            f"duplicate species (kept best per clade)."
+        )
+        selected_species = _deduped
+
     # ── 5. Final limit (safety cap) ────────────────────────
     if len(selected_species) > effective_k:
+        pre_trim = len(selected_species)
         selected_species = selected_species[:effective_k]
         warnings.append(
-            f"Trimmed result from {len(selected_species)} to {effective_k} species."
+            f"Trimmed result from {pre_trim} to {effective_k} species."
         )
+
+    logger.info(
+        "[run_db_sampling] result → total_selected=%d, effective_k=%d, "
+        "num_clades=%d, sum_quotas=%d",
+        len(selected_species), effective_k, len(clades_result),
+        sum(c.get('quota', 0) if isinstance(c, dict) else c.quota for c in clades_info),
+    )
 
     return SamplingResult(
         config_id=config_id,
@@ -567,7 +599,7 @@ def get_sampling_stats(
         species_names=species_names,
     )
 
-    total = qs.count()
+    total = qs.values("organism_name").distinct().count()
 
     # Single pass: gather kingdoms, phyla and rank counts at once
     ranks_of_interest = RANK_HIERARCHY[:-1]  # skip 'species'

@@ -31,10 +31,11 @@ export function createSelectionManager({ renderer }) {
     badge.classList.remove(
       "bg-secondary-lt", "text-secondary",
       "bg-success-lt", "text-success",
+      "text-dark",
     );
 
-    if (isSampling) badge.classList.add("bg-success-lt", "text-success");
-    else badge.classList.add("bg-secondary-lt", "text-secondary");
+    if (isSampling) badge.classList.add("bg-success-lt", "text-dark");
+    else badge.classList.add("bg-secondary-lt", "text-dark");
   }
 
   // ------------------------------------------------------------------
@@ -45,7 +46,7 @@ export function createSelectionManager({ renderer }) {
     if (!badge) return;
     if (count > 0) {
       badge.textContent = String(count);
-      badge.className = "badge rounded-pill bg-primary ms-2";
+      badge.className = "badge rounded-pill bg-primary-lt text-dark ms-2";
       badge.style.display = "";
     } else {
       badge.style.display = "none";
@@ -60,7 +61,7 @@ export function createSelectionManager({ renderer }) {
     if (!tbody) return;
     tbody.innerHTML =
       rowsHtml ||
-      `<tr><td class="text-muted small ps-3" colspan="2">${escapeHtml(emptyMsg)}</td></tr>`;
+      `<tr><td class="text-muted small ps-2" colspan="7">${escapeHtml(emptyMsg)}</td></tr>`;
   }
 
   function renderSelectionManualTbody(selectedMap) {
@@ -96,16 +97,15 @@ export function createSelectionManager({ renderer }) {
         : `<span>${escapeHtml(name)}</span>`;
       return `
         <tr>
-          <td class="ps-3">
-            <span class="small text-muted me-2">${escapeHtml(rank)}</span>
-            ${nameHtml}
-          </td>
-          <td class="text-end pe-3">
+          <td class="ps-2 text-muted small" colspan="2">${escapeHtml(rank)}</td>
+          <td>${nameHtml}</td>
+          <td colspan="3"></td>
+          <td class="text-end pe-2">
             <button type="button"
-                    class="btn btn-sm btn-outline-danger"
+                    class="btn btn-sm btn-outline-danger py-0 px-1"
                     data-sel-remove="${escapeHtml(selId)}"
                     title="Remove">
-              Remove
+              <i class="fa-solid fa-trash-can"></i>
             </button>
           </td>
         </tr>
@@ -156,8 +156,11 @@ export function createSelectionManager({ renderer }) {
   function renderDbSamplingTbody(result) {
     const species = Array.isArray(result?.species) ? result.species : [];
 
-    // Render the clades breakdown table
-    renderDbSamplingClades(result);
+    // Only update clades table when data includes clades info (Step 2).
+    // Step 3 (assembly filter) doesn't carry clades — preserve existing.
+    if (Array.isArray(result?.clades)) {
+      renderDbSamplingClades(result);
+    }
 
     if (!species.length) {
       setText("selCount", "0");
@@ -168,30 +171,39 @@ export function createSelectionManager({ renderer }) {
     const html = species.map((s, i) => {
       const name = s.organism_name || s.name || "";
       const clade = s.clade_group || s.clade || "";
-      const hasAsm = s.assembly_score !== undefined;
-      const scoreHtml = hasAsm
-        ? `<span class="badge bg-${s.assembly_score >= 0.6 ? 'success' : s.assembly_score >= 0.3 ? 'warning' : 'danger'}-lt small ms-1" title="Assembly score">${s.assembly_score.toFixed(2)}</span>`
-        : "";
-      // Species quality score from sampling engine
+
+      // Quality score (from db_engine)
       const hasSp = s.species_score !== undefined && s.species_score !== null;
       const spScore = hasSp ? s.species_score : 0;
       const spColor = spScore >= 0.6 ? "success" : spScore >= 0.3 ? "warning" : "secondary";
       const spScoreHtml = hasSp
-        ? `<span class="badge bg-${spColor} small ms-1" title="Quality score: assembly level, N50, coverage, BUSCO, annotation">${spScore.toFixed(2)}</span>`
+        ? `<span class="badge bg-${spColor}-lt text-dark" title="Quality: level, N50, coverage, BUSCO, annotation">${spScore.toFixed(2)}</span>`
+        : `<span class="text-muted">—</span>`;
+
+      // Assembly score (from assembly_engine, Step 3)
+      const hasAsm = s.assembly_score !== undefined;
+      const asmColor = hasAsm
+        ? (s.assembly_score >= 0.6 ? "success" : s.assembly_score >= 0.3 ? "warning" : "danger")
         : "";
+      const asmScoreHtml = hasAsm
+        ? `<span class="badge bg-${asmColor}-lt text-dark">${s.assembly_score.toFixed(2)}</span>`
+        : `<span class="text-muted">—</span>`;
+
+      // Genome level
       const levelHtml = s.genome_level
-        ? `<span class="badge bg-light text-muted small ms-1" title="Assembly level">${escapeHtml(s.genome_level)}</span>`
-        : "";
+        ? `<span class="badge bg-azure-lt text-dark">${escapeHtml(s.genome_level)}</span>`
+        : `<span class="text-muted">—</span>`;
+
       return `
         <tr>
-          <td class="ps-3">
-            <i class="fa-solid fa-dna text-success me-2" title="DB Sampling"></i>
-            <span class="small text-muted me-2">${escapeHtml(clade)}</span>
-            <em>${escapeHtml(name)}</em>
-            ${spScoreHtml}${scoreHtml}${levelHtml}
-          </td>
-          <td class="text-end pe-3">
-            <button class="btn btn-sm btn-outline-secondary"
+          <td class="ps-2 text-muted small">${i + 1}</td>
+          <td class="small" title="${escapeHtml(clade)}">${escapeHtml(clade)}</td>
+          <td><em>${escapeHtml(name)}</em></td>
+          <td class="text-center">${spScoreHtml}</td>
+          <td class="text-center">${asmScoreHtml}</td>
+          <td class="text-center">${levelHtml}</td>
+          <td class="text-end pe-2">
+            <button class="btn btn-sm btn-outline-secondary py-0 px-1"
                     type="button"
                     data-copy-key="${escapeHtml(name)}"
                     title="Copy name">
@@ -284,13 +296,14 @@ export function createSelectionManager({ renderer }) {
         : `<span>${escapeHtml(r.name || "")}</span>`;
       return `
       <tr>
-        <td class="ps-3">
+        <td class="ps-2">
           ${icon(r.group)}
-          <span class="small text-muted me-2">${escapeHtml(r.rank || "")}</span>
-          ${nameTag}
         </td>
-        <td class="text-end pe-3">
-          <button class="btn btn-sm btn-outline-secondary"
+        <td class="small text-muted">${escapeHtml(r.rank || "")}</td>
+        <td>${nameTag}</td>
+        <td colspan="3"></td>
+        <td class="text-end pe-2">
+          <button class="btn btn-sm btn-outline-secondary py-0 px-1"
                   type="button"
                   data-copy-key="${escapeHtml(r.key)}"
                   title="Copy key">

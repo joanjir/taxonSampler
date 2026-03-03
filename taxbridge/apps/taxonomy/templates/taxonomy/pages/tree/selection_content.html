@@ -1,18 +1,18 @@
 ﻿<!-- Selection content (dentro de tab) -->
-<div class="card-body p-0 border-bottom">
+<div class="card-body p-0 border-bottom" style="position:relative; z-index:10;">
   <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light">
     <div>
-      <span id="selModeBadge" class="badge bg-secondary-lt text-secondary me-2">Manual</span>
+      <span id="selModeBadge" class="badge bg-secondary-lt text-dark me-2">Manual</span>
       <span id="selSubtitle" class="text-muted small">Taxa selected for sampling / export</span>
     </div>
     <div class="btn-group btn-group-sm" role="group" aria-label="Selection actions">
-      <!-- Export dropdown -->
-      <div class="btn-group btn-group-sm" role="group">
+      <!-- Export dropdown (dropup so it stays above clades table) -->
+      <div class="btn-group btn-group-sm dropup" role="group">
         <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export">
           <i class="fa-solid fa-file-export me-1"></i>
           Export
         </button>
-        <ul class="dropdown-menu dropdown-menu-end">
+        <ul class="dropdown-menu dropdown-menu-end shadow">
           <li>
             <button id="exportSelJson" class="dropdown-item" type="button"><i class="fa-solid fa-code me-2"></i>JSON</button>
           </li>
@@ -43,6 +43,12 @@
     <div class="fw-semibold small mb-1">
       <i class="fa-solid fa-chart-pie me-1 text-primary"></i>
       Clades allocation
+      <span class="help-icon text-muted ms-1"
+            data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="right"
+            data-bs-html="true" data-bs-custom-class="popover-help"
+            data-bs-content="&lt;div class='small'&gt;&lt;div class='fw-semibold mb-1'&gt;Clades Allocation&lt;/div&gt;&lt;div&gt;Proportional distribution of species per clade:&lt;/div&gt;&lt;ul class='list-unstyled mb-0 mt-1' style='line-height:1.8'&gt;&lt;li&gt;&lt;span class='badge bg-azure-lt text-dark'&gt;Available&lt;/span&gt; Species with genome in the database&lt;/li&gt;&lt;li&gt;&lt;span class='badge bg-purple-lt text-dark'&gt;Quota&lt;/span&gt; Target assigned by the sampling strategy&lt;/li&gt;&lt;li&gt;&lt;span class='badge bg-green-lt text-dark'&gt;Sampled&lt;/span&gt; Species effectively selected&lt;/li&gt;&lt;/ul&gt;&lt;/div&gt;">
+        <i class="fa-regular fa-circle-question"></i>
+      </span>
       <span id="selCladesHint" class="text-muted ms-2 fw-normal"></span>
     </div>
     <div style="max-height: 180px; overflow-y: auto;">
@@ -64,22 +70,41 @@
 <!-- Body: selection table -->
 <div class="card-body p-0">
   <div class="table-responsive" style="max-height: 420px;">
-    <table class="table table-sm table-hover align-middle mb-0">
+    <table class="table table-sm table-bordered table-hover align-middle mb-0" style="font-size:.82rem;">
       <thead class="table-light position-sticky" style="top: 0; z-index: 1;">
         <tr>
-          <th class="ps-3">
-            <span>Taxon</span>
-            <span id="selHint" class="text-muted small ms-2"></span>
+          <th class="ps-2" style="width:32px;">#</th>
+          <th>Clade</th>
+          <th>Species</th>
+          <th class="text-center" style="min-width:70px;">
+            Quality
+            <span class="help-icon text-muted ms-1"
+                  data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="bottom"
+                  data-bs-html="true" data-bs-custom-class="popover-help"
+                  data-bs-content="&lt;div class='small'&gt;&lt;div class='fw-semibold mb-1'&gt;Quality Score (Step&amp;nbsp;2)&lt;/div&gt;&lt;div class='mb-1'&gt;Composite score 0 – 1 based on:&lt;/div&gt;&lt;table class='table table-sm mb-0' style='font-size:.78rem;line-height:1.6'&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-green-lt text-dark'&gt;20%&lt;/span&gt; Assembly level&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-azure-lt text-dark'&gt;15%&lt;/span&gt; RefSeq category&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-purple-lt text-dark'&gt;20%&lt;/span&gt; Quality score (NCBI)&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-cyan-lt text-dark'&gt;15%&lt;/span&gt; Scaffold N50&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-orange-lt text-dark'&gt;10%&lt;/span&gt; Coverage&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-pink-lt text-dark'&gt;15%&lt;/span&gt; BUSCO complete&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-yellow-lt text-dark'&gt;5%&lt;/span&gt; Gene annotation&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;div class='mt-1 text-muted'&gt;Color: &lt;span class='badge bg-success-lt text-dark'&gt;≥ 0.6&lt;/span&gt; &lt;span class='badge bg-warning-lt text-dark'&gt;≥ 0.3&lt;/span&gt; &lt;span class='badge bg-secondary-lt text-dark'&gt;&amp;lt; 0.3&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;">
+              <i class="fa-regular fa-circle-question" style="font-weight:normal;"></i>
+            </span>
           </th>
-          <th class="text-end pe-3" style="width: 64px;">Action</th>
+          <th class="text-center" style="min-width:70px;">
+            Assembly
+            <span class="help-icon text-muted ms-1"
+                  data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="bottom"
+                  data-bs-html="true" data-bs-custom-class="popover-help"
+                  data-bs-content="&lt;div class='small'&gt;&lt;div class='fw-semibold mb-1'&gt;Assembly Score (Step&amp;nbsp;3)&lt;/div&gt;&lt;div class='mb-1'&gt;Weighted composite from assembly filter:&lt;/div&gt;&lt;table class='table table-sm mb-0' style='font-size:.78rem;line-height:1.6'&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-cyan-lt text-dark'&gt;35%&lt;/span&gt; Coverage&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-purple-lt text-dark'&gt;30%&lt;/span&gt; Scaffold N50&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;span class='badge bg-green-lt text-dark'&gt;35%&lt;/span&gt; Quality score&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;div class='mt-1 text-muted'&gt;Color: &lt;span class='badge bg-success-lt text-dark'&gt;≥ 0.6&lt;/span&gt; &lt;span class='badge bg-warning-lt text-dark'&gt;≥ 0.3&lt;/span&gt; &lt;span class='badge bg-danger-lt text-dark'&gt;&amp;lt; 0.3&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;">
+              <i class="fa-regular fa-circle-question" style="font-weight:normal;"></i>
+            </span>
+          </th>
+          <th class="text-center" style="min-width:80px;">Level</th>
+          <th class="text-end pe-2" style="width:48px;"></th>
         </tr>
       </thead>
       <tbody id="selList">
         <tr>
-          <td class="text-muted small ps-3" colspan="2">No selection.</td>
+          <td class="text-muted small ps-2" colspan="7">No selection.</td>
         </tr>
       </tbody>
     </table>
+    <div id="selHint" class="text-muted small px-3 py-1"></div>
   </div>
 </div>
 

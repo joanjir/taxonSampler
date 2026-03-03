@@ -7,7 +7,10 @@ Separated from UI views which render HTML templates.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 from django.db.models import Q
@@ -1431,6 +1434,14 @@ def sampling_execute(request):
         config_id = config_obj.pk
 
     # Execute sampling
+    logger.info(
+        "[sampling_execute] params → max_sample_size=%s, start_rank=%s, "
+        "end_rank=%s, strategy=%s, scope_filters=%s, target_keys=%s, "
+        "species_names_count=%s",
+        max_sample_size, start_rank, end_rank, strategy,
+        scope_filters, target_keys,
+        len(species_names) if species_names else 0,
+    )
     try:
         result = run_db_sampling(
             max_sample_size=max_sample_size,
