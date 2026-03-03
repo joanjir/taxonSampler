@@ -298,7 +298,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 OUTPUT_ZIP="${outZip}"
-API_URL="https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/download"
+API_URL="https://api.ncbi.nlm.nih.gov/datasets/v2/genome/download"
 BATCH_SIZE=${BATCH_SIZE}
 
 # ── Accession manifest ──
@@ -420,7 +420,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
 $OutputZip = "${outZip}"
-$ApiUrl    = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/download"
+$ApiUrl    = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/download"
 $BatchSize = ${BATCH_SIZE}
 
 # ── Accession manifest ──
