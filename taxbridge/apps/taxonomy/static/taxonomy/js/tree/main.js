@@ -188,26 +188,34 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
   const result = selMgr.getLastSampling();
   if (!result) return;
 
-  // DB sampling: result has a species array, not ingroup/outgroupPicked
-  if (Array.isArray(result.species)) {
-    const names = result.species
-      .map(s => s.organism_name || s.scientific_name || s.name || "")
-      .filter(Boolean);
+  // DB sampling: result has a species array with classification fields
+  if (Array.isArray(result.species) && result.species.length) {
+    // Build tree path keys from classification data
+    const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus"];
+    const keys = result.species.map(s => {
+      const parts = [];
+      for (const r of RANKS) {
+        const val = s[r];
+        if (val) parts.push(`${r}:${val}`);
+      }
+      // Add the species level using organism_name
+      const name = s.organism_name || s.scientific_name || s.name || "";
+      if (name) parts.push(`species:${name}`);
+      return parts.join("|");
+    }).filter(Boolean);
 
-    // Try to find these species in the tree by name match
-    if (typeof renderer.revealByNames === "function" && names.length) {
-      renderer.revealByNames(names, { fit: true });
-      return;
+    if (keys.length && typeof renderer.showOnlyKeys === "function") {
+      renderer.showOnlyKeys(keys, { fit: true });
     }
 
-    // Fallback: just expand to species level
-    if (typeof renderer.openToRank === "function") {
-      renderer.openToRank("species", { fit: true });
-      return;
+    // Switch to Taxonomy tab
+    const treeTab = document.getElementById("treeTab");
+    if (treeTab) {
+      try {
+        const bsTab = bootstrap?.Tab ? new bootstrap.Tab(treeTab) : null;
+        if (bsTab) bsTab.show(); else treeTab.click();
+      } catch { treeTab.click(); }
     }
-
-    renderer.setRankCut?.("species");
-    renderer.fitToView?.();
     return;
   }
 
@@ -218,18 +226,20 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     .map((x) => x?.key)
     .filter(Boolean);
 
-  if (typeof renderer.revealKeys === "function" && keys.length) {
+  if (typeof renderer.showOnlyKeys === "function" && keys.length) {
+    renderer.showOnlyKeys(keys, { fit: true });
+  } else if (typeof renderer.revealKeys === "function" && keys.length) {
     renderer.revealKeys(keys, { fit: true });
-    return;
   }
 
-  if (typeof renderer.openToRank === "function") {
-    renderer.openToRank("species", { fit: true });
-    return;
+  // Switch to Taxonomy tab
+  const treeTab = document.getElementById("treeTab");
+  if (treeTab) {
+    try {
+      const bsTab = bootstrap?.Tab ? new bootstrap.Tab(treeTab) : null;
+      if (bsTab) bsTab.show(); else treeTab.click();
+    } catch { treeTab.click(); }
   }
-
-  renderer.setRankCut?.("species");
-  renderer.fitToView?.();
 });
 
 document.getElementById("clearSamplingView")?.addEventListener("click", () => {
