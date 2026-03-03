@@ -20,6 +20,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
   // ---------------- data state ----------------
   let fullData = null;
+  let _savedFullData = null;   // original tree before sampling prune
 
   // mode 1: manual (no rankCut filter) => only what the user expands opens
   const expandedKeys = new Set();
@@ -152,6 +153,88 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       // If not, center on the first found node
       centerOnKeyAfterRebuild(firstKey, 250);
     }
+  }
+
+  // ----------------------------------------------------------------
+  // Pruned-tree approach: replace tree entirely with sampled paths
+  // ----------------------------------------------------------------
+
+  /**
+   * Build a pruned copy of the tree containing only paths
+   * leading to the target keys (sampled species).
+   */
+  function pruneTreeToKeys(node, targetKeys, parts = []) {
+    const nextParts = pushPart(parts, node);
+    const key = keyOf(nextParts);
+
+    // Node IS one of the targets → include as leaf
+    if (targetKeys.has(key)) {
+      const out = { ...node, __key: key };
+      delete out.children;
+      delete out._children;
+      return out;
+    }
+
+    // Check if any target is a descendant of this node
+    const isAncestor = [...targetKeys].some(tk => tk.startsWith(key + "|"));
+    if (!isAncestor) return null;
+
+    // Recurse into children
+    const kids = Array.isArray(node.children) && node.children.length
+      ? node.children
+      : (Array.isArray(node._children) ? node._children : []);
+
+    const prunedKids = kids
+      .map(c => pruneTreeToKeys(c, targetKeys, nextParts))
+      .filter(Boolean);
+
+    if (prunedKids.length === 0) return null;
+
+    const out = { ...node, __key: key };
+    out.children = prunedKids;
+    delete out._children;
+    return out;
+  }
+
+  /**
+   * Replace the visible tree with a pruned tree containing
+   * only the sampled species and their ancestors.
+   * Call restoreFullTree() to go back to the original.
+   */
+  function showSampledTree(keys) {
+    if (!keys || !keys.length) return;
+    const source = _savedFullData || fullData;
+    if (!source) return;
+
+    // Save original the first time
+    if (!_savedFullData) _savedFullData = fullData;
+
+    const targetSet = new Set(keys);
+    const pruned = pruneTreeToKeys(source, targetSet);
+    if (!pruned) return;
+
+    // Full re-render with pruned data (destroys SVG, fresh DOM)
+    render(pruned);
+
+    // render() starts collapsed (MAX_INITIAL_DEPTH=0).
+    // Expand everything — the pruned tree is small.
+    expandedKeys.clear();
+    seedExpandedKeysFromData(fullData, Infinity);
+    for (const key of [...expandedKeys]) {
+      expandThroughChain(key);
+    }
+    rebuildHierarchyAndUpdate(root);
+    setTimeout(fitToView, 120);
+  }
+
+  /**
+   * Restore the original full tree (undo showSampledTree).
+   */
+  function restoreFullTree() {
+    if (!_savedFullData) return;
+    const saved = _savedFullData;
+    _savedFullData = null;
+    render(saved);
   }
 
   /**
@@ -1352,7 +1435,10 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
   
   // Get all nodes of a specific rank
   function getNodesByRank(targetRank) {
-    if (!fullData) return [];
+    // Always walk the ORIGINAL (unsaved) tree so lookups work
+    // even while the pruned sampling tree is displayed.
+    const source = _savedFullData || fullData;
+    if (!source) return [];
     
     const rank = (targetRank || "").toLowerCase();
     const results = [];
@@ -1376,7 +1462,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       }
     }
     
-    walk(fullData);
+    walk(source);
     
     // Sort by name
     results.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -1425,6 +1511,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     revealKeys,
     showOnlyKeys,
     clearKeyFilter,
+    showSampledTree,
+    restoreFullTree,
     // Rank-based navigation
     getChildrenOf,
     getRootInfo,

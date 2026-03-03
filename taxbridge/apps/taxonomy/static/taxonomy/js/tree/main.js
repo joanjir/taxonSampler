@@ -215,8 +215,8 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     console.log("[applySamplingView] sampled names:", sampledNames.size,
                 "tree species matched:", keys.length);
 
-    if (keys.length && typeof renderer.revealKeys === "function") {
-      renderer.revealKeys(keys, { clearExpanded: true });
+    if (keys.length && typeof renderer.showSampledTree === "function") {
+      renderer.showSampledTree(keys);
     }
 
     // Switch to Taxonomy tab
@@ -237,8 +237,8 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     .map((x) => x?.key)
     .filter(Boolean);
 
-  if (typeof renderer.revealKeys === "function" && keys.length) {
-    renderer.revealKeys(keys, { clearExpanded: true });
+  if (typeof renderer.showSampledTree === "function" && keys.length) {
+    renderer.showSampledTree(keys);
   }
 
   // Switch to Taxonomy tab
@@ -267,6 +267,7 @@ document.getElementById("clearSamplingView")?.addEventListener("click", () => {
   renderer.setSamplingMode?.("");
   renderer.setSamplingRootKey?.(null);
   renderer.setRankCut?.(null);
+  renderer.restoreFullTree?.();   // restore original tree if pruned
   renderer.fitToView?.();
 
   if (window.__samplingWizard?.reset) window.__samplingWizard.reset();
