@@ -215,6 +215,15 @@ export function initAssemblyFilter() {
     window.dispatchEvent(new CustomEvent("assembly-filter:skipped", {
       detail: { species: inputSpecies },
     }));
+
+    // Switch to Selection tab so the user sees the result
+    const selTab = document.getElementById("selectionTab");
+    if (selTab) {
+      try {
+        const bsTab = bootstrap?.Tab ? new bootstrap.Tab(selTab) : null;
+        if (bsTab) bsTab.show(); else selTab.click();
+      } catch { selTab.click(); }
+    }
   }
 
   // ── Set input from Step 2 result ──────────────────────────────────

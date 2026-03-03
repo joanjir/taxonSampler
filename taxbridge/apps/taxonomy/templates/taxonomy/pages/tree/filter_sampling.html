@@ -285,13 +285,29 @@
                    class="form-control form-control-sm" placeholder="Any">
           </div>
 
-          <hr class="my-2">
-
-          <!-- Hidden stats kept for JS compatibility -->
-          <div id="asmStatsSummary" class="d-none">
-            <span id="asmStatTotal"></span>
-            <span id="asmStatAvgScore"></span>
-            <span id="asmStatAvgCov"></span>
+          <!-- Assembly stats summary -->
+          <div id="asmStatsSummary" class="d-none mb-3">
+            <label class="form-label small mb-1 fw-semibold">Assembly overview</label>
+            <div class="row g-2">
+              <div class="col-4">
+                <div class="border rounded-3 px-2 py-1 text-center">
+                  <div class="text-muted" style="font-size:.65rem;">Species</div>
+                  <div id="asmStatTotal" class="fw-semibold small">—</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="border rounded-3 px-2 py-1 text-center">
+                  <div class="text-muted" style="font-size:.65rem;">Avg score</div>
+                  <div id="asmStatAvgScore" class="fw-semibold small">—</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="border rounded-3 px-2 py-1 text-center">
+                  <div class="text-muted" style="font-size:.65rem;">Avg coverage</div>
+                  <div id="asmStatAvgCov" class="fw-semibold small">—</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Action buttons -->

@@ -91,11 +91,14 @@ export function createSelectionManager({ renderer }) {
       const selId = String(x.id || x.key || "");
       const rank = String(x.rank || "");
       const name = String(x.name || "");
+      const nameHtml = rank.toLowerCase() === "species"
+        ? `<em>${escapeHtml(name)}</em>`
+        : `<span>${escapeHtml(name)}</span>`;
       return `
         <tr>
           <td class="ps-3">
             <span class="small text-muted me-2">${escapeHtml(rank)}</span>
-            <span>${escapeHtml(name)}</span>
+            ${nameHtml}
           </td>
           <td class="text-end pe-3">
             <button type="button"
@@ -177,7 +180,7 @@ export function createSelectionManager({ renderer }) {
           <td class="ps-3">
             <i class="fa-solid fa-dna text-success me-2" title="DB Sampling"></i>
             <span class="small text-muted me-2">${escapeHtml(clade)}</span>
-            <span>${escapeHtml(name)}</span>
+            <em>${escapeHtml(name)}</em>
             ${scoreHtml}${levelHtml}
           </td>
           <td class="text-end pe-3">
@@ -268,12 +271,16 @@ export function createSelectionManager({ renderer }) {
         ? `<i class="fa-solid fa-circle-dot text-warning me-2" title="Outgroup"></i>`
         : `<i class="fa-solid fa-leaf text-success me-2" title="Ingroup"></i>`;
 
-    const html = rows.map((r) => `
+    const html = rows.map((r) => {
+      const nameTag = (r.rank || "").toLowerCase() === "species"
+        ? `<em>${escapeHtml(r.name || "")}</em>`
+        : `<span>${escapeHtml(r.name || "")}</span>`;
+      return `
       <tr>
         <td class="ps-3">
           ${icon(r.group)}
           <span class="small text-muted me-2">${escapeHtml(r.rank || "")}</span>
-          <span>${escapeHtml(r.name || "")}</span>
+          ${nameTag}
         </td>
         <td class="text-end pe-3">
           <button class="btn btn-sm btn-outline-secondary"
