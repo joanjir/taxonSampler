@@ -354,7 +354,7 @@
     docs:     { label: '📖 Documentation',    color: 'bg-secondary-lt text-secondary', ghLabel: 'documentation', placeholder: 'What documentation is missing or incorrect?', titlePH: 'e.g. Missing installation steps for Redis on macOS' }
   };
 
-  // ── Environment info ──
+  // ── Environment info (automatically captured) ──
   const envInfo = [
     'Browser: ' + navigator.userAgent.split(') ')[0].split('(').pop(),
     'Platform: ' + (navigator.userAgentData ? navigator.userAgentData.platform : navigator.platform),
@@ -540,7 +540,15 @@
       if (actVal) md += '### Actual Behavior\n' + actVal + '\n\n';
     }
 
-    md += '### Environment\n```\n' + envInfo + '\n```\n';
+    // Format environment info as a table for better readability in GitHub
+    const envLines = envInfo.split('\n');
+    md += '### Environment\n| | |\n|---|---|\n';
+    envLines.forEach(line => {
+      const [key, val] = line.split(': ');
+      md += '| **' + (key || '') + '** | ' + (val || '') + ' |\n';
+    });
+    md += '\n';
+    
     return md;
   }
 
