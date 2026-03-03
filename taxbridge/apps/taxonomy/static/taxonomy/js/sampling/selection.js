@@ -91,7 +91,7 @@ export function createSelectionManager({ renderer }) {
       const selId = String(x.id || x.key || "");
       const rank = String(x.rank || "");
       const name = String(x.name || "");
-      const nameHtml = rank.toLowerCase() === "species"
+      const nameHtml = ["species", "subspecies"].includes(rank.toLowerCase())
         ? `<em>${escapeHtml(name)}</em>`
         : `<span>${escapeHtml(name)}</span>`;
       return `
@@ -272,7 +272,7 @@ export function createSelectionManager({ renderer }) {
         : `<i class="fa-solid fa-leaf text-success me-2" title="Ingroup"></i>`;
 
     const html = rows.map((r) => {
-      const nameTag = (r.rank || "").toLowerCase() === "species"
+      const nameTag = ["species", "subspecies"].includes((r.rank || "").toLowerCase())
         ? `<em>${escapeHtml(r.name || "")}</em>`
         : `<span>${escapeHtml(r.name || "")}</span>`;
       return `

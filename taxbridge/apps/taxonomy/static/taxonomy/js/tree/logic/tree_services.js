@@ -21,7 +21,7 @@ export function countSpeciesUnderNode(node) {
   (function dfs(n) {
     if (!n) return;
     const r = ((n.rank || "") + "").toLowerCase();
-    if (r === "species") {
+    if (r === "species" || r === "subspecies") {
       count += 1;
       return;
     }

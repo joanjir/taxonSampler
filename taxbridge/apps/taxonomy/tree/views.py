@@ -131,19 +131,20 @@ def tree_search(request):
 
     # A) Species hits (fast)
     if "species" in include:
-        # COL species (accepted + synonyms)
+        # COL species & subspecies (accepted + synonyms)
         sp_qs = (
             ExternalTaxon.objects
             .filter(system="col", rank__in=["species", "subspecies"])
             .filter(name__icontains=q)
-            .only("id", "external_id", "name", "rank", "status", "classification_path")
+            .only("id", "external_id", "name", "status", "classification_path")
             .order_by("name")[:15000]
         )
 
         for rec in sp_qs:
             path = normalize_classification_path(rec.classification_path)
+            leaf_rank = rec.rank if rec.rank in ("species", "subspecies") else "species"
             parts = [{"rank": "dataset", "name": "Root"}] + [{"rank": r, "name": n} for r, n in path] + [
-                {"rank": "species", "name": rec.name}
+                {"rank": leaf_rank, "name": rec.name}
             ]
             k = path_key_from_parts(parts)
             if k in hits_by_key:
@@ -155,7 +156,7 @@ def tree_search(request):
             hits_by_key[k] = {
                 "key": k,
                 "name": rec.name,
-                "rank": "species",
+                "rank": leaf_rank,
                 "id": rec.id,
                 "external_id": rec.external_id,
                 "label": parts_to_label(parts),

@@ -8,7 +8,7 @@ export function computeNodeUIState({ d, samplingMode, samplingRootKey, samplingT
   const isScope = samplingMode === "node" && samplingRootKey && k === samplingRootKey;
   const isTarget = samplingMode === "node" && samplingTargetKeys?.has(k);
   const rank = (d?.data?.rank || "").toLowerCase();
-  const isSpecies = rank === "species";
+  const isSpecies = rank === "species" || rank === "subspecies";
 
   return {
     key: k,

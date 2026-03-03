@@ -184,7 +184,7 @@ def count_species_under(node: Dict[str, Any]) -> int:
     if not node:
         return 0
     
-    if norm_rank(node.get("rank")) == "species":
+    if norm_rank(node.get("rank")) in ("species", "subspecies"):
         return 1
     
     count = 0

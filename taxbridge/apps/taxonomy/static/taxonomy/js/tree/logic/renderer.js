@@ -211,9 +211,9 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     // Rebuild
     if (root) rebuildHierarchyAndUpdate(root);
 
-    // Fit
+    // Fit — use higher minimum scale so nodes stay readable
     if (opts.fit) {
-      setTimeout(fitToView, 250);
+      setTimeout(fitToFilteredView, 250);
     }
   }
 
@@ -420,7 +420,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     pushKids(d);
     while (q.length) {
       const n = q.shift();
-      if (((n.data.rank || "") + "").toLowerCase() === "species") return n;
+      if (["species", "subspecies"].includes(((n.data.rank || "") + "").toLowerCase())) return n;
       pushKids(n);
     }
     return null;
@@ -555,6 +555,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     fitToViewHelper({ svgRoot, gZoom, zoomBehavior, mount, margin: 40 });
   }
 
+  /** Higher minimum scale for filtered/showOnlyKeys views so text stays readable */
+  function fitToFilteredView() {
+    fitToViewHelper({ svgRoot, gZoom, zoomBehavior, mount, margin: 40, minScale: 0.65 });
+  }
+
   function centerOn(d) {
     centerOnHelper({ svgRoot, zoomBehavior, mount, d });
   }
@@ -675,8 +680,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
         // In sampling "node" mode
         if (samplingMode === "node") {
-          // Do not allow species
-          if (rank === "species") {
+          // Do not allow species or subspecies (leaf nodes)
+          if (rank === "species" || rank === "subspecies") {
             return;
           }
 
@@ -799,7 +804,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       // Source badge for species (A=Accepted, S=Synonym, M=Manual)
       // Positioned outside the node box, at the top-left corner
       const src = (d.data.source || "").toLowerCase();
-      const isSpecies = (d.data.rank || "").toLowerCase() === "species";
+      const isSpecies = ["species", "subspecies"].includes((d.data.rank || "").toLowerCase());
       if (isSpecies && src) {
         let letter, bgFill, fgFill;
         if (src === "synonym") {
@@ -844,6 +849,11 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     });
 
     const nodeUpdate = nodeEnter.merge(node);
+
+    // Ensure DOM order matches data (DFS) order so parent rects
+    // are painted BEFORE child text — prevents overlap clipping
+    // when node boxes are wider than COL_GAP.
+    nodeUpdate.order();
 
     // expand/collapse per click in the node (except checkbox)
     nodeUpdate
@@ -1033,7 +1043,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       }
 
       // jumps (if used)
-      const isSp = ((d.data.rank || "") + "").toLowerCase() === "species";
+      const isSp = ["species", "subspecies"].includes(((d.data.rank || "") + "").toLowerCase());
       const hasSp = !!findFirstSpecies(d);
       g.select("g.jump").style("display", !isSp && hasSp ? null : "none");
     });

@@ -149,7 +149,8 @@ class ExternalTaxonManager(models.Manager):
                 if sk_name:
                     cur.meta.setdefault("superkingdom", sk_name)
             
-            sp_key = ("species", sp.name)
+            leaf_rank = sp.rank if sp.rank in ("species", "subspecies") else "species"
+            sp_key = (leaf_rank, sp.name)
             if sp_key not in cur.children:
                 meta = {
                     "id": sp.id,
@@ -161,7 +162,7 @@ class ExternalTaxonManager(models.Manager):
                     meta["superkingdom"] = sk_name
                 cur.children[sp_key] = TrieNode(
                     name=sp.name,
-                    rank="species",
+                    rank=leaf_rank,
                     meta=meta,
                 )
 

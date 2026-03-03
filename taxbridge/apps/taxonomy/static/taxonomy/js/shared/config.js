@@ -28,7 +28,7 @@ export const RANK_STYLE = {
 
 export function rankStyle(rank) {
     const k = (rank || '').toLowerCase();
-    return k === 'species' ? RANK_STYLE.species : RANK_STYLE.default;
+    return (k === 'species' || k === 'subspecies') ? RANK_STYLE.species : RANK_STYLE.default;
 }
 
 export function isSciName(name) {

@@ -541,7 +541,7 @@ export function createSamplingFiltersController({ renderer }) {
         setWarn("No active node. Click a node in the taxonomy to make it active, then set scope.");
         return;
       }
-      if (normRank(a.rank) === "species") {
+      if (normRank(a.rank) === "species" || normRank(a.rank) === "subspecies") {
         setWarn("Species nodes cannot be used as scope. Select a higher rank node.");
         return;
       }
@@ -586,7 +586,7 @@ export function createSamplingFiltersController({ renderer }) {
         return;
       }
       const rk = normRank(a.rank);
-      if (rk === "species") {
+      if (rk === "species" || rk === "subspecies") {
         setWarn("Species nodes cannot be targets. Select a higher rank clade.");
         return;
       }

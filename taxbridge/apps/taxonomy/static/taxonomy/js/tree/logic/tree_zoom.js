@@ -14,7 +14,7 @@ export function initZoom({ svgRoot, gZoom, tooltip, onUserInteracted }) {
   return zoomBehavior;
 }
 
-export function fitToView({ svgRoot, gZoom, zoomBehavior, mount, margin = 40 }) {
+export function fitToView({ svgRoot, gZoom, zoomBehavior, mount, margin = 40, minScale = 0.35 }) {
   if (!svgRoot || !gZoom || !zoomBehavior) return;
 
   const width = mount.clientWidth;
@@ -24,7 +24,7 @@ export function fitToView({ svgRoot, gZoom, zoomBehavior, mount, margin = 40 }) 
 
   const scale = Math.min(
     1.8,
-    Math.max(0.35, Math.min((width - margin) / bbox.width, (height - margin) / bbox.height))
+    Math.max(minScale, Math.min((width - margin) / bbox.width, (height - margin) / bbox.height))
   );
 
   const tx = (width - bbox.width * scale) / 2 - bbox.x * scale;
