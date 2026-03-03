@@ -38,6 +38,77 @@ def _rank_index(rank: str) -> int:
         return -1
 
 
+# ── Species quality scoring ──────────────────────────────────────
+
+# Assembly level ordinal (higher = better)
+_LEVEL_SCORE = {
+    "complete genome": 4,
+    "chromosome":      3,
+    "scaffold":        2,
+    "contig":          1,
+}
+
+# RefSeq category ordinal
+_REFSEQ_SCORE = {
+    "reference genome":      3,
+    "representative genome": 2,
+    "na":                    1,
+}
+
+
+def compute_species_score(genome) -> float:
+    """
+    Compute a composite quality score for a genome assembly.
+
+    The score ranges from 0 to 1 and combines:
+      - assembly_level  (20%): Complete > Chromosome > Scaffold > Contig
+      - refseq_category (15%): reference > representative > na
+      - quality_score   (20%): NCBI pre-computed quality score
+      - scaffold_n50    (15%): higher is better (log-scaled, typical 0-500 Mb)
+      - genome_coverage (10%): higher is better (capped at 200×)
+      - busco_complete  (15%): % of complete BUSCO genes
+      - has_annotation  ( 5%): bonus if protein-coding gene count > 0
+
+    Species with missing data get 0 for that component (not penalised
+    beyond receiving no bonus).
+    """
+    score = 0.0
+
+    # 1. Assembly level (0.20)
+    level = (getattr(genome, "genome_level", "") or "").lower()
+    score += 0.20 * (_LEVEL_SCORE.get(level, 0) / 4)
+
+    # 2. RefSeq category (0.15)
+    cat = (getattr(genome, "refseq_category", "") or "").lower()
+    score += 0.15 * (_REFSEQ_SCORE.get(cat, 0) / 3)
+
+    # 3. Pre-computed quality_score (0.20)
+    qs = getattr(genome, "quality_score", None) or 0.0
+    score += 0.20 * min(1.0, max(0.0, qs))
+
+    # 4. Scaffold N50 (0.15) — log-normalised, cap at 500 Mb
+    n50 = getattr(genome, "scaffold_n50_kb", None) or 0.0
+    if n50 > 0:
+        import math as _m
+        # log10(1)=0, log10(500_000)=5.7
+        score += 0.15 * min(1.0, _m.log10(n50 + 1) / 5.7)
+
+    # 5. Genome coverage (0.10) — linear, capped at 200×
+    cov = getattr(genome, "genome_coverage", None) or 0.0
+    score += 0.10 * min(1.0, max(0.0, cov / 200))
+
+    # 6. BUSCO complete (0.15) — direct percentage
+    busco = getattr(genome, "busco_complete", None) or 0.0
+    score += 0.15 * min(1.0, max(0.0, busco / 100))
+
+    # 7. Has annotation bonus (0.05)
+    pc = getattr(genome, "protein_coding", None) or 0
+    if pc > 0:
+        score += 0.05
+
+    return round(score, 6)
+
+
 @dataclass
 class CladeAllocation:
     """A clade with its species count and sampling quota."""
@@ -320,8 +391,11 @@ def run_db_sampling(
             genomes.sort(key=lambda g: g.accession)
             picks = genomes[:clade.quota]
         else:
-            # Proportional / balanced: sort alphabetically for determinism
-            genomes.sort(key=lambda g: g.organism_name)
+            # Proportional / balanced: rank by quality score (best first).
+            # Deterministic tie-breaking by organism_name for reproducibility.
+            genomes.sort(
+                key=lambda g: (-compute_species_score(g), g.organism_name)
+            )
             picks = genomes[:clade.quota]
 
         clade_species = []
@@ -357,6 +431,7 @@ def run_db_sampling(
                 "source_database": g.source_database or "",
                 "sequencing_tech": g.sequencing_tech or "",
                 "busco_complete": g.busco_complete,
+                "species_score": compute_species_score(g),
             }
             clade_species.append(species_data)
             selected_species.append(species_data)

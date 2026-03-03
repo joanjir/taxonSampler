@@ -172,6 +172,13 @@ export function createSelectionManager({ renderer }) {
       const scoreHtml = hasAsm
         ? `<span class="badge bg-${s.assembly_score >= 0.6 ? 'success' : s.assembly_score >= 0.3 ? 'warning' : 'danger'}-lt small ms-1" title="Assembly score">${s.assembly_score.toFixed(2)}</span>`
         : "";
+      // Species quality score from sampling engine
+      const hasSp = s.species_score !== undefined && s.species_score !== null;
+      const spScore = hasSp ? s.species_score : 0;
+      const spColor = spScore >= 0.6 ? "success" : spScore >= 0.3 ? "warning" : "secondary";
+      const spScoreHtml = hasSp
+        ? `<span class="badge bg-${spColor} small ms-1" title="Quality score: assembly level, N50, coverage, BUSCO, annotation">${spScore.toFixed(2)}</span>`
+        : "";
       const levelHtml = s.genome_level
         ? `<span class="badge bg-light text-muted small ms-1" title="Assembly level">${escapeHtml(s.genome_level)}</span>`
         : "";
@@ -181,7 +188,7 @@ export function createSelectionManager({ renderer }) {
             <i class="fa-solid fa-dna text-success me-2" title="DB Sampling"></i>
             <span class="small text-muted me-2">${escapeHtml(clade)}</span>
             <em>${escapeHtml(name)}</em>
-            ${scoreHtml}${levelHtml}
+            ${spScoreHtml}${scoreHtml}${levelHtml}
           </td>
           <td class="text-end pe-3">
             <button class="btn btn-sm btn-outline-secondary"

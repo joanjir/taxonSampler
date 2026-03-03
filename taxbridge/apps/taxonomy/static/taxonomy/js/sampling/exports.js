@@ -82,9 +82,9 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       // DB sampling: export species list as TXT
       const species = last.species || [];
       const lines = species.map((s, i) =>
-        `${i + 1}\t${s.organism_name || ""}\t${s.taxid || ""}\t${s.accession || ""}\t${s.clade_group || ""}`
+        `${i + 1}\t${s.organism_name || ""}\t${s.taxid || ""}\t${s.accession || ""}\t${s.clade_group || ""}\t${s.species_score ?? ""}`
       );
-      const header = "#\torganism_name\ttaxid\taccession\tclade";
+      const header = "#\torganism_name\ttaxid\taccession\tclade\tspecies_score";
       const txt = header + "\n" + lines.join("\n") + "\n";
       await saveAs(txt, "sampling.txt");
       return;
@@ -155,6 +155,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
         "Genes":           s.genes ?? "",
         "Protein Coding":  s.protein_coding ?? "",
         "Quality Score":   s.quality_score ?? "",
+        "Species Score":   s.species_score ?? "",
         "Release Date":    s.release_date || "",
         "Source DB":       s.source_database || "",
         "Sequencing Tech": s.sequencing_tech || "",
