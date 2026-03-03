@@ -3,7 +3,7 @@
 export const VIS = {
     NODE_H: 20,
     PAD_X: 8,
-    MAX_W: 260,
+    MAX_W: 190,
     MIN_W: 34,
     DUR: 160,
     CB_SIZE: 12,

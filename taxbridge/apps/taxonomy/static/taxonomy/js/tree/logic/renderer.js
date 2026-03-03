@@ -12,7 +12,7 @@ import {
 } from "./tree_services.js";
 import { computeNodeUIState } from "./tree_ui_state.js";
 import { buildVisibleTree as buildVisibleTreeHelper } from "./tree_visibility.js";
-import { initZoom as initZoomHelper, fitToView as fitToViewHelper, centerOn as centerOnHelper, smartFitIfNeeded as smartFitHelper } from "./tree_zoom.js";
+import { initZoom as initZoomHelper, fitToView as fitToViewHelper, fitToFilteredView as fitToFilteredViewHelper, centerOn as centerOnHelper, smartFitIfNeeded as smartFitHelper } from "./tree_zoom.js";
 
 export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbChange }) {
   // ---------------- D3 state ----------------
@@ -557,7 +557,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
 
   /** Higher minimum scale for filtered/showOnlyKeys views so text stays readable */
   function fitToFilteredView() {
-    fitToViewHelper({ svgRoot, gZoom, zoomBehavior, mount, margin: 40, minScale: 0.65 });
+    fitToFilteredViewHelper({ svgRoot, gZoom, zoomBehavior, mount, margin: 40 });
   }
 
   function centerOn(d) {

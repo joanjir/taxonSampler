@@ -36,6 +36,43 @@ export function fitToView({ svgRoot, gZoom, zoomBehavior, mount, margin = 40, mi
     .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
 }
 
+/**
+ * Fit filtered/showOnlyKeys views — readable minimum scale (0.85)
+ * and top-left positioning when tree doesn't fit.
+ */
+export function fitToFilteredView({ svgRoot, gZoom, zoomBehavior, mount, margin = 40 }) {
+  if (!svgRoot || !gZoom || !zoomBehavior) return;
+
+  const width = mount.clientWidth;
+  const height = mount.clientHeight;
+  const bbox = gZoom.node().getBBox();
+  if (!bbox.width || !bbox.height || !width || !height) return;
+
+  const idealScale = Math.min(
+    (width  - margin * 2) / bbox.width,
+    (height - margin * 2) / bbox.height
+  );
+
+  // Never go below 0.85 — keeps 12px text at ≈10px (readable)
+  const scale = Math.min(1.5, Math.max(0.85, idealScale));
+
+  let tx, ty;
+  if (idealScale >= 0.85) {
+    // Tree fits at readable scale → center it
+    tx = (width  - bbox.width  * scale) / 2 - bbox.x * scale;
+    ty = (height - bbox.height * scale) / 2 - bbox.y * scale;
+  } else {
+    // Tree doesn't fit → anchor top-left so root path is visible
+    tx = margin - bbox.x * scale;
+    ty = margin - bbox.y * scale;
+  }
+
+  svgRoot
+    .transition()
+    .duration(300)
+    .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+}
+
 export function centerOn({ svgRoot, zoomBehavior, mount, d }) {
   if (!svgRoot || !zoomBehavior || !d) return;
 
