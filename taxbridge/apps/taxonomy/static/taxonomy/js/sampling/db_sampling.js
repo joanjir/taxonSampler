@@ -13,10 +13,16 @@
 import { apiDbSamplingStats, apiDbSamplingExecute } from "../shared/api.js";
 
 // ── Rank hierarchy (index 0 = highest) ──────────────────────────
-const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"];
-const RANK_LABELS = { kingdom:"Kingdom", phylum:"Phylum", "class":"Class", order:"Order", family:"Family", genus:"Genus", species:"Species" };
+const RANKS = ["domain", "kingdom", "phylum", "class", "order", "family", "genus", "species"];
+const RANK_LABELS = { domain:"Domain", kingdom:"Kingdom", phylum:"Phylum", "class":"Class", order:"Order", family:"Family", genus:"Genus", species:"Species" };
 
-function rankToIndex(r) { const i = RANKS.indexOf((r||"").toLowerCase()); return i >= 0 ? i : 0; }
+function rankToIndex(r) {
+  // Treat "superkingdom" as a synonym for "domain".
+  let rank = (r || "").toLowerCase();
+  if (rank === "superkingdom") rank = "domain";
+  const i = RANKS.indexOf(rank);
+  return i >= 0 ? i : 0;
+}
 function indexToRank(i) { return RANKS[Math.max(0, Math.min(RANKS.length - 1, i))]; }
 
 /**

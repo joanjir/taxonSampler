@@ -228,9 +228,23 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
   // genomic data for the sampled species.
 
   /**
-   * Build a bash script that downloads NCBI data via `datasets` CLI.
+   * Map our short include flags to NCBI Datasets API v2 annotation types.
+   */
+  const NCBI_INCLUDE_MAP = {
+    genome:  "GENOME_FASTA",
+    protein: "PROT_FASTA",
+    gbff:    "GENOME_GBFF",
+  };
+
+  function mapIncludeTypes(includeFlag) {
+    return includeFlag.split(",").map(f => NCBI_INCLUDE_MAP[f.trim()]).filter(Boolean);
+  }
+
+  /**
+   * Build a bash script that downloads NCBI data via the REST API (curl).
+   * No external CLI tools required — only curl and unzip.
    * @param {Array} species - species list from sampling result
-   * @param {string} includeFlag - datasets --include value: genome | protein | gbff | genome,protein,gbff
+   * @param {string} includeFlag - genome | protein | gbff | genome,protein,gbff
    * @param {string} label - human-readable label (e.g. "Genomes (FASTA)")
    * @param {string} outZip - output zip filename
    * @returns {string} bash script content
@@ -243,13 +257,20 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
     if (!accessions.length) return null;
 
-    const accList = accessions.map(a => `  ${a}`).join("\n");
+    const apiTypes = mapIncludeTypes(includeFlag);
 
-    // Also build a commented manifest for reference
+    // Commented manifest for reference
     const manifest = species
       .filter(s => s.accession)
       .map(s => `#   ${s.accession}  ${s.organism_name || ""}`)
       .join("\n");
+
+    // JSON array of accessions for the API payload
+    const accJson = accessions.map(a => `"${a}"`).join(",");
+    const typesJson = apiTypes.map(t => `"${t}"`).join(",");
+
+    // Batch size: NCBI API handles up to ~500 accessions per request
+    const BATCH_SIZE = 200;
 
     return `#!/usr/bin/env bash
 # ============================================================
@@ -258,14 +279,11 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 # Species: ${accessions.length} | Data: ${includeFlag}
 # ============================================================
 #
-# Prerequisites — install the NCBI datasets CLI:
+# Prerequisites: curl, unzip (standard on most systems)
 #
-#   pip install ncbi-datasets-cli        (Python / pip)
-#   conda install -c conda-forge ncbi-datasets-cli   (Conda)
-#
-# On Windows you can run this script in Git Bash, WSL, or
-# install datasets.exe from:
-#   https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/
+# Optional: set NCBI_API_KEY for higher rate limits:
+#   export NCBI_API_KEY="your-key-here"
+#   (Get one free at https://www.ncbi.nlm.nih.gov/account/settings/)
 #
 # Usage:
 #   chmod +x ${outZip.replace(".zip", ".sh")}
@@ -277,46 +295,78 @@ set -euo pipefail
 
 OUTPUT_DIR="${outZip.replace(".zip", "")}"
 OUTPUT_ZIP="${outZip}"
+API_URL="https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/download"
+BATCH_SIZE=${BATCH_SIZE}
 
 # ── Accession manifest ──
 ${manifest}
 
-# Write accession list to temp file
-ACCESSION_FILE=$(mktemp /tmp/taxbridge_accessions.XXXXXX.txt)
-cat > "$ACCESSION_FILE" <<'__ACCESSIONS__'
-${accessions.join("\n")}
-__ACCESSIONS__
+# Full accession list
+ACCESSIONS=(
+${accessions.map(a => `  "${a}"`).join("\n")}
+)
 
 echo "============================================================"
 echo " TaxBridge — NCBI ${label} Download"
-echo " Species: ${accessions.length}"
+echo " Species: \${#ACCESSIONS[@]}"
 echo " Data:    ${includeFlag}"
 echo "============================================================"
 echo ""
 
-# ── Check datasets is installed ──
-if ! command -v datasets &> /dev/null; then
-    echo "ERROR: 'datasets' CLI not found."
-    echo "Install it with:  pip install ncbi-datasets-cli"
-    echo "  or:             conda install -c conda-forge ncbi-datasets-cli"
-    rm -f "$ACCESSION_FILE"
+# ── Check curl is available ──
+if ! command -v curl &> /dev/null; then
+    echo "ERROR: 'curl' not found. Please install curl."
     exit 1
 fi
 
-echo "Downloading ${accessions.length} assemblies (${includeFlag})..."
-echo ""
+# ── Build curl headers ──
+HEADERS=(-H "Content-Type: application/json" -H "Accept: application/zip")
+if [ -n "\${NCBI_API_KEY:-}" ]; then
+    HEADERS+=(-H "api-key: \$NCBI_API_KEY")
+    echo "Using NCBI API key for higher rate limits."
+fi
 
-datasets download genome accession \\
-    --inputfile "$ACCESSION_FILE" \\
-    --include ${includeFlag} \\
-    --filename "$OUTPUT_ZIP"
+# ── Download in batches of $BATCH_SIZE ──
+TOTAL=\${#ACCESSIONS[@]}
+PART=0
 
-echo ""
-echo "Extracting to $OUTPUT_DIR/ ..."
-mkdir -p "$OUTPUT_DIR"
-unzip -o "$OUTPUT_ZIP" -d "$OUTPUT_DIR"
+for (( i=0; i<TOTAL; i+=BATCH_SIZE )); do
+    BATCH=("\${ACCESSIONS[@]:i:BATCH_SIZE}")
+    PART=$((PART + 1))
 
-rm -f "$ACCESSION_FILE"
+    # Build JSON array of this batch
+    JSON_ACC=""
+    for acc in "\${BATCH[@]}"; do
+        [ -n "$JSON_ACC" ] && JSON_ACC="$JSON_ACC,"
+        JSON_ACC="$JSON_ACC\\"$acc\\""
+    done
+
+    PAYLOAD='{"accessions":['$JSON_ACC'],"include_annotation_type":[${typesJson}]}'
+
+    if [ "$TOTAL" -le "$BATCH_SIZE" ]; then
+        DEST="$OUTPUT_ZIP"
+        echo "Downloading \${#BATCH[@]} assemblies..."
+    else
+        DEST="\${OUTPUT_ZIP%.zip}_part\${PART}.zip"
+        echo "Downloading batch $PART (\${#BATCH[@]} of $TOTAL assemblies)..."
+    fi
+
+    curl -X POST "$API_URL" \\
+        "\${HEADERS[@]}" \\
+        -d "$PAYLOAD" \\
+        -o "$DEST" \\
+        --progress-bar --fail
+
+    echo ""
+    echo "Extracting $DEST ..."
+    mkdir -p "$OUTPUT_DIR"
+    unzip -o "$DEST" -d "$OUTPUT_DIR"
+
+    # Clean up partial zip if batched
+    if [ "$TOTAL" -gt "$BATCH_SIZE" ]; then
+        rm -f "$DEST"
+    fi
+done
 
 echo ""
 echo "============================================================"
@@ -326,7 +376,8 @@ echo "============================================================"
   }
 
   /**
-   * Build a PowerShell script variant for Windows users.
+   * Build a PowerShell script that downloads NCBI data via the REST API.
+   * No external CLI tools required — only Invoke-WebRequest and Expand-Archive.
    */
   function buildNcbiPsScript(species, includeFlag, label, outZip) {
     const now = new Date().toISOString().slice(0, 10);
@@ -336,10 +387,14 @@ echo "============================================================"
 
     if (!accessions.length) return null;
 
+    const apiTypes = mapIncludeTypes(includeFlag);
+
     const manifest = species
       .filter(s => s.accession)
       .map(s => `#   ${s.accession}  ${s.organism_name || ""}`)
       .join("\n");
+
+    const BATCH_SIZE = 200;
 
     return `# ============================================================
 # NCBI ${label} Download Script (PowerShell)
@@ -347,14 +402,11 @@ echo "============================================================"
 # Species: ${accessions.length} | Data: ${includeFlag}
 # ============================================================
 #
-# Prerequisites — install the NCBI datasets CLI:
+# Prerequisites: PowerShell 5.1+ (built-in on Windows 10/11)
 #
-#   pip install ncbi-datasets-cli        (Python / pip)
-#   conda install -c conda-forge ncbi-datasets-cli   (Conda)
-#   winget install NCBI.datasets         (Windows Package Manager)
-#
-# Or download from:
-#   https://www.ncbi.nlm.nih.gov/datasets/docs/v2/download-and-install/
+# Optional: set NCBI_API_KEY for higher rate limits:
+#   $env:NCBI_API_KEY = "your-key-here"
+#   (Get one free at https://www.ncbi.nlm.nih.gov/account/settings/)
 #
 # Usage:
 #   .\\${outZip.replace(".zip", ".ps1")}
@@ -365,6 +417,8 @@ $ErrorActionPreference = "Stop"
 
 $OutputDir = "${outZip.replace(".zip", "")}"
 $OutputZip = "${outZip}"
+$ApiUrl    = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/download"
+$BatchSize = ${BATCH_SIZE}
 
 # ── Accession manifest ──
 ${manifest}
@@ -376,38 +430,60 @@ ${accessions.map(a => `    "${a}"`).join("\n")}
 
 Write-Host "============================================================"
 Write-Host " TaxBridge - NCBI ${label} Download"
-Write-Host " Species: ${accessions.length}"
+Write-Host " Species: $($Accessions.Count)"
 Write-Host " Data:    ${includeFlag}"
 Write-Host "============================================================"
 Write-Host ""
 
-# ── Check datasets is installed ──
-if (-not (Get-Command "datasets" -ErrorAction SilentlyContinue)) {
-    Write-Host "ERROR: 'datasets' CLI not found." -ForegroundColor Red
-    Write-Host "Install with:  pip install ncbi-datasets-cli"
-    Write-Host "  or:          conda install -c conda-forge ncbi-datasets-cli"
-    Write-Host "  or:          winget install NCBI.datasets"
-    exit 1
+# ── Build headers ──
+$Headers = @{ "Accept" = "application/zip" }
+if ($env:NCBI_API_KEY) {
+    $Headers["api-key"] = $env:NCBI_API_KEY
+    Write-Host "Using NCBI API key for higher rate limits."
 }
 
-# Write accessions to temp file
-$AccFile = [System.IO.Path]::GetTempFileName()
-$Accessions | Set-Content -Path $AccFile -Encoding UTF8
+# Allow large downloads (PS 5.1 default buffer is small)
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-Write-Host "Downloading $($Accessions.Count) assemblies (${includeFlag})..."
-Write-Host ""
+# ── Download in batches of $BatchSize ──
+$Total = $Accessions.Count
+$Part  = 0
 
-datasets download genome accession \`
-    --inputfile $AccFile \`
-    --include ${includeFlag} \`
-    --filename $OutputZip
+for ($i = 0; $i -lt $Total; $i += $BatchSize) {
+    $Batch = $Accessions[$i .. [Math]::Min($i + $BatchSize - 1, $Total - 1)]
+    $Part++
 
-Write-Host ""
-Write-Host "Extracting to $OutputDir/ ..."
-if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir | Out-Null }
-Expand-Archive -Path $OutputZip -DestinationPath $OutputDir -Force
+    $Body = @{
+        accessions              = $Batch
+        include_annotation_type = @(${apiTypes.map(t => `"${t}"`).join(", ")})
+    } | ConvertTo-Json -Depth 3 -Compress
 
-Remove-Item -Path $AccFile -Force -ErrorAction SilentlyContinue
+    if ($Total -le $BatchSize) {
+        $Dest = $OutputZip
+        Write-Host "Downloading $($Batch.Count) assemblies..."
+    } else {
+        $Dest = $OutputZip -replace '\\.zip$', "_part$Part.zip"
+        Write-Host "Downloading batch $Part ($($Batch.Count) of $Total assemblies)..."
+    }
+
+    Invoke-WebRequest -Uri $ApiUrl \`
+        -Method POST \`
+        -ContentType "application/json" \`
+        -Headers $Headers \`
+        -Body $Body \`
+        -OutFile $Dest \`
+        -UseBasicParsing
+
+    Write-Host ""
+    Write-Host "Extracting $Dest ..."
+    if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir | Out-Null }
+    Expand-Archive -Path $Dest -DestinationPath $OutputDir -Force
+
+    # Clean up partial zip if batched
+    if ($Total -gt $BatchSize) {
+        Remove-Item -Path $Dest -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Write-Host ""
 Write-Host "============================================================"
@@ -440,7 +516,8 @@ Write-Host "============================================================"
       const { value: format } = await Swal.fire({
         title: `Download ${label}`,
         html: `<div class="text-start small">
-          <p>Generate a script to download <strong>${accessions.length}</strong> assemblies from NCBI using the <code>datasets</code> CLI.</p>
+          <p>Generate a script to download <strong>${accessions.length}</strong> assemblies directly from the NCBI Datasets API.</p>
+          <p>Only requires <code>curl</code> (Bash) or <code>PowerShell 5.1+</code> (Windows) — no extra tools needed.</p>
           <p class="mb-1">Choose script format:</p>
         </div>`,
         input: 'radio',

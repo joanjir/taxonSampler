@@ -1402,7 +1402,7 @@ def sampling_execute(request):
     save_config = data.get("save", False)
     config_name = data.get("name", "")
 
-    valid_ranks = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
+    valid_ranks = ["domain", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
     valid_strategies = ["none", "random", "proportional", "balanced"]
 
     if start_rank not in valid_ranks:

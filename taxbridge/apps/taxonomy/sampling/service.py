@@ -104,7 +104,11 @@ class TreeIndex:
             return 0
         
         rank = norm_rank(node.get("rank", ""))
-        count = 1 if rank == target_rank else 0
+        # When counting "species", also include "subspecies" nodes
+        if target_rank == "species":
+            count = 1 if rank in ("species", "subspecies") else 0
+        else:
+            count = 1 if rank == target_rank else 0
         
         children = node.get("children") or []
         for child in children:
