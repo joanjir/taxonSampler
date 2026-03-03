@@ -276,6 +276,7 @@ class NCBIGenome(models.Model):
         ("matched", "Matched"),
         ("not_in_col", "Not in COL"),
         ("manual", "Manual"),
+        ("mismatch", "Mismatch – genus audit failed"),
     ]
     col_match_status = models.CharField(
         max_length=32,
