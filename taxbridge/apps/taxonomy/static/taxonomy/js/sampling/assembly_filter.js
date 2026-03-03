@@ -194,6 +194,24 @@ export function initAssemblyFilter() {
         detail: result,
       }));
 
+      // Auto-switch to Selection tab so the user sees the result
+      const selTab = document.getElementById("selectionTab");
+      if (selTab) {
+        setTimeout(() => {
+          try {
+            const bsTab = bootstrap?.Tab ? new bootstrap.Tab(selTab) : null;
+            if (bsTab) bsTab.show(); else selTab.click();
+          } catch { selTab.click(); }
+        }, 300);
+      }
+
+      // Reset the wizard (user can run again if needed)
+      if (window.__samplingWizard?.reset) {
+        setTimeout(() => {
+          window.__samplingWizard.reset();
+        }, 800);
+      }
+
     } catch (err) {
       console.error("[assembly_filter] Error:", err);
       let msg = "Assembly filtering failed";
@@ -216,13 +234,20 @@ export function initAssemblyFilter() {
       detail: { species: inputSpecies },
     }));
 
-    // Switch to Selection tab so the user sees the result
+    // Auto-switch to Selection tab so the user sees the result
     const selTab = document.getElementById("selectionTab");
     if (selTab) {
       try {
         const bsTab = bootstrap?.Tab ? new bootstrap.Tab(selTab) : null;
         if (bsTab) bsTab.show(); else selTab.click();
       } catch { selTab.click(); }
+    }
+
+    // Reset the wizard (optional: user can run again if needed)
+    if (window.__samplingWizard?.reset) {
+      setTimeout(() => {
+        window.__samplingWizard.reset();
+      }, 500);
     }
   }
 

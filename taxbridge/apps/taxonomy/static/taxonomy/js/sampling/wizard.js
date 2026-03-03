@@ -45,6 +45,7 @@ export function initSamplingWizard({ renderer }) {
     scopeLabel: "",
     targetKeys: [],
     targetLabels: new Map(),
+    samplingExecuted: false,  // Track if sampling was run in STEP 2
   };
 
   // Track the last clicked tree node so the wizard can use it as scope.
@@ -54,6 +55,19 @@ export function initSamplingWizard({ renderer }) {
     const d = ev.detail;
     if (d?.key) {
       _lastActiveNode = { key: d.key, rank: d.rank || "", name: d.name || "" };
+      // Auto-add as target if: 
+      // - User is in STEP 1
+      // - A scope is already selected
+      // - The node is a valid descendant
+      // - It's not the scope itself
+      // - It's not a species/subspecies (those are leaf nodes)
+      if (state.step === 1 && state.scopeKey && d.key !== state.scopeKey) {
+        const rank = (d.rank || "").toLowerCase();
+        if (rank !== "species" && rank !== "subspecies") {
+          // Silently auto-add it
+          addTarget(d.key, `${d.rank || "node"}: ${d.name || d.key}`);
+        }
+      }
     }
   });
 
@@ -98,7 +112,18 @@ export function initSamplingWizard({ renderer }) {
     state.step = n;
     if (stepLabel) stepLabel.textContent = `Step ${n} / 3`;
     if (prevBtn) prevBtn.disabled = n === 1;
-    if (nextBtn) nextBtn.classList.toggle("d-none", n >= 3);
+    
+    // Next button visible in STEP 1 and 2, hidden in STEP 3
+    // But disabled in STEP 2 until sampling is executed
+    if (nextBtn) {
+      nextBtn.classList.toggle("d-none", n >= 3);
+      if (n === 2) {
+        // In STEP 2, disable Next unless sampling has been executed
+        nextBtn.disabled = !state.samplingExecuted;
+      } else {
+        nextBtn.disabled = false;
+      }
+    }
 
     // Use BOTH class and inline style for reliable show/hide
     // (inline style works even if Bootstrap CSS hasn't loaded yet)
@@ -195,6 +220,26 @@ export function initSamplingWizard({ renderer }) {
     }
   }
 
+  // Public API for external code (filters.js) to add targets
+  function addTarget(targetKey, targetLabel) {
+    if (!targetKey) return;
+    if (!isDescendantPath(targetKey, state.scopeKey)) {
+      return; // Silently reject if not in scope
+    }
+    if (!state.targetKeys.includes(targetKey)) {
+      state.targetKeys.push(targetKey);
+      state.targetLabels.set(targetKey, targetLabel || targetKey);
+      renderTargets();
+    }
+  }
+
+  // Public API for external code to clear targets
+  function clearTargets() {
+    state.targetKeys = [];
+    state.targetLabels.clear();
+    renderTargets();
+  }
+
   // ------------------------------------------------------------------
   // Event bindings
   // ------------------------------------------------------------------
@@ -270,6 +315,7 @@ export function initSamplingWizard({ renderer }) {
       setScope("", "");
       state.targetKeys = [];
       state.targetLabels.clear();
+      state.samplingExecuted = false;  // Reset sampling flag
       renderTargets();
       showWarn("");
       try { sessionStorage.removeItem("taxbridge_dbsampling"); } catch (_) {}
@@ -290,7 +336,36 @@ export function initSamplingWizard({ renderer }) {
   // Listen for tree loaded event
   window.addEventListener("tree:loaded", enableWizard, { once: true });
 
-  const api = { state, reset, setStep, enableWizard };
+  // Listen for scope changes from old filters.js code
+  window.addEventListener("sampling:scope-changed", () => {
+    // Get the new scope from renderer if available
+    const newScope = window.__samplingWizard?.state?.scopeKey;
+    // Clear out-of-scope targets
+    if (newScope && state.targetKeys.length) {
+      const kept = [];
+      for (const k of state.targetKeys) {
+        if (isDescendantPath(k, newScope)) {
+          kept.push(k);
+        } else {
+          state.targetLabels.delete(k);
+        }
+      }
+      if (kept.length !== state.targetKeys.length) {
+        state.targetKeys = kept;
+        renderTargets();
+      }
+    }
+  });
+  window.addEventListener("db-sampling:final", (_ev) => {
+    state.samplingExecuted = true;
+    // Enable Next button if we're in STEP 2
+    if (state.step === 2) {
+      const nextBtn = document.getElementById("sam-nextBtn");
+      if (nextBtn) nextBtn.disabled = false;
+    }
+  });
+
+  const api = { state, reset, setStep, enableWizard, setScope, addTarget, clearTargets };
 
   // Expose globally for integration with samplingCtl
   window.__samplingWizard = api;

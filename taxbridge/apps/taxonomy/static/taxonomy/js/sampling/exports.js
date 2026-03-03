@@ -86,7 +86,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       );
       const header = "#\torganism_name\ttaxid\taccession\tclade\tspecies_score";
       const txt = header + "\n" + lines.join("\n") + "\n";
-      await saveAs(txt, "sampling.txt");
+      await saveAs(txt, "sampling.txt", "text/plain");
       return;
     }
 
@@ -294,7 +294,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 set -euo pipefail
 
 # Work in the same folder where this script lives
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 OUTPUT_ZIP="${outZip}"
@@ -536,10 +536,10 @@ Write-Host "============================================================"
 
       if (format === 'bash') {
         const script = buildNcbiScript(species, includeFlag, label, `${outZipBase}.zip`);
-        if (script) await saveAs(script, `${outZipBase}.sh`, "text/x-shellscript");
+        if (script) await saveAs(script, `${outZipBase}.sh`, "application/octet-stream");
       } else {
         const script = buildNcbiPsScript(species, includeFlag, label, `${outZipBase}.zip`);
-        if (script) await saveAs(script, `${outZipBase}.ps1`, "text/plain");
+        if (script) await saveAs(script, `${outZipBase}.ps1`, "application/octet-stream");
       }
     };
   }

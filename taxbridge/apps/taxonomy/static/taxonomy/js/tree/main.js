@@ -231,9 +231,10 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     const sampledNames = new Set();
     for (const s of result.species) {
       // col_name is the ExternalTaxon.name used in the tree
-      if (s.col_name)        sampledNames.add(s.col_name);
-      if (s.organism_name)   sampledNames.add(s.organism_name);
-      if (s.scientific_name) sampledNames.add(s.scientific_name);
+      if (s.col_name)        sampledNames.add(String(s.col_name).trim());
+      if (s.organism_name)   sampledNames.add(String(s.organism_name).trim());
+      if (s.scientific_name) sampledNames.add(String(s.scientific_name).trim());
+      if (s.name)            sampledNames.add(String(s.name).trim());
     }
 
     // Look up actual tree keys by matching species names
@@ -245,12 +246,17 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
         ]
       : [];
     const keys = treeSpecies
-      .filter(n => sampledNames.has(n.name))
+      .filter(n => sampledNames.has(String(n.name || "").trim()))
       .map(n => n.key)
       .filter(Boolean);
 
-    console.log("[applySamplingView] sampled names:", sampledNames.size,
-                "tree species matched:", keys.length);
+    console.log("[applySamplingView] sampled names (set size):", sampledNames.size,
+                "sampled names list:", Array.from(sampledNames).slice(0, 10),
+                "tree species total:", treeSpecies.length,
+                "tree species matched:", keys.length,
+                "unmatched sampledNames:", Array.from(sampledNames)
+                  .filter(name => !treeSpecies.some(n => String(n.name || "").trim() === name))
+                  .slice(0, 5));
 
     if (keys.length && typeof renderer.showSampledTree === "function") {
       renderer.showSampledTree(keys);

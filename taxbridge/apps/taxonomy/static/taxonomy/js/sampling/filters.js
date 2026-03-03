@@ -549,6 +549,11 @@ export function createSamplingFiltersController({ renderer }) {
       console.log("[sampling_filters] calling renderer.setSamplingScopeKey with key:", a.key);
       renderer.setSamplingScopeKey?.(a.key);
 
+      // Sync with the new wizard
+      if (window.__samplingWizard) {
+        window.__samplingWizard.setScope(a.key, `${a.rank || "node"}: ${a.name || a.key}`);
+      }
+
       updateScopeBadge();
       renderTargetsChips();
       emitSamplingConfigChanged();
@@ -563,6 +568,11 @@ export function createSamplingFiltersController({ renderer }) {
       renderer.setSamplingSetupEnabled?.(true);
 
       renderer.setSamplingScopeKey?.(null);
+
+      // Sync with wizard - clear scope
+      if (window.__samplingWizard) {
+        window.__samplingWizard.setScope("", "");
+      }
 
       updateScopeBadge();
       renderTargetsChips();

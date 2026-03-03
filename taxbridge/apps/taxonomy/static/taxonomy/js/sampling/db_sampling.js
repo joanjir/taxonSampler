@@ -242,6 +242,14 @@ export function initDbSampling() {
       scopeFilters,
       targetKeys,
     });
+    
+    // Debug: show what's really in targetKeys
+    if (targetKeys.length > 0) {
+      console.log("[db_sampling] targetKeys contents:");
+      targetKeys.forEach((tk, idx) => {
+        console.log(`  [${idx}]: ${tk} (type: ${typeof tk})`);
+      });
+    }
 
     return { scopeFilters, targetKeys, speciesNames: null };
   }
@@ -345,6 +353,13 @@ export function initDbSampling() {
 
       // Dispatch event so Selection tab picks up the results
       window.dispatchEvent(new CustomEvent("db-sampling:final", { detail: result }));
+
+      // Auto-advance to Step 3 (Assembly Filtering)
+      if (window.__samplingWizard?.setStep) {
+        setTimeout(() => {
+          window.__samplingWizard.setStep(3);
+        }, 500);
+      }
 
     } catch (err) {
       console.error("[db_sampling] Execute error:", err);

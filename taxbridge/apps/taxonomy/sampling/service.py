@@ -641,7 +641,7 @@ def run_sampling(
         config=config,
         scope_node=scope_node,
         scope_root_key=scope_key,
-        target_keys=config.get("targets", []),
+        target_keys=config.get("target_keys", []),
         index=index
     )
     
