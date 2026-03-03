@@ -35,12 +35,12 @@
                 <i class="ti ti-dna-2 fs-2"></i>
               </span>
               <div>
-                <div class="text-secondary fs-5">Species</div>
-                <div class="h1 mb-0">{{ stats.total_taxa|default:"0" }}</div>
+                <div class="text-secondary fs-5">Samplable Species</div>
+                <div class="h1 mb-0">{{ stats.samplable_species|default:"0" }}</div>
               </div>
             </div>
             <div class="text-secondary">
-              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} genome assemblies
+              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} genomes ({{ stats.total_taxa|default:"0" }} taxa)
             </div>
           </div>
         </div>
@@ -62,7 +62,7 @@
               </div>
             </div>
             <div class="text-secondary">
-              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} / {{ stats.total_taxa|default:"0" }} linked
+              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} / {{ stats.total_taxa|default:"0" }} genomes linked
             </div>
           </div>
         </div>
@@ -75,17 +75,14 @@
                 <i class="ti ti-unlink fs-2"></i>
               </span>
               <div>
-                <div class="text-secondary fs-5">Unlinked</div>
-                <div class="h1 mb-0">{{ stats.unlinked_taxa|default:"0" }}</div>
+                <div class="text-secondary fs-5">Excluded</div>
+                <div class="h1 mb-0">{{ stats.excluded_taxa|default:"0" }}</div>
               </div>
             </div>
             <div class="text-secondary">
-              {% if stats.not_in_col_taxa %}
-              <i class="ti ti-x me-1"></i> {{ stats.not_in_col_taxa }} not in COL
+              {% if stats.not_in_col_taxa %}<i class="ti ti-x me-1"></i> {{ stats.not_in_col_taxa }} not in COL{% endif %}
+              {% if stats.mismatch_taxa %} &middot; {{ stats.mismatch_taxa }} mismatch{% endif %}
               {% if stats.pending_taxa %} &middot; {{ stats.pending_taxa }} pending{% endif %}
-              {% else %}
-              <i class="ti ti-clock me-1"></i> pending COL match
-              {% endif %}
             </div>
           </div>
         </div>

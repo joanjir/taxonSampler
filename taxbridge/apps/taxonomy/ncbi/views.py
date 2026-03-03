@@ -79,14 +79,34 @@ def taxon_sync_dashboard(request):
         "total_syncs": TaxonSyncRun.objects.count(),
         "successful_syncs": TaxonSyncRun.objects.filter(status="completed").count(),
     }
+
+    # Samplable species = species that appear in the tree (matched + manual)
+    # Must match the tree badge and home dashboard.
+    samplable_col = (
+        ExternalTaxon.objects
+        .filter(
+            system="col",
+            rank__in=["species", "subspecies"],
+            ncbi_genomes__col_match_status="matched",
+        )
+        .distinct()
+        .count()
+    )
+    samplable_manual = ExternalTaxon.objects.filter(system="manual", rank="species").count()
+    stats["samplable_species"] = samplable_col + samplable_manual
+    stats["mismatch_taxa"] = (
+        Taxon.objects.filter(genomes__col_match_status="mismatch")
+        .distinct()
+        .count()
+    )
     
-    # Calculate unlinked taxa (never searched) vs not_in_col (searched, not found)
-    stats["unlinked_taxa"] = stats["total_taxa"] - stats["matched_taxa"]
+    # Not in COL (searched, not found) + mismatch (bad match) = excluded from tree
     stats["not_in_col_taxa"] = (
         Taxon.objects.filter(genomes__col_match_status="not_in_col")
         .distinct()
         .count()
     )
+    stats["excluded_taxa"] = stats["not_in_col_taxa"] + stats["mismatch_taxa"]
     # Truly pending = never searched (unmatched status)
     stats["pending_taxa"] = (
         Taxon.objects.filter(genomes__col_match_status="unmatched")

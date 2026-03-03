@@ -34,8 +34,8 @@
             <div class="d-flex align-items-center mb-2">
               <span class="avatar bg-blue-lt me-3"><i class="ti ti-dna-2 fs-2"></i></span>
               <div>
-                <div class="subheader">Species</div>
-                <div class="h1 mb-0">{{ total_ncbi_taxa|default:0 }}</div>
+                <div class="subheader">Samplable Species</div>
+                <div class="h1 mb-0">{{ samplable_species|default:0 }}</div>
               </div>
             </div>
             <div class="text-secondary small">
@@ -66,17 +66,14 @@
             <div class="d-flex align-items-center mb-2">
               <span class="avatar bg-yellow-lt me-3"><i class="ti ti-unlink fs-2"></i></span>
               <div>
-                <div class="subheader">Unlinked</div>
-                <div class="h1 mb-0">{{ unmatched_genomes|default:0|add:not_in_col_count|default:0 }}</div>
+                <div class="subheader">Excluded</div>
+                <div class="h1 mb-0">{{ not_in_col_count|default:0|add:mismatch_count|default:0 }}</div>
               </div>
             </div>
             <div class="text-secondary small">
-              {% if not_in_col_count %}
-              <i class="ti ti-x me-1"></i> {{ not_in_col_count }} not in COL
+              {% if not_in_col_count %}<i class="ti ti-x me-1"></i> {{ not_in_col_count }} not in COL{% endif %}
+              {% if mismatch_count %} &middot; {{ mismatch_count }} mismatch{% endif %}
               {% if unmatched_genomes %} &middot; {{ unmatched_genomes }} pending{% endif %}
-              {% else %}
-              <i class="ti ti-clock me-1"></i> pending COL match
-              {% endif %}
             </div>
           </div>
         </div>

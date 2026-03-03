@@ -18,6 +18,22 @@ def home(request):
     unmatched_genomes = NCBIGenome.objects.filter(col_match_status="unmatched").count()
     not_in_col_count = NCBIGenome.objects.filter(col_match_status="not_in_col").count()
     manual_count = NCBIGenome.objects.filter(col_match_status="manual").count()
+    mismatch_count = NCBIGenome.objects.filter(col_match_status="mismatch").count()
+
+    # Samplable species = species that appear in the tree (matched + manual)
+    # This must match the tree's species_count (build_tree output).
+    samplable_col = (
+        ExternalTaxon.objects
+        .filter(
+            system="col",
+            rank__in=["species", "subspecies"],
+            ncbi_genomes__col_match_status="matched",
+        )
+        .distinct()
+        .count()
+    )
+    samplable_manual = ExternalTaxon.objects.filter(system="manual", rank="species").count()
+    samplable_species = samplable_col + samplable_manual
     
     # Statistics by genome level
     genome_levels = list(
@@ -83,6 +99,8 @@ def home(request):
         "unmatched_genomes": unmatched_genomes,
         "not_in_col_count": not_in_col_count,
         "manual_count": manual_count,
+        "mismatch_count": mismatch_count,
+        "samplable_species": samplable_species,
         "genome_levels": genome_levels,
         "kingdom_stats": kingdom_stats,
         # Taxonomy
