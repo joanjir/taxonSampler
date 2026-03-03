@@ -299,8 +299,23 @@ def run_db_sampling(
     # First pass: collect all genomes per clade
     _clade_all: Dict[str, List] = defaultdict(list)
     _no_clade_all: List = []
+    _genus_skipped = 0
 
     for genome in qs.iterator():
+        # ── Genus-validation safeguard ──
+        # Skip genomes whose organism_name genus diverges completely from
+        # the linked COL taxon (bad matches that slipped past audit).
+        _org = (genome.organism_name or "").strip()
+        _org_g = _org.split()[0].lower() if _org else ""
+        if _org_g and genome.external_taxon:
+            _col_name = (genome.external_taxon.name or "").lower()
+            _col_cls = genome.external_taxon.classification or {}
+            _col_g = (_col_cls.get("genus", "") or "").lower()
+            _col_sp = (_col_cls.get("species", "") or "").lower()
+            if _org_g not in _col_g and _org_g not in _col_sp and _org_g not in _col_name:
+                _genus_skipped += 1
+                continue
+
         cls = genome.external_taxon.classification or {}
         clade_name = cls.get(rank_key, "")
 
@@ -319,6 +334,16 @@ def run_db_sampling(
             composite_key = clade_name
 
         _clade_all[composite_key].append(genome)
+
+    if _genus_skipped:
+        warnings.append(
+            f"{_genus_skipped} genomes skipped: COL genus mismatch "
+            f"(run 'manage.py audit_col_matches --fix' to clean)."
+        )
+        logger.warning(
+            "[run_db_sampling] %d genomes skipped due to genus mismatch",
+            _genus_skipped,
+        )
 
     # Second pass: deduplicate — keep best genome per organism_name
     # (highest quality_score) within each clade
@@ -602,15 +627,31 @@ def get_sampling_stats(
     total = qs.values("organism_name").distinct().count()
 
     # Single pass: gather kingdoms, phyla and rank counts at once
+    # Also apply genus-validation safeguard (skip bad COL links)
     ranks_of_interest = RANK_HIERARCHY[:-1]  # skip 'species'
     rank_counts: Dict[str, Dict[str, int]] = {r: defaultdict(int) for r in ranks_of_interest}
     kingdoms: set = set()
     phyla: set = set()
+    valid_species: set = set()
 
     for genome in qs.only(
+        "organism_name",
         "external_taxon__classification",
+        "external_taxon__name",
     ).select_related("external_taxon").iterator():
+        # Genus-validation safeguard
+        _org = (genome.organism_name or "").strip()
+        _org_g = _org.split()[0].lower() if _org else ""
+        if _org_g and genome.external_taxon:
+            _col_name = (genome.external_taxon.name or "").lower()
+            _col_cls = genome.external_taxon.classification or {}
+            _col_g = (_col_cls.get("genus", "") or "").lower()
+            _col_sp = (_col_cls.get("species", "") or "").lower()
+            if _org_g not in _col_g and _org_g not in _col_sp and _org_g not in _col_name:
+                continue
+
         cls = genome.external_taxon.classification or {}
+        valid_species.add(genome.organism_name)
         k = cls.get("kingdom", "")
         p = cls.get("phylum", "")
         if k:
@@ -623,7 +664,7 @@ def get_sampling_stats(
                 rank_counts[rank][val] += 1
 
     return {
-        "total_species": total,
+        "total_species": len(valid_species),
         "kingdoms": sorted(kingdoms),
         "phyla": sorted(phyla),
         "rank_breakdown": {
