@@ -211,9 +211,23 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     // Rebuild
     if (root) rebuildHierarchyAndUpdate(root);
 
-    // Fit — use higher minimum scale so nodes stay readable
+    // Position the view at readable zoom on the root of the filtered tree.
+    // Don't try to fit everything (too many nodes) — let user pan/scroll.
     if (opts.fit) {
-      setTimeout(fitToFilteredView, 250);
+      setTimeout(() => {
+        if (!root || !svgRoot || !zoomBehavior) return;
+        const scale = 1.0;
+        const margin = 40;
+        // Position so the root node is visible top-left
+        const rootY = root.y || 0;  // horizontal position (d3.tree: y = depth)
+        const rootX = root.x || 0;  // vertical position (d3.tree: x = breadth)
+        const tx = margin - rootY * scale;
+        const ty = (mount.clientHeight / 2) - rootX * scale;
+        svgRoot
+          .transition()
+          .duration(300)
+          .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+      }, 300);
     }
   }
 
