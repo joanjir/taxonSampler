@@ -175,6 +175,10 @@ export function initDbSampling() {
       ? Math.min(maxIdx + 1, RANKS.length - 1)
       : 0;
 
+    console.log("[db_sampling] applyScopeFloor →", {
+      scopeFilters, maxIdx, _minRankIdx, floor: RANKS[_minRankIdx],
+    });
+
     // IMPORTANT: Do NOT change the `min` attribute on the range inputs.
     // Changing `min` shifts the thumb→pixel mapping so that value=1 with
     // min=1 lands at 0% of the track, but the ticks/dots are placed at
@@ -241,6 +245,12 @@ export function initDbSampling() {
   async function loadStats() {
     const { scopeFilters, targetKeys, speciesNames } = getWizardScope();
 
+    // Apply scope floor IMMEDIATELY so the slider updates before the
+    // network round-trip.  Previously this lived inside the try block
+    // after the await, which meant a slow or failing API call would
+    // leave the slider at the wrong position.
+    applyScopeFloor(scopeFilters);
+
     try {
       const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames });
       statsCache = data;
@@ -248,12 +258,8 @@ export function initDbSampling() {
       if (dom.statMatched)  dom.statMatched.textContent  = data.total_species ?? "—";
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;
 
-      // Apply scope floor to range slider
-      applyScopeFloor(scopeFilters);
-
       // Show scope info
       updateScopeDisplay(scopeFilters, targetKeys, data.total_species);
-
 
     } catch (err) {
       console.error("[db_sampling] Stats error:", err);
