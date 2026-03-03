@@ -293,7 +293,10 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
 set -euo pipefail
 
-OUTPUT_DIR="${outZip.replace(".zip", "")}"
+# Work in the same folder where this script lives
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 OUTPUT_ZIP="${outZip}"
 API_URL="https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/download"
 BATCH_SIZE=${BATCH_SIZE}
@@ -359,18 +362,15 @@ for (( i=0; i<TOTAL; i+=BATCH_SIZE )); do
 
     echo ""
     echo "Extracting $DEST ..."
-    mkdir -p "$OUTPUT_DIR"
-    unzip -o "$DEST" -d "$OUTPUT_DIR"
+    unzip -o "$DEST"
 
-    # Clean up partial zip if batched
-    if [ "$TOTAL" -gt "$BATCH_SIZE" ]; then
-        rm -f "$DEST"
-    fi
+    # Clean up zip after extraction
+    rm -f "$DEST"
 done
 
 echo ""
 echo "============================================================"
-echo " Done! Files saved to: $OUTPUT_DIR/"
+echo " Done! Files saved to: $SCRIPT_DIR/"
 echo "============================================================"
 `;
   }
@@ -415,7 +415,10 @@ echo "============================================================"
 
 $ErrorActionPreference = "Stop"
 
-$OutputDir = "${outZip.replace(".zip", "")}"
+# Work in the same folder where this script lives
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $ScriptDir
+
 $OutputZip = "${outZip}"
 $ApiUrl    = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/download"
 $BatchSize = ${BATCH_SIZE}
@@ -476,18 +479,15 @@ for ($i = 0; $i -lt $Total; $i += $BatchSize) {
 
     Write-Host ""
     Write-Host "Extracting $Dest ..."
-    if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir | Out-Null }
-    Expand-Archive -Path $Dest -DestinationPath $OutputDir -Force
+    Expand-Archive -Path $Dest -DestinationPath . -Force
 
-    # Clean up partial zip if batched
-    if ($Total -gt $BatchSize) {
-        Remove-Item -Path $Dest -Force -ErrorAction SilentlyContinue
-    }
+    # Clean up zip after extraction
+    Remove-Item -Path $Dest -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
 Write-Host "============================================================"
-Write-Host " Done! Files saved to: $OutputDir/"
+Write-Host " Done! Files saved to: $ScriptDir/"
 Write-Host "============================================================"
 `;
   }
