@@ -615,6 +615,15 @@ def _allocate_balanced(clades: List[CladeAllocation], k: int) -> None:
 # Utility: Get available stats for UI
 # ============================================================
 
+import time as _time
+
+# Simple in-memory cache for sampling stats
+_stats_cache: Dict[str, Any] = {}
+_stats_cache_key: str = ""
+_stats_cache_ts: float = 0.0
+_STATS_CACHE_TTL = 300  # 5 minutes
+
+
 def get_sampling_stats(
     scope_kingdom: str = "",
     scope_phylum: str = "",
@@ -627,7 +636,20 @@ def get_sampling_stats(
     Accepts the same scope filters as run_db_sampling.
 
     Optimised: single pass over the queryset instead of N iterations.
+    Results are cached for 5 minutes per unique parameter combination.
     """
+    global _stats_cache, _stats_cache_key, _stats_cache_ts
+
+    import json as _json
+    cache_key = _json.dumps(
+        [scope_kingdom, scope_phylum, scope_filters, sorted(target_keys or []),
+         sorted(species_names or [])],
+        sort_keys=True,
+    )
+    now = _time.monotonic()
+    if cache_key == _stats_cache_key and _stats_cache and (now - _stats_cache_ts) < _STATS_CACHE_TTL:
+        return _stats_cache
+
     from apps.taxonomy.models import NCBIGenome
 
     qs = NCBIGenome.objects.filter(
@@ -683,7 +705,7 @@ def get_sampling_stats(
             if val:
                 rank_counts[rank][val] += 1
 
-    return {
+    result = {
         "total_species": len(valid_species),
         "kingdoms": sorted(kingdoms),
         "phyla": sorted(phyla),
@@ -695,3 +717,8 @@ def get_sampling_stats(
             for rank, groups in rank_counts.items()
         },
     }
+
+    _stats_cache = result
+    _stats_cache_key = cache_key
+    _stats_cache_ts = now
+    return result

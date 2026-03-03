@@ -28,7 +28,50 @@ from apps.taxonomy.utils import (
     path_key_from_parts,
     norm_rank,
 )
-from apps.taxonomy.sampling.service import run_sampling
+from apps.taxonomy.sampling.service import run_sampling, TreeIndex
+
+import time as _time
+
+# =============================================================================
+# In-memory tree cache (avoids rebuilding on every scope-info request)
+# =============================================================================
+
+_tree_cache: Dict[str, Any] = {}
+_tree_cache_ts: float = 0.0
+_tree_index_cache: "TreeIndex | None" = None
+_TREE_CACHE_TTL = 300  # 5 minutes
+
+
+def _get_cached_tree_and_index() -> Tuple[Dict[str, Any], "TreeIndex"]:
+    """
+    Returns the cached (tree, TreeIndex) pair.
+    Rebuilds only when the cache is stale (older than _TREE_CACHE_TTL seconds).
+    """
+    global _tree_cache, _tree_cache_ts, _tree_index_cache
+
+    now = _time.monotonic()
+    if _tree_cache and _tree_index_cache and (now - _tree_cache_ts) < _TREE_CACHE_TTL:
+        return _tree_cache, _tree_index_cache
+
+    tree = ExternalTaxon.objects.build_tree(
+        limit=None, rank_cut="species", with_keys=True,
+    )
+    index = TreeIndex()
+    index.build(tree)
+
+    _tree_cache = tree
+    _tree_index_cache = index
+    _tree_cache_ts = now
+    logger.info("[tree_cache] rebuilt in %.1f s", _time.monotonic() - now)
+    return tree, index
+
+
+def invalidate_tree_cache():
+    """Call after DB mutations that affect the tree (sync, manual edits, etc.)."""
+    global _tree_cache, _tree_cache_ts, _tree_index_cache
+    _tree_cache = {}
+    _tree_cache_ts = 0.0
+    _tree_index_cache = None
 
 
 # =============================================================================
@@ -658,21 +701,16 @@ def sampling_scope_info(request):
             "children": [{"key": "...", "name": "...", "rank": "...", "species_count": 5}, ...]
         }
     """
-    from apps.taxonomy.sampling.service import TreeIndex
-    
     scope_key = request.GET.get("scope_key", "").strip() or None
     target_keys_str = request.GET.get("target_keys", "").strip()
     active_key = request.GET.get("active_key", "").strip() or None
     
     target_keys = [k.strip() for k in target_keys_str.split(",") if k.strip()] if target_keys_str else []
     
-    # Build tree index
-    tree = ExternalTaxon.objects.build_tree(limit=10000, rank_cut="species", with_keys=True)
+    # Use cached tree + index (rebuilt at most every 5 min)
+    tree, index = _get_cached_tree_and_index()
     if not tree:
         return JsonResponse({"error": "No tree data available"}, status=404)
-    
-    index = TreeIndex()
-    index.build(tree)
     
     def node_info(key):
         """Get node info with species count."""
