@@ -190,19 +190,26 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
 
   // DB sampling: result has a species array with classification fields
   if (Array.isArray(result.species) && result.species.length) {
-    // Build tree path keys from classification data
-    const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus"];
-    const keys = result.species.map(s => {
-      const parts = [];
-      for (const r of RANKS) {
-        const val = s[r];
-        if (val) parts.push(`${r}:${val}`);
-      }
-      // Add the species level using organism_name
-      const name = s.organism_name || s.scientific_name || s.name || "";
-      if (name) parts.push(`species:${name}`);
-      return parts.join("|");
-    }).filter(Boolean);
+    // Collect all candidate names for each sampled species
+    const sampledNames = new Set();
+    for (const s of result.species) {
+      // col_name is the ExternalTaxon.name used in the tree
+      if (s.col_name)        sampledNames.add(s.col_name);
+      if (s.organism_name)   sampledNames.add(s.organism_name);
+      if (s.scientific_name) sampledNames.add(s.scientific_name);
+    }
+
+    // Look up actual tree keys by matching species names
+    const treeSpecies = typeof renderer.getNodesByRank === "function"
+      ? renderer.getNodesByRank("species")
+      : [];
+    const keys = treeSpecies
+      .filter(n => sampledNames.has(n.name))
+      .map(n => n.key)
+      .filter(Boolean);
+
+    console.log("[applySamplingView] sampled names:", sampledNames.size,
+                "tree species matched:", keys.length);
 
     if (keys.length && typeof renderer.showOnlyKeys === "function") {
       renderer.showOnlyKeys(keys, { fit: true });
