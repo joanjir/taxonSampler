@@ -2,13 +2,68 @@
 /**
  * Cross-browser "Save As" dialog.
  *
- * Shows a Bootstrap modal where the user can edit the filename before
- * downloading.  Works in all browsers (Firefox, Chrome, Edge, Safari).
+ * Primary path:  File System Access API (`showSaveFilePicker`) — opens the
+ *                native OS file picker so the user can choose the target
+ *                folder and filename.  Works in Chrome ≥ 86, Edge ≥ 86.
+ *
+ * Fallback path: Bootstrap modal where the user edits the filename, then
+ *                the file is downloaded to the browser's default
+ *                Downloads folder.  Works everywhere.
  *
  * Usage:
  *   import { saveAs } from "../shared/save_as.js";
  *   await saveAs(blobOrString, "report.xlsx", "application/octet-stream");
  */
+
+// ── File System Access API (native picker) ──────────────────────────
+
+/**
+ * Map file extension to the `accept` descriptor for showSaveFilePicker.
+ */
+function extensionAccept(ext) {
+  const map = {
+    ".json":    { "application/json": [".json"] },
+    ".txt":     { "text/plain": [".txt"] },
+    ".csv":     { "text/csv": [".csv"] },
+    ".xlsx":    { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] },
+    ".xls":     { "application/vnd.ms-excel": [".xls"] },
+    ".newick":  { "application/octet-stream": [".newick", ".nwk", ".tre"] },
+    ".nwk":     { "application/octet-stream": [".newick", ".nwk", ".tre"] },
+    ".svg":     { "image/svg+xml": [".svg"] },
+  };
+  return map[ext.toLowerCase()] || { "application/octet-stream": [ext || ".*"] };
+}
+
+/**
+ * Try the native File System Access API.
+ * Returns true if the file was saved, false if the user cancelled,
+ * or throws if the API is not supported.
+ */
+async function nativeSaveAs(blob, suggestedName) {
+  // Guard: API must exist
+  if (typeof window.showSaveFilePicker !== "function") {
+    throw new Error("showSaveFilePicker not supported");
+  }
+
+  const dotIdx = suggestedName.lastIndexOf(".");
+  const ext = dotIdx > 0 ? suggestedName.slice(dotIdx) : "";
+  const descLabel = ext ? `${ext.slice(1).toUpperCase()} file` : "File";
+
+  const handle = await window.showSaveFilePicker({
+    suggestedName,
+    types: [{
+      description: descLabel,
+      accept: extensionAccept(ext),
+    }],
+  });
+
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+  return true;
+}
+
+// ── Fallback: Bootstrap modal ───────────────────────────────────────
 
 let _modalEl = null;
 let _bsModal = null;
@@ -117,7 +172,11 @@ function triggerDownload(blob, filename) {
 }
 
 /**
- * Save content with a "Save As" dialog (filename prompt).
+ * Save content with a "Save As" dialog.
+ *
+ * If the File System Access API is available (Chrome / Edge) the native
+ * OS file picker opens so the user can choose the folder.  Otherwise
+ * falls back to a Bootstrap modal for the filename + browser download.
  *
  * @param {string|Blob|ArrayBuffer} content - The data to save.
  * @param {string} defaultFilename - Suggested filename.
@@ -125,6 +184,23 @@ function triggerDownload(blob, filename) {
  * @returns {Promise<boolean>} true if saved, false if cancelled.
  */
 export async function saveAs(content, defaultFilename, mimeType = "text/plain;charset=utf-8") {
+  const blob = content instanceof Blob
+    ? content
+    : new Blob([content || ""], { type: mimeType });
+
+  // ── Try native picker first ──
+  if (typeof window.showSaveFilePicker === "function") {
+    try {
+      return await nativeSaveAs(blob, defaultFilename);
+    } catch (err) {
+      // User cancelled the picker (AbortError) → return false
+      if (err?.name === "AbortError") return false;
+      // SecurityError or not supported → fall through to modal
+      console.warn("[save_as] Native picker failed, falling back to modal:", err.message);
+    }
+  }
+
+  // ── Fallback: modal filename prompt + download ──
   const ext = defaultFilename.includes(".")
     ? defaultFilename.slice(defaultFilename.lastIndexOf("."))
     : "";
@@ -135,10 +211,6 @@ export async function saveAs(content, defaultFilename, mimeType = "text/plain;ch
 
   const chosenName = await askFilename(defaultFilename, hint);
   if (!chosenName) return false; // cancelled
-
-  const blob = content instanceof Blob
-    ? content
-    : new Blob([content || ""], { type: mimeType });
 
   triggerDownload(blob, chosenName);
   return true;
