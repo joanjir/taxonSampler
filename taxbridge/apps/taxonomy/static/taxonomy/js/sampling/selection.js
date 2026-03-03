@@ -291,7 +291,8 @@ export function createSelectionManager({ renderer }) {
           </button>
         </td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
 
     renderSelListTbody(html);
 
