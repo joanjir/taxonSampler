@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 # Canonical rank hierarchy (coarse to fine)
 RANK_HIERARCHY = [
-    "kingdom", "phylum", "class", "order", "family", "genus", "species",
+    "domain", "superkingdom", "kingdom", "phylum", "class", "order",
+    "family", "genus", "species",
 ]
 
 
@@ -256,15 +257,15 @@ def run_db_sampling(
         species_names=species_names,
     )
 
-    total_available = qs.values("organism_name").distinct().count()
+    total_available_raw = qs.values("organism_name").distinct().count()
 
     logger.info(
         "[run_db_sampling] scope applied → total_available=%d, "
         "max_sample_size=%d, strategy=%s, start_rank=%s, end_rank=%s",
-        total_available, max_sample_size, strategy, start_rank, end_rank,
+        total_available_raw, max_sample_size, strategy, start_rank, end_rank,
     )
 
-    if total_available == 0:
+    if total_available_raw == 0:
         return SamplingResult(
             config_id=config_id,
             strategy=strategy,
@@ -276,16 +277,6 @@ def run_db_sampling(
             clades=[],
             species=[],
             warnings=["No matched species found in the database."],
-        )
-
-    # Validate max_sample_size (0 = use all available)
-    if max_sample_size <= 0:
-        max_sample_size = total_available
-    effective_k = min(max_sample_size, total_available)
-    if max_sample_size > total_available:
-        warnings.append(
-            f"max_sample_size ({max_sample_size}) exceeds available species "
-            f"({total_available}). Using {total_available}."
         )
 
     # ── 2. Group species by taxonomic rank ──────────────────
@@ -300,6 +291,7 @@ def run_db_sampling(
     _clade_all: Dict[str, List] = defaultdict(list)
     _no_clade_all: List = []
     _genus_skipped = 0
+    _valid_species: set = set()
 
     for genome in qs.iterator():
         # ── Genus-validation safeguard ──
@@ -316,6 +308,7 @@ def run_db_sampling(
                 _genus_skipped += 1
                 continue
 
+        _valid_species.add(genome.organism_name)
         cls = genome.external_taxon.classification or {}
         clade_name = cls.get(rank_key, "")
 
@@ -343,6 +336,33 @@ def run_db_sampling(
         logger.warning(
             "[run_db_sampling] %d genomes skipped due to genus mismatch",
             _genus_skipped,
+        )
+
+    # Recalculate total_available using valid (post-filter) species count
+    total_available = len(_valid_species)
+
+    if total_available == 0:
+        return SamplingResult(
+            config_id=config_id,
+            strategy=strategy,
+            max_sample_size=max_sample_size,
+            start_rank=start_rank,
+            end_rank=end_rank,
+            total_available=0,
+            total_selected=0,
+            clades=[],
+            species=[],
+            warnings=warnings + ["No valid species after genus-mismatch filtering."],
+        )
+
+    # Validate max_sample_size (0 = use all available)
+    if max_sample_size <= 0:
+        max_sample_size = total_available
+    effective_k = min(max_sample_size, total_available)
+    if max_sample_size > total_available:
+        warnings.append(
+            f"max_sample_size ({max_sample_size}) exceeds available species "
+            f"({total_available}). Using {total_available}."
         )
 
     # Second pass: deduplicate — keep best genome per organism_name

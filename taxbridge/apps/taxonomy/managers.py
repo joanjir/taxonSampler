@@ -104,9 +104,17 @@ class ExternalTaxonManager(models.Manager):
         Returns:
             Tree in D3 format ready for the frontend
         """
+        # Only include species that have at least one matched NCBIGenome.
+        # This keeps the tree consistent with sampling (avoids showing
+        # species that cannot be sampled).
         qs = (
-            self.filter(system=system, rank__in=["species", "subspecies"])
+            self.filter(
+                system=system,
+                rank__in=["species", "subspecies"],
+                ncbi_genomes__col_match_status="matched",
+            )
             .only("id", "external_id", "name", "rank", "status", "classification_path")
+            .distinct()
             .order_by("id")
         )
         if limit is not None:
