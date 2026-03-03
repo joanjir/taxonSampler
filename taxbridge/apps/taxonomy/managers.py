@@ -105,7 +105,7 @@ class ExternalTaxonManager(models.Manager):
             Tree in D3 format ready for the frontend
         """
         qs = (
-            self.filter(system=system, rank="species")
+            self.filter(system=system, rank__in=["species", "subspecies"])
             .only("id", "external_id", "name", "rank", "status", "classification_path")
             .order_by("id")
         )
@@ -137,7 +137,7 @@ class ExternalTaxonManager(models.Manager):
 
             cur = root
             for rank, name in path:
-                if rank == "species":
+                if rank in ("species", "subspecies"):
                     continue
                 key = (rank, name)
                 if key not in cur.children:

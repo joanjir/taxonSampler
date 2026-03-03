@@ -134,9 +134,9 @@ def tree_search(request):
         # COL species (accepted + synonyms)
         sp_qs = (
             ExternalTaxon.objects
-            .filter(system="col", rank="species")
+            .filter(system="col", rank__in=["species", "subspecies"])
             .filter(name__icontains=q)
-            .only("id", "external_id", "name", "status", "classification_path")
+            .only("id", "external_id", "name", "rank", "status", "classification_path")
             .order_by("name")[:15000]
         )
 
@@ -211,7 +211,7 @@ def tree_search(request):
 
         scan_qs = (
             ExternalTaxon.objects
-            .filter(system="col", rank="species")
+            .filter(system="col", rank__in=["species", "subspecies"])
             .only("classification_path")
             .order_by("id")[:nodes_scan_limit]
         )

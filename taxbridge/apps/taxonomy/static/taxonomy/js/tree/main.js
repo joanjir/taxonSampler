@@ -200,8 +200,12 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     }
 
     // Look up actual tree keys by matching species names
+    // Include both "species" and "subspecies" rank nodes
     const treeSpecies = typeof renderer.getNodesByRank === "function"
-      ? renderer.getNodesByRank("species")
+      ? [
+          ...renderer.getNodesByRank("species"),
+          ...renderer.getNodesByRank("subspecies"),
+        ]
       : [];
     const keys = treeSpecies
       .filter(n => sampledNames.has(n.name))
