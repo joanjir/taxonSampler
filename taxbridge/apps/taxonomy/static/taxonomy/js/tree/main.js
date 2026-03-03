@@ -188,6 +188,17 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
   const result = selMgr.getLastSampling();
   if (!result) return;
 
+  // ── Switch to Taxonomy tab FIRST so the tree container is visible ──
+  // SVG text measurement (getComputedTextLength, getBBox) returns 0
+  // when the container has display:none (hidden Bootstrap tab).
+  const treeTab = document.getElementById("treeTab");
+  if (treeTab) {
+    try {
+      const bsTab = bootstrap?.Tab ? new bootstrap.Tab(treeTab) : null;
+      if (bsTab) bsTab.show(); else treeTab.click();
+    } catch { treeTab.click(); }
+  }
+
   // DB sampling: result has a species array with classification fields
   if (Array.isArray(result.species) && result.species.length) {
     // Collect all candidate names for each sampled species
@@ -218,15 +229,6 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
     if (keys.length && typeof renderer.showSampledTree === "function") {
       renderer.showSampledTree(keys);
     }
-
-    // Switch to Taxonomy tab
-    const treeTab = document.getElementById("treeTab");
-    if (treeTab) {
-      try {
-        const bsTab = bootstrap?.Tab ? new bootstrap.Tab(treeTab) : null;
-        if (bsTab) bsTab.show(); else treeTab.click();
-      } catch { treeTab.click(); }
-    }
     return;
   }
 
@@ -239,15 +241,6 @@ document.getElementById("applySamplingView")?.addEventListener("click", () => {
 
   if (typeof renderer.showSampledTree === "function" && keys.length) {
     renderer.showSampledTree(keys);
-  }
-
-  // Switch to Taxonomy tab
-  const treeTab = document.getElementById("treeTab");
-  if (treeTab) {
-    try {
-      const bsTab = bootstrap?.Tab ? new bootstrap.Tab(treeTab) : null;
-      if (bsTab) bsTab.show(); else treeTab.click();
-    } catch { treeTab.click(); }
   }
 });
 

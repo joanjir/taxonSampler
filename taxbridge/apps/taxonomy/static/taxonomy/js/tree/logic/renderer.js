@@ -162,6 +162,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
   /**
    * Build a pruned copy of the tree containing only paths
    * leading to the target keys (sampled species).
+   * After pruning, species_count on intermediate nodes is
+   * recalculated to reflect the pruned tree.
    */
   function pruneTreeToKeys(node, targetKeys, parts = []) {
     const nextParts = pushPart(parts, node);
@@ -172,6 +174,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
       const out = { ...node, __key: key };
       delete out.children;
       delete out._children;
+      out.species_count = 1;   // leaf = 1 species
+      out.speciesCount  = 1;
       return out;
     }
 
@@ -193,6 +197,14 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     const out = { ...node, __key: key };
     out.children = prunedKids;
     delete out._children;
+
+    // Recalculate species_count as sum of children's counts
+    const total = prunedKids.reduce(
+      (sum, c) => sum + (c.species_count || c.speciesCount || 0), 0
+    );
+    out.species_count = total;
+    out.speciesCount  = total;
+
     return out;
   }
 
