@@ -6,6 +6,12 @@
       <span id="selSubtitle" class="text-muted small">Taxa selected for sampling / export</span>
     </div>
     <div class="btn-group btn-group-sm" role="group" aria-label="Selection actions">
+      <!-- Import button -->
+      <button id="importSelJson" class="btn btn-outline-secondary" type="button" title="Import sampling configuration">
+        <i class="fa-solid fa-file-import me-1"></i>
+        Import
+      </button>
+      <input type="file" id="importSelJsonFile" accept=".json,application/json" style="display:none;">
       <!-- Export dropdown -->
       <div class="btn-group btn-group-sm dropdown" role="group">
         <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export">

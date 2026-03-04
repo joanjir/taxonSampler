@@ -555,4 +555,83 @@ Write-Host "============================================================"
 
   document.getElementById("dlScriptAll")?.addEventListener("click",
     ncbiScriptHandler("genome,protein,gbff", "All Data (genome+protein+gbff)", "download_all_ncbi"));
+
+  // ══════════════════════════════════════════════════════════════════
+  // Import JSON configuration
+  // ══════════════════════════════════════════════════════════════════
+  
+  const importBtn = document.getElementById("importSelJson");
+  const importFileInput = document.getElementById("importSelJsonFile");
+  
+  if (importBtn && importFileInput) {
+    // Click button → trigger hidden file input
+    importBtn.addEventListener("click", () => {
+      importFileInput.value = ""; // Reset to allow re-selecting same file
+      importFileInput.click();
+    });
+    
+    // File selected → read and import
+    importFileInput.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        
+        // Validate structure
+        if (!data || !Array.isArray(data.species)) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Invalid format',
+            text: 'The file does not contain a valid sampling configuration. Expected a JSON with "species" array.',
+            confirmButtonColor: '#198754'
+          });
+          return;
+        }
+        
+        // Dispatch event to restore the sampling state
+        window.dispatchEvent(new CustomEvent("sampling:import", { detail: data }));
+        
+        // Build scope info for display
+        let scopeHtml = '';
+        if (data.scope_filters && Object.keys(data.scope_filters).length > 0) {
+          const scopeParts = Object.entries(data.scope_filters)
+            .map(([rank, name]) => `${rank}: <strong>${name}</strong>`)
+            .join(' → ');
+          scopeHtml = `<p class="small text-success mb-1"><i class="fa-solid fa-filter me-1"></i>Scope: ${scopeParts}</p>`;
+        }
+        
+        let targetsHtml = '';
+        if (data.target_keys && data.target_keys.length > 0) {
+          targetsHtml = `<p class="small text-info mb-1"><i class="fa-solid fa-bullseye me-1"></i>Targets: <strong>${data.target_keys.length}</strong> clades</p>`;
+        }
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Configuration loaded',
+          html: `<div class="text-start">
+            <p>Imported <strong>${data.species?.length || 0}</strong> species.</p>
+            ${scopeHtml}
+            ${targetsHtml}
+            ${data.strategy ? `<p class="small text-muted mb-1">Strategy: <strong>${data.strategy}</strong></p>` : ''}
+            ${data.start_rank && data.end_rank ? `<p class="small text-muted mb-1">Rank range: <strong>${data.start_rank} → ${data.end_rank}</strong></p>` : ''}
+            ${data.total_available ? `<p class="small text-muted mb-1">Available in scope: <strong>${data.total_available}</strong></p>` : ''}
+            <hr class="my-2">
+            <p class="small text-info mb-0"><i class="fa-solid fa-info-circle me-1"></i>Check the <strong>Filters panel (Step 2)</strong> on the right to see the restored configuration.</p>
+          </div>`,
+          confirmButtonColor: '#198754',
+        });
+        
+      } catch (err) {
+        console.error("[exports] Import error:", err);
+        Swal.fire({
+          icon: 'error',
+          title: 'Import failed',
+          text: 'Could not parse the JSON file. Make sure it is a valid sampling export.',
+          confirmButtonColor: '#198754'
+        });
+      }
+    });
+  }
 }

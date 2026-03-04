@@ -142,6 +142,78 @@ window.addEventListener("db-sampling:final", (ev) => {
 });
 
 // =========================================================================
+// Import sampling configuration from JSON file
+// =========================================================================
+window.addEventListener("sampling:import", (ev) => {
+  const result = ev.detail || null;
+  if (!result) return;
+
+  console.log("[main] sampling:import →", {
+    species: result.species?.length || 0,
+    available: result.available_species?.length || 0,
+    strategy: result.strategy,
+  });
+
+  // Store available species list for the "Add species" dropdown
+  window.__availableScopedSpecies = result.available_species || [];
+
+  // Store as sampling result
+  selMgr.setLastSampling(result);
+  selMgr.setBadgeMode("Imported", true);
+
+  const sub = document.getElementById("selSubtitle");
+  if (sub) sub.textContent = `Imported configuration (${result.species?.length || 0} species)`;
+
+  selMgr.repaintSelection();
+
+  const st = document.getElementById("samplingStatus");
+  if (st) st.classList.remove("d-none");
+
+  // Enable wizard and restore Step 2 configuration
+  if (window.__samplingWizard?.enableWizard) {
+    window.__samplingWizard.enableWizard();
+  }
+  
+  // Restore Step 2 (DB Sampling) configuration
+  if (dbSampling?.restoreConfig) {
+    dbSampling.restoreConfig(result);
+  }
+  
+  // Mark sampling as executed BEFORE setStep so Next button stays enabled
+  if (window.__samplingWizard?.markSamplingExecuted) {
+    window.__samplingWizard.markSamplingExecuted();
+  }
+  
+  // Show Step 2 so user can see the restored config
+  if (window.__samplingWizard?.setStep) {
+    window.__samplingWizard.setStep(2);
+  }
+
+  // Show "Add species from scope" panel if we have available_species
+  const addOrgWrap = document.getElementById("selAddOrgWrap");
+  if (addOrgWrap) {
+    if (result.available_species?.length > 0) {
+      addOrgWrap.classList.remove("d-none");
+      initAddOrganismSelect2();
+    } else {
+      addOrgWrap.classList.add("d-none");
+    }
+  }
+
+  // Generate phylo tree
+  if (phyloTree && result.species?.length > 0) {
+    phyloTree.generate(result);
+  }
+
+  // Activate the Selection tab so user can see the imported species
+  const selectionTab = document.querySelector('[data-bs-target="#selectionTab"]');
+  if (selectionTab && typeof bootstrap !== 'undefined') {
+    const tab = new bootstrap.Tab(selectionTab);
+    tab.show();
+  }
+});
+
+// =========================================================================
 // Selection tab: Add/Remove species controls (Select2)
 // =========================================================================
 

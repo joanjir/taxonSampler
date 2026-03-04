@@ -450,9 +450,105 @@ export function initDbSampling() {
     loadStats();
   }
 
+  // ── Restore config from imported JSON ─────────────────────────────
+  function restoreConfig(data) {
+    if (!data) return;
+    
+    console.log("[db_sampling] restoreConfig →", {
+      strategy: data.strategy,
+      start_rank: data.start_rank,
+      end_rank: data.end_rank,
+      max_sample_size: data.max_sample_size,
+      total_available: data.total_available,
+      scope_filters: data.scope_filters,
+      target_keys: data.target_keys,
+    });
+    
+    // Reset rank floor to allow any rank selection
+    _minRankIdx = 0;
+    
+    // Restore max_sample_size
+    if (dom.maxSampleSize && data.max_sample_size != null) {
+      dom.maxSampleSize.value = data.max_sample_size;
+    }
+    
+    // Restore strategy
+    if (dom.strategy && data.strategy) {
+      // Find matching option
+      const options = dom.strategy.options;
+      for (let i = 0; i < options.length; i++) {
+        if (options[i].value === data.strategy) {
+          dom.strategy.selectedIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // Restore rank range
+    if (dom.startRank && data.start_rank) {
+      const startIdx = rankToIndex(data.start_rank);
+      if (startIdx >= 0) {
+        dom.startRank.value = startIdx;
+      }
+    }
+    if (dom.endRank && data.end_rank) {
+      const endIdx = rankToIndex(data.end_rank);
+      if (endIdx >= 0) {
+        dom.endRank.value = endIdx;
+      }
+    }
+    
+    // Update UI
+    updateRangeUI();
+    
+    // Update stats display
+    if (dom.availableCount && data.total_available != null) {
+      dom.availableCount.textContent = data.total_available.toLocaleString();
+    }
+    
+    // Show scope info (including original Step 1 scope/targets if available)
+    if (dom.scopeInfo) {
+      const lines = [];
+      
+      // Show original scope filters (Step 1) if present
+      if (data.scope_filters && Object.keys(data.scope_filters).length > 0) {
+        const scopeParts = [];
+        for (const [rank, name] of Object.entries(data.scope_filters)) {
+          scopeParts.push(`${RANK_LABELS[rank] || rank}: <strong>${esc(name)}</strong>`);
+        }
+        lines.push(`<span class="text-success">Scope:</span> ${scopeParts.join(' → ')}`);
+      }
+      
+      // Show targets count (Step 1) if present  
+      if (data.target_keys && data.target_keys.length > 0) {
+        lines.push(`<span class="text-info">Targets:</span> ${data.target_keys.length} clades selected`);
+      }
+      
+      // Show sampling config (Step 2)
+      const configParts = [];
+      if (data.start_rank) configParts.push(RANK_LABELS[data.start_rank] || data.start_rank);
+      if (data.end_rank && data.end_rank !== data.start_rank) {
+        configParts.push(`→ ${RANK_LABELS[data.end_rank] || data.end_rank}`);
+      }
+      if (data.strategy) configParts.push(`[${data.strategy}]`);
+      if (configParts.length) {
+        lines.push(`<span class="text-muted">Config:</span> ${configParts.join(' ')}`);
+      }
+      
+      if (lines.length) {
+        dom.scopeInfo.innerHTML = `<i class="fa-solid fa-file-import text-azure me-1"></i>
+          <div class="small" style="line-height:1.4">${lines.join('<br>')}</div>`;
+        dom.scopeInfo.classList.remove("d-none");
+      }
+    }
+    
+    lastResult = data;
+  }
+
   return {
     loadStats,
     execute,
     getLastResult: () => lastResult,
+    restoreConfig,
   };
 }

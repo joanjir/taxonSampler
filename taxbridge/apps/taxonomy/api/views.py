@@ -1609,6 +1609,9 @@ def sampling_execute(request):
         "clades": result.clades,
         "species": result.species,
         "available_species": result.available_species,  # All species in scope
+        # Scope info for export/import (restore original scope context)
+        "scope_filters": scope_filters,  # Dict of rank→taxon from Step 1
+        "target_keys": target_keys,      # List of tree path keys from Step 1
     })
 
 

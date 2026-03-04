@@ -360,12 +360,20 @@ export function initSamplingWizard({ renderer }) {
     state.samplingExecuted = true;
     // Enable Next button if we're in STEP 2
     if (state.step === 2) {
-      const nextBtn = document.getElementById("sam-nextBtn");
+      const nextBtn = document.getElementById("samNext");
       if (nextBtn) nextBtn.disabled = false;
     }
   });
 
-  const api = { state, reset, setStep, enableWizard, setScope, addTarget, clearTargets };
+  // Mark sampling as executed (for import scenarios)
+  function markSamplingExecuted() {
+    state.samplingExecuted = true;
+    // Enable Next button directly (regardless of current step)
+    const nextBtn = document.getElementById("samNext");
+    if (nextBtn) nextBtn.disabled = false;
+  }
+
+  const api = { state, reset, setStep, enableWizard, setScope, addTarget, clearTargets, markSamplingExecuted };
 
   // Expose globally for integration with samplingCtl
   window.__samplingWizard = api;
