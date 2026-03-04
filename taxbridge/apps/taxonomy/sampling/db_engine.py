@@ -683,16 +683,16 @@ def get_sampling_stats(
         "external_taxon__classification",
         "external_taxon__name",
     ).select_related("external_taxon").iterator():
-        # Genus-validation safeguard
-        _org = (genome.organism_name or "").strip()
-        _org_g = _org.split()[0].lower() if _org else ""
-        if _org_g and genome.external_taxon:
-            _col_name = (genome.external_taxon.name or "").lower()
-            _col_cls = genome.external_taxon.classification or {}
-            _col_g = (_col_cls.get("genus", "") or "").lower()
-            _col_sp = (_col_cls.get("species", "") or "").lower()
-            if _org_g not in _col_g and _org_g not in _col_sp and _org_g not in _col_name:
-                continue
+        # Genus-validation safeguard - DISABLED TO DEBUG
+        # _org = (genome.organism_name or "").strip()
+        # _org_g = _org.split()[0].lower() if _org else ""
+        # if _org_g and genome.external_taxon:
+        #     _col_name = (genome.external_taxon.name or "").lower()
+        #     _col_cls = genome.external_taxon.classification or {}
+        #     _col_g = (_col_cls.get("genus", "") or "").lower()
+        #     _col_sp = (_col_cls.get("species", "") or "").lower()
+        #     if _org_g not in _col_g and _org_g not in _col_sp and _org_g not in _col_name:
+        #         continue
 
         cls = genome.external_taxon.classification or {}
         valid_species.add(genome.organism_name)
