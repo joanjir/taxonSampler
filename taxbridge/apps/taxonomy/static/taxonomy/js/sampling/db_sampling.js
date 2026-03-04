@@ -68,6 +68,7 @@ export function initDbSampling() {
     statTotal:     document.getElementById("dbStatTotal"),
     statMatched:   document.getElementById("dbStatMatched"),
     statKingdoms:  document.getElementById("dbStatKingdoms"),
+    availableCount: document.getElementById("dbAvailableCount"),
 
     // Config inputs
     maxSampleSize: document.getElementById("dbMaxSampleSize"),
@@ -306,11 +307,24 @@ export function initDbSampling() {
       const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames });
       statsCache = data;
 
-      if (dom.statMatched)  dom.statMatched.textContent  = data.total_species ?? "—";
+      const totalSpecies = data.total_species ?? 0;
+      
+      if (dom.statMatched)  dom.statMatched.textContent  = totalSpecies;
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;
+      if (dom.availableCount) dom.availableCount.textContent = totalSpecies;
+      
+      // Limit max sample size to available species
+      if (dom.maxSampleSize) {
+        dom.maxSampleSize.max = totalSpecies;
+        // If current value exceeds available, reset it
+        const currentVal = parseInt(dom.maxSampleSize.value, 10) || 0;
+        if (currentVal > totalSpecies && currentVal !== 0) {
+          dom.maxSampleSize.value = "";
+        }
+      }
 
       // Show scope info
-      updateScopeDisplay(scopeFilters, targetKeys, data.total_species);
+      updateScopeDisplay(scopeFilters, targetKeys, totalSpecies);
 
     } catch (err) {
       console.error("[db_sampling] Stats error:", err);

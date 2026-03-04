@@ -297,6 +297,7 @@ def run_db_sampling(
         # ── Genus-validation safeguard ──
         # Skip genomes whose organism_name genus diverges completely from
         # the linked COL taxon (bad matches that slipped past audit).
+        # This is a soft filter: we only skip if genus is completely absent.
         _org = (genome.organism_name or "").strip()
         _org_g = _org.split()[0].lower() if _org else ""
         if _org_g and genome.external_taxon:
@@ -304,7 +305,10 @@ def run_db_sampling(
             _col_cls = genome.external_taxon.classification or {}
             _col_g = (_col_cls.get("genus", "") or "").lower()
             _col_sp = (_col_cls.get("species", "") or "").lower()
-            if _org_g not in _col_g and _org_g not in _col_sp and _org_g not in _col_name:
+            # Only skip if no genus match at all AND name is completely different
+            if (_col_g and _org_g not in _col_g and 
+                _col_sp and _org_g not in _col_sp and 
+                _org_g not in _col_name):
                 _genus_skipped += 1
                 continue
 
