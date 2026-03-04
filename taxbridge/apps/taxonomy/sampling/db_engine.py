@@ -295,22 +295,23 @@ def run_db_sampling(
 
     for genome in qs.iterator():
         # ── Genus-validation safeguard ──
+        # TEMPORARILY DISABLED to debug missing species (Homo sapiens, Mus musculus)
         # Skip genomes whose organism_name genus diverges completely from
         # the linked COL taxon (bad matches that slipped past audit).
         # This is a soft filter: we only skip if genus is completely absent.
-        _org = (genome.organism_name or "").strip()
-        _org_g = _org.split()[0].lower() if _org else ""
-        if _org_g and genome.external_taxon:
-            _col_name = (genome.external_taxon.name or "").lower()
-            _col_cls = genome.external_taxon.classification or {}
-            _col_g = (_col_cls.get("genus", "") or "").lower()
-            _col_sp = (_col_cls.get("species", "") or "").lower()
-            # Only skip if no genus match at all AND name is completely different
-            if (_col_g and _org_g not in _col_g and 
-                _col_sp and _org_g not in _col_sp and 
-                _org_g not in _col_name):
-                _genus_skipped += 1
-                continue
+        # _org = (genome.organism_name or "").strip()
+        # _org_g = _org.split()[0].lower() if _org else ""
+        # if _org_g and genome.external_taxon:
+        #     _col_name = (genome.external_taxon.name or "").lower()
+        #     _col_cls = genome.external_taxon.classification or {}
+        #     _col_g = (_col_cls.get("genus", "") or "").lower()
+        #     _col_sp = (_col_cls.get("species", "") or "").lower()
+        #     # Only skip if no genus match at all AND name is completely different
+        #     if (_col_g and _org_g not in _col_g and 
+        #         _col_sp and _org_g not in _col_sp and 
+        #         _org_g not in _col_name):
+        #         _genus_skipped += 1
+        #         continue
 
         _valid_species.add(genome.organism_name)
         cls = genome.external_taxon.classification or {}
@@ -332,7 +333,7 @@ def run_db_sampling(
 
         _clade_all[composite_key].append(genome)
 
-    if _genus_skipped:
+    if _genus_skipped > 0:
         warnings.append(
             f"{_genus_skipped} genomes skipped: COL genus mismatch "
             f"(run 'manage.py audit_col_matches --fix' to clean)."
