@@ -135,10 +135,10 @@ class SamplingConfiguration(models.Model):
     """
 
     STRATEGY_CHOICES = [
-        ("none", "None (natural order)"),
-        ("random", "Random"),
-        ("proportional", "Proportional"),
-        ("balanced", "Equal Sample Size"),
+        ("natural", "Natural order"),
+        ("quality_random", "Quality Random"),
+        ("stratified_proportional", "Stratified Proportional"),
+        ("balanced_hierarchical", "Balanced Hierarchical"),
     ]
 
     RANK_CHOICES = [
@@ -183,7 +183,7 @@ class SamplingConfiguration(models.Model):
     strategy = models.CharField(
         max_length=32,
         choices=STRATEGY_CHOICES,
-        default="proportional",
+        default="stratified_proportional",
         help_text="Sampling strategy",
     )
 

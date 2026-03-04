@@ -194,13 +194,13 @@
           <div class="mb-3">
             <label class="form-label small mb-1 fw-semibold">
               Strategy
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="All species = no sampling, take everything up to max. Random = uniform random pick. Proportional = quota proportional to clade size. Equal per group = same quota per clade."><i class="fa-solid fa-circle-question"></i></span>
+              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Natural = order by accession (natural). Quality Random = random within balanced quotas, prioritizing quality. Stratified Proportional = quota proportional to clade size. Balanced Hierarchical = equal quota per clade."><i class="fa-solid fa-circle-question"></i></span>
             </label>
             <select id="dbStrategy" class="form-select form-select-sm">
-              <option value="none">All species (up to max)</option>
-              <option value="random">Random</option>
-              <option value="proportional" selected>Proportional</option>
-              <option value="balanced">Equal per group</option>
+              <option value="natural">Natural order</option>
+              <option value="quality_random">Quality Random</option>
+              <option value="stratified_proportional" selected>Stratified Proportional</option>
+              <option value="balanced_hierarchical">Balanced Hierarchical</option>
             </select>
           </div>
 

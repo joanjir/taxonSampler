@@ -1407,7 +1407,7 @@ def sampling_execute(request):
         - max_sample_size: int (required)
         - start_rank: str (default: phylum)
         - end_rank: str (default: species)
-        - strategy: none | random | proportional | balanced (default: proportional)
+        - strategy: natural | quality_random | stratified_proportional | balanced_hierarchical (default: stratified_proportional)
         - kingdom: str (optional scope filter)
         - phylum: str (optional scope filter)
         - target_keys: list of tree path keys for target clades (optional)
@@ -1431,7 +1431,7 @@ def sampling_execute(request):
 
     start_rank = data.get("start_rank", "phylum").lower()
     end_rank = data.get("end_rank", "species").lower()
-    strategy = data.get("strategy", "proportional").lower()
+    strategy = data.get("strategy", "stratified_proportional").lower()
     kingdom = data.get("scope_kingdom") or data.get("kingdom", "")
     phylum = data.get("scope_phylum") or data.get("phylum", "")
     scope_filters = data.get("scope_filters") or None
@@ -1441,7 +1441,7 @@ def sampling_execute(request):
     config_name = data.get("name", "")
 
     valid_ranks = ["domain", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
-    valid_strategies = ["none", "random", "proportional", "balanced"]
+    valid_strategies = ["natural", "quality_random", "stratified_proportional", "balanced_hierarchical"]
 
     if start_rank not in valid_ranks:
         return JsonResponse({"error": f"Invalid start_rank: {start_rank}"}, status=400)

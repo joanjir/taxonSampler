@@ -6,10 +6,10 @@ Uses NCBIGenome records with COL classification data
 to perform stratified sampling by taxonomic rank.
 
 Strategies:
-  - none:         Natural order (by accession) up to max_sample_size
-  - random:       Global random selection of K species
-  - proportional: n_i = floor(size_i / total * K) + largest-remainder
-  - balanced:     n_i = min(floor(K / num_clades), available_i)  (strict)
+  - natural:                Natural order (by accession) up to max_sample_size
+  - quality_random:         Random selection within balanced quotas, prioritizing quality
+  - stratified_proportional: n_i = floor(size_i / total * K) + largest-remainder
+  - balanced_hierarchical:  n_i = floor(K / num_clades) per clade (strictly equal)
 """
 from __future__ import annotations
 
@@ -204,7 +204,7 @@ def run_db_sampling(
     max_sample_size: int,
     start_rank: str = "phylum",
     end_rank: str = "species",
-    strategy: str = "proportional",
+    strategy: str = "stratified_proportional",
     scope_kingdom: str = "",
     scope_phylum: str = "",
     scope_filters: Optional[Dict[str, str]] = None,
@@ -226,7 +226,7 @@ def run_db_sampling(
         max_sample_size: Maximum number of species to return (0 = all)
         start_rank: Top grouping rank (e.g. phylum)
         end_rank: Bottom grouping rank before selecting species
-        strategy: none | random | proportional | balanced
+        strategy: natural | quality_random | stratified_proportional | balanced_hierarchical
         scope_kingdom: Filter by kingdom (optional, legacy)
         scope_phylum: Filter by phylum (optional, legacy)
         scope_filters: Dict of rank→taxon filters from Step 1 scope
@@ -399,36 +399,26 @@ def run_db_sampling(
 
     num_clades = len(clades_info)
 
-    if strategy == "none":
-        # No grouping logic — just take first K
+    if strategy == "natural":
+        # Natural order: take first K by accession within each clade
         _allocate_none(clades_info, effective_k)
 
-    elif strategy == "random":
-        # Global random: quotas set after selection (see below)
-        pass
+    elif strategy == "quality_random":
+        # Quality-weighted random: balanced quotas with random selection
+        # (prioritizes quality during selection)
+        _allocate_balanced(clades_info, effective_k)
 
-    elif strategy == "proportional":
+    elif strategy == "stratified_proportional":
+        # Proportional to clade size: n_i = floor(K * N_i / N_total) + largest-remainder
         _allocate_proportional(clades_info, effective_k)
 
-    elif strategy == "balanced":
+    elif strategy == "balanced_hierarchical":
+        # Balanced: equal quota per clade n_i = floor(K / num_clades)
         _allocate_balanced(clades_info, effective_k)
 
     else:
-        warnings.append(f"Unknown strategy '{strategy}', using 'none'.")
+        warnings.append(f"Unknown strategy '{strategy}', using 'natural'.")
         _allocate_none(clades_info, effective_k)
-
-    # ── 3b. Global random pre-selection ─────────────────────
-    _random_selected: set = set()
-    if strategy == "random":
-        all_genomes = []
-        for _name in sorted(clade_genomes.keys()):
-            all_genomes.extend(clade_genomes[_name])
-        random.shuffle(all_genomes)
-        _random_selected = {g.organism_name for g in all_genomes[:effective_k]}
-        # Set quotas per clade based on how many fell in each
-        for clade in clades_info:
-            cg = clade_genomes.get(clade.name, [])
-            clade.quota = sum(1 for g in cg if g.organism_name in _random_selected)
 
     # ── 4. Select species within each clade ─────────────────
     selected_species: List[Dict[str, Any]] = []
@@ -437,11 +427,18 @@ def run_db_sampling(
     for clade in clades_info:
         genomes = clade_genomes.get(clade.name, [])
 
-        if strategy == "random":
-            # Global random: pick genomes whose organism was pre-selected
-            picks = [g for g in genomes if g.organism_name in _random_selected]
-        elif strategy == "none":
-            # Natural order (by accession)
+        if strategy == "quality_random":
+            # Quality-random: sort by quality score (best first), then random sample
+            if clade.quota > 0 and len(genomes) > 0:
+                genomes.sort(key=lambda g: (-compute_species_score(g), g.organism_name))
+                # Take best 2x quota candidates, then random sample from them
+                candidates = genomes[:min(len(genomes), clade.quota * 2)]
+                num_to_pick = min(clade.quota, len(candidates))
+                picks = random.sample(candidates, num_to_pick)
+            else:
+                picks = []
+        elif strategy == "natural":
+            # Natural order: by accession, take first K
             genomes.sort(key=lambda g: g.accession)
             picks = genomes[:clade.quota]
         else:

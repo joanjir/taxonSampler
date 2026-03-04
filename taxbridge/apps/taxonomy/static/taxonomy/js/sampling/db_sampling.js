@@ -315,7 +315,7 @@ export function initDbSampling() {
     const maxSampleSize = rawVal === "" ? 0 : Math.max(1, parseInt(rawVal, 10) || 1);
     const startRank     = indexToRank(parseInt(dom.startRank?.value || "1", 10));
     const endRank       = indexToRank(parseInt(dom.endRank?.value   || "6", 10));
-    const strategy      = (dom.strategy?.value   || "proportional").trim();
+    const strategy      = (dom.strategy?.value   || "stratified_proportional").trim();
     // Get Step 1 wizard scope
     const { scopeFilters, targetKeys, speciesNames } = getWizardScope();
 
