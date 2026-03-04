@@ -33,6 +33,7 @@ urlpatterns = [
     path("sampling/execute/", views.sampling_execute, name="sampling-execute"),
     path("sampling/configs/", views.sampling_configs, name="sampling-configs"),
     path("sampling/newick/", views.sampling_newick, name="sampling-newick"),
+    path("organisms-search/", views.organisms_search, name="organisms-search"),
     
     # Assembly Filtering API (Step 3)
     path("assembly/fields/", views.assembly_fields, name="assembly-fields"),

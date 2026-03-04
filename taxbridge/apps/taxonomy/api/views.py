@@ -1398,6 +1398,38 @@ def sampling_stats(request):
     return JsonResponse(stats)
 
 
+@require_GET
+def organisms_search(request):
+    """
+    Search for organisms by name.
+    Returns a list of organism names matching the query.
+    
+    Query params:
+      q: search query (minimum 2 characters)
+    """
+    query = request.GET.get('q', '').strip().lower()
+    
+    if len(query) < 2:
+        return JsonResponse({"organisms": []})
+    
+    from apps.taxonomy.models import NCBIGenome
+    
+    # Search for organism names containing the query
+    organisms = (
+        NCBIGenome.objects
+        .filter(
+            organism_name__icontains=query,
+            col_match_status='matched',
+            external_taxon__isnull=False,
+        )
+        .values_list('organism_name', flat=True)
+        .distinct()
+        .order_by('organism_name')[:50]  # Limit to 50 results
+    )
+    
+    return JsonResponse({"organisms": list(organisms)})
+
+
 @csrf_exempt
 @require_POST
 def sampling_execute(request):

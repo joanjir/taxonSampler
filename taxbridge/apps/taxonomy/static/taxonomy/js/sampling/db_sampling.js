@@ -84,6 +84,16 @@ export function initDbSampling() {
     // Scope info display
     scopeInfo:     document.getElementById("dbScopeInfo"),
 
+    // Step 2b: Edit organisms
+    step2bContainer: document.getElementById("samStep2b"),
+    sampledList:     document.getElementById("sampledOrganismsList"),
+    sampledCountBadge: document.getElementById("sampledCountBadge"),
+    addOrgSearch:    document.getElementById("addOrganismSearch"),
+    addOrgBtn:       document.getElementById("addOrganismBtn"),
+    addOrgResults:   document.getElementById("addOrganismResults"),
+    addOrgResultsList: document.getElementById("addOrganismResultsList"),
+    proceedToAsm:    document.getElementById("proceedToAssemblyFilter"),
+
     // Action
     runBtn:        document.getElementById("runDbSampling"),
   };
@@ -405,6 +415,11 @@ export function initDbSampling() {
       // Dispatch event so Selection tab picks up the results
       window.dispatchEvent(new CustomEvent("db-sampling:final", { detail: result }));
 
+      // Show Step 2b with sampled organisms
+      if (sampledOrganisms !== undefined) {
+        onSamplingComplete(result);
+      }
+
       // Auto-advance to Step 3 (Assembly Filtering)
       if (window.__samplingWizard?.setStep) {
         setTimeout(() => {
@@ -448,6 +463,151 @@ export function initDbSampling() {
   if (step2El && !step2El.classList.contains("d-none")) {
     loadStats();
   }
+
+  // ── Step 2b: Edit sampled organisms ────────────────────────────────
+
+  let sampledOrganisms = new Set(); // Track selected organism names
+
+  function updateSampledList() {
+    const list = dom.sampledList;
+    const badge = dom.sampledCountBadge;
+    
+    if (!list) return;
+
+    if (sampledOrganisms.size === 0) {
+      list.innerHTML = '<div class="text-muted small">No organisms selected</div>';
+      if (badge) badge.textContent = "0";
+      return;
+    }
+
+    list.innerHTML = Array.from(sampledOrganisms).map(org => `
+      <div class="d-flex justify-content-between align-items-center mb-1 p-1 border-bottom">
+        <small>${esc(org)}</small>
+        <button class="btn btn-sm btn-outline-danger remove-org-btn" data-org="${esc(org)}">
+          <i class="fa-solid fa-trash fs-7"></i>
+        </button>
+      </div>
+    `).join('');
+
+    // Bind remove buttons
+    list.querySelectorAll('.remove-org-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sampledOrganisms.delete(btn.dataset.org);
+        updateSampledList();
+      });
+    });
+
+    if (badge) badge.textContent = sampledOrganisms.size;
+  }
+
+  // Search for organisms to add
+  if (dom.addOrgSearch) {
+    let searchTimeout;
+    dom.addOrgSearch.addEventListener('input', async (e) => {
+      const query = e.target.value.trim();
+      
+      clearTimeout(searchTimeout);
+      if (!query || query.length < 2) {
+        if (dom.addOrgResults) dom.addOrgResults.classList.add('d-none');
+        return;
+      }
+
+      searchTimeout = setTimeout(async () => {
+        try {
+          const resp = await fetch(`/api/taxonomy/organisms-search/?q=${encodeURIComponent(query)}`);
+          if (!resp.ok) return;
+          
+          const data = await resp.json();
+          const organisms = data.organisms || [];
+          
+          if (organisms.length === 0) {
+            if (dom.addOrgResults) dom.addOrgResults.classList.add('d-none');
+            return;
+          }
+
+          // Show results
+          if (dom.addOrgResults) dom.addOrgResults.classList.remove('d-none');
+          if (dom.addOrgResultsList) {
+            dom.addOrgResultsList.innerHTML = organisms.map(org => `
+              <div class="d-flex justify-content-between align-items-center mb-1 p-1 border-bottom">
+                <small>${esc(org)}</small>
+                <button class="btn btn-sm btn-outline-primary add-organism-quick" data-org="${esc(org)}">
+                  <i class="fa-solid fa-plus fs-7"></i>
+                </button>
+              </div>
+            `).join('');
+
+            // Bind quick-add buttons
+            dom.addOrgResultsList.querySelectorAll('.add-organism-quick').forEach(btn => {
+              btn.addEventListener('click', () => {
+                const org = btn.dataset.org;
+                if (!sampledOrganisms.has(org)) {
+                  sampledOrganisms.add(org);
+                  updateSampledList();
+                  dom.addOrgSearch.value = '';
+                  if (dom.addOrgResults) dom.addOrgResults.classList.add('d-none');
+                }
+              });
+            });
+          }
+        } catch (err) {
+          console.error('[db_sampling] Search error:', err);
+        }
+      }, 300);
+    });
+  }
+
+  // Add organism button
+  if (dom.addOrgBtn) {
+    dom.addOrgBtn.addEventListener('click', () => {
+      const org = (dom.addOrgSearch?.value || "").trim();
+      if (org && !sampledOrganisms.has(org)) {
+        sampledOrganisms.add(org);
+        updateSampledList();
+        dom.addOrgSearch.value = '';
+        if (dom.addOrgResults) dom.addOrgResults.classList.add('d-none');
+      }
+    });
+  }
+
+  // Proceed to Step 3
+  if (dom.proceedToAsm) {
+    dom.proceedToAsm.addEventListener('click', () => {
+      // Store the edited list for Step 3
+      window.__samplingResults = window.__samplingResults || {};
+      window.__samplingResults.sampledOrganisms = Array.from(sampledOrganisms);
+      
+      // Move to Step 3
+      const step2bEl = dom.step2bContainer;
+      const step3El = document.getElementById("samStep3");
+      if (step2bEl && step3El) {
+        step2bEl.classList.add('d-none');
+        step3El.classList.remove('d-none');
+        // Trigger Step 3 initialization if needed
+        const step3init = window.__samAssemblyFilterInit;
+        if (typeof step3init === 'function') step3init();
+      }
+    });
+  }
+
+  // After sampling, load results into Step 2b
+  function onSamplingComplete(result) {
+    sampledOrganisms.clear();
+    if (result && result.species) {
+      result.species.forEach(s => {
+        sampledOrganisms.add(s.organism_name);
+      });
+    }
+    updateSampledList();
+    
+    // Show Step 2b
+    if (dom.step2bContainer) {
+      dom.step2bContainer.classList.remove('d-none');
+    }
+  }
+
+  // Hook into execute to call onSamplingComplete
+  // (already done inline in execute function above)
 
   return {
     loadStats,
