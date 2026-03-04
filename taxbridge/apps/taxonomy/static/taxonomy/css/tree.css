@@ -264,10 +264,14 @@ g.node.clade-path {
 /* ── Range Taxon dual slider (NCBI style) ──────────────────── */
 .range-taxon-wrap {
   padding: 8px 0 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .range-taxon-container {
   position: relative;
   height: 28px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 /* Background track */
 .range-taxon-track {
