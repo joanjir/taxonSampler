@@ -32,6 +32,29 @@ RANK_HIERARCHY = [
     "family", "genus", "species",
 ]
 
+# Model organisms — always prioritize these in sampling
+MODEL_ORGANISMS = {
+    "Homo sapiens",           # Human
+    "Mus musculus",           # Mouse
+    "Rattus norvegicus",      # Rat
+    "Drosophila melanogaster", # Fruit fly
+    "Caenorhabditis elegans", # C. elegans
+    "Arabidopsis thaliana",   # Thale cress
+    "Danio rerio",            # Zebrafish
+    "Gallus gallus",          # Chicken
+    "Sus scrofa",             # Pig
+    "Bos taurus",             # Cattle
+    "Equus caballus",         # Horse
+    "Ovis aries",             # Sheep
+    "Canis lupus familiaris", # Dog
+    "Felis catus",            # Cat
+    "Panthera leo",           # Lion
+    "Chlorocebus aethiops",   # African green monkey
+    "Macaca mulatta",         # Rhesus macaque
+    "Pan troglodytes",        # Chimpanzee
+    "Gorilla gorilla",        # Gorilla
+}
+
 
 def _rank_index(rank: str) -> int:
     """Returns the position of a rank in the hierarchy, or -1."""
@@ -136,6 +159,7 @@ class SamplingResult:
     clades: List[Dict[str, Any]]
     species: List[Dict[str, Any]]
     warnings: List[str] = field(default_factory=list)
+    available_species: List[Dict[str, Any]] = field(default_factory=list)  # All species data in scope (for adding)
 
 
 def _apply_scope_filters(
@@ -292,6 +316,7 @@ def run_db_sampling(
     _no_clade_all: List = []
     _genus_skipped = 0
     _valid_species: set = set()
+    _all_genomes_by_name: Dict[str, Any] = {}  # Best genome per organism_name (for available_species)
 
     for genome in qs.iterator():
         # ── Genus-validation safeguard ──
@@ -314,6 +339,14 @@ def run_db_sampling(
         #         continue
 
         _valid_species.add(genome.organism_name)
+        
+        # Track best genome per organism for available_species data
+        org_name = genome.organism_name
+        if org_name not in _all_genomes_by_name:
+            _all_genomes_by_name[org_name] = genome
+        elif (genome.quality_score or 0) > (_all_genomes_by_name[org_name].quality_score or 0):
+            _all_genomes_by_name[org_name] = genome
+        
         cls = genome.external_taxon.classification or {}
         clade_name = cls.get(rank_key, "")
 
@@ -531,6 +564,47 @@ def run_db_sampling(
         sum(c.get('quota', 0) if isinstance(c, dict) else c.quota for c in clades_info),
     )
 
+    # ── Apply model organism boost ──
+    # Reorganize to prioritize model organisms in the result
+    model_species = []
+    other_species = []
+    for sp in selected_species:
+        if sp.get("organism_name") in MODEL_ORGANISMS:
+            model_species.append(sp)
+        else:
+            other_species.append(sp)
+    
+    # Sort model organisms first, then others
+    final_selected = model_species + other_species
+
+    # ── Build available_species with full data ──
+    # Include all species in scope with their taxonomic classification
+    _selected_names = {sp.get("organism_name") for sp in final_selected}
+    _available_species_data: List[Dict[str, Any]] = []
+    
+    for org_name in sorted(_valid_species):
+        g = _all_genomes_by_name.get(org_name)
+        if not g:
+            continue
+        cls = g.external_taxon.classification or {} if g.external_taxon else {}
+        _available_species_data.append({
+            "organism_name": org_name,
+            "accession": g.accession,
+            "taxid": g.taxon.taxid if g.taxon else None,
+            "scientific_name": g.taxon.scientific_name if g.taxon else org_name,
+            "kingdom": cls.get("kingdom", ""),
+            "phylum": cls.get("phylum", ""),
+            "class": cls.get("class", ""),
+            "order": cls.get("order", ""),
+            "family": cls.get("family", ""),
+            "genus": cls.get("genus", ""),
+            "col_name": g.external_taxon.name if g.external_taxon else "",
+            "genome_level": g.genome_level or "",
+            "refseq_category": g.refseq_category or "",
+            "quality_score": g.quality_score,
+            "species_score": compute_species_score(g),
+        })
+
     return SamplingResult(
         config_id=config_id,
         strategy=strategy,
@@ -538,10 +612,11 @@ def run_db_sampling(
         start_rank=start_rank,
         end_rank=end_rank,
         total_available=total_available,
-        total_selected=len(selected_species),
+        total_selected=len(final_selected),
         clades=clades_result,
-        species=selected_species,
+        species=final_selected,
         warnings=warnings,
+        available_species=_available_species_data,  # All species data in scope
     )
 
 
@@ -599,18 +674,54 @@ def _allocate_proportional(clades: List[CladeAllocation], k: int) -> None:
 
 def _allocate_balanced(clades: List[CladeAllocation], k: int) -> None:
     """
-    Distribute K equally among clades (strict balanced).
-    n_i = min(floor(K / num_clades), N_i)
-    No redistribution — avoids over-representation of large clades.
+    Distribute K equally among clades (balanced).
+    
+    When num_clades <= K:
+        Each clade gets floor(K / num_clades), with remainder distributed
+        to clades with available species (smallest clades first for fairness).
+    
+    When num_clades > K:
+        Only K clades can receive 1 species each. Priority is given to:
+        1. Clades that have species available
+        2. Smaller clades (to maximize diversity)
     """
     m = len(clades)
     if m == 0:
         return
 
-    base = k // m
-
-    for clade in clades:
-        clade.quota = min(base, clade.species_count)
+    if m <= k:
+        # Normal case: more quota than clades
+        base = k // m
+        remainder = k % m
+        
+        # Sort by species_count ascending (prioritize smaller clades for remainder)
+        indexed = list(enumerate(clades))
+        indexed.sort(key=lambda x: x[1].species_count)
+        
+        # Assign base quota to all clades
+        for clade in clades:
+            clade.quota = min(base, clade.species_count)
+        
+        # Distribute remainder to clades that can still take more
+        for i, clade in indexed:
+            if remainder <= 0:
+                break
+            if clade.quota < clade.species_count:
+                clade.quota += 1
+                remainder -= 1
+    else:
+        # More clades than K: select 1 species from K different clades
+        # Sort clades by size (smallest first) to maximize diversity
+        indexed = [(i, c) for i, c in enumerate(clades) if c.species_count > 0]
+        indexed.sort(key=lambda x: x[1].species_count)
+        
+        # Give quota=1 to at most K clades
+        assigned = 0
+        for i, clade in indexed:
+            if assigned >= k:
+                break
+            clade.quota = 1
+            assigned += 1
 
 
 # ============================================================

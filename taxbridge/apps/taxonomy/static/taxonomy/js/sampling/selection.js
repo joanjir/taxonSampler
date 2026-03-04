@@ -209,6 +209,12 @@ export function createSelectionManager({ renderer }) {
                     title="Copy name">
               <i class="fa-solid fa-copy"></i>
             </button>
+            <button class="btn btn-sm btn-outline-danger py-0 px-1 ms-1 sel-remove-org"
+                    type="button"
+                    data-org="${escapeHtml(name)}"
+                    title="Remove from selection">
+              <i class="fa-solid fa-trash"></i>
+            </button>
           </td>
         </tr>
       `;
@@ -342,6 +348,35 @@ export function createSelectionManager({ renderer }) {
         if (selId && typeof renderer.removeSelectedBySelId === "function") {
           renderer.removeSelectedBySelId(selId);
           repaintSelection();
+        }
+        return;
+      }
+
+      // Handle remove organism from sampling selection
+      const rmOrgBtn = e.target.closest?.(".sel-remove-org");
+      if (rmOrgBtn) {
+        const orgName = rmOrgBtn.getAttribute("data-org");
+        if (orgName && lastSamplingResult?.species) {
+          // Remove from species array
+          lastSamplingResult.species = lastSamplingResult.species.filter(
+            s => (s.organism_name || s.name) !== orgName
+          );
+          lastSamplingResult.total_selected = lastSamplingResult.species.length;
+          
+          // Repaint
+          repaintSelection();
+          
+          // Update phylo tree if available
+          if (window.removeOrganismFromSelection) {
+            // Use the global function to also update phylo tree
+            // But since we already updated here, just log it
+            console.log(`[selection] Removed ${orgName} from selection`);
+          }
+          
+          // Dispatch event to update phylo tree
+          window.dispatchEvent(new CustomEvent("selection:changed", { 
+            detail: lastSamplingResult 
+          }));
         }
         return;
       }

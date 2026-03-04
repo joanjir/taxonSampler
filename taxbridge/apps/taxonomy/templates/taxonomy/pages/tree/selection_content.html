@@ -1,18 +1,18 @@
 ﻿<!-- Selection content (dentro de tab) -->
-<div class="card-body p-0 border-bottom" style="position:relative; z-index:10;">
+<div class="card-body p-0 border-bottom" style="position:relative; z-index:1050;">
   <div class="d-flex align-items-center justify-content-between px-3 py-2 bg-light">
     <div>
       <span id="selModeBadge" class="badge bg-secondary-lt text-dark me-2">Manual</span>
       <span id="selSubtitle" class="text-muted small">Taxa selected for sampling / export</span>
     </div>
     <div class="btn-group btn-group-sm" role="group" aria-label="Selection actions">
-      <!-- Export dropdown (dropup so it stays above clades table) -->
-      <div class="btn-group btn-group-sm dropup" role="group">
+      <!-- Export dropdown -->
+      <div class="btn-group btn-group-sm dropdown" role="group">
         <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export">
           <i class="fa-solid fa-file-export me-1"></i>
           Export
         </button>
-        <ul class="dropdown-menu dropdown-menu-end shadow">
+        <ul class="dropdown-menu dropdown-menu-end shadow" style="z-index:1060;">
           <li>
             <button id="exportSelJson" class="dropdown-item" type="button"><i class="fa-solid fa-code me-2"></i>JSON</button>
           </li>
@@ -50,6 +50,26 @@
         </ul>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Add/Search organisms panel (shown only after DB sampling) -->
+<div id="selAddOrgWrap" class="card-body p-0 border-bottom d-none">
+  <div class="px-3 py-2">
+    <div class="fw-semibold small mb-2">
+      <i class="fa-solid fa-search-plus me-1 text-azure"></i>
+      Add species from scope
+      <span id="selAddOrgCount" class="badge bg-azure-lt text-dark ms-1" style="font-weight:normal;"></span>
+      <span class="help-icon text-muted ms-1"
+            data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="right"
+            data-bs-html="true" data-bs-custom-class="popover-help"
+            data-bs-content="<div class='small'>Search and add species from the current sampling scope that were not included in the initial sample.</div>">
+        <i class="fa-regular fa-circle-question"></i>
+      </span>
+    </div>
+    <select id="selAddOrgSelect" class="form-select form-select-sm" style="width:100%;">
+      <option></option>
+    </select>
   </div>
 </div>
 
@@ -111,7 +131,7 @@
             </span>
           </th>
           <th class="text-center" style="min-width:80px;">Level</th>
-          <th class="text-end pe-2" style="width:48px;"></th>
+          <th class="text-end pe-2" style="width:48px;">Actions</th>
         </tr>
       </thead>
       <tbody id="selList">

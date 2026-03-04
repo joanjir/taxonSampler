@@ -118,6 +118,7 @@ class SamplingStrategyTestCase(TestCase):
                 scientific_name=f"Arthropoda_sp_{i:02d}",
                 rank="species",
                 lineage="",
+            )
             col = ExternalTaxon.objects.create(
                 external_id=f"col_arthropoda_sp_{i:02d}",
                 name=f"Arthropoda_sp_{i:02d}",

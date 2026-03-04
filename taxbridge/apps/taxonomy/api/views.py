@@ -1401,11 +1401,17 @@ def sampling_stats(request):
 @require_GET
 def organisms_search(request):
     """
-    Search for organisms by name.
+    Search for organisms by name within the current sampling scope.
     Returns a list of organism names matching the query.
     
     Query params:
       q: search query (minimum 2 characters)
+      kingdom: filter by kingdom (optional)
+      phylum: filter by phylum (optional)
+      class: filter by class (optional)
+      order: filter by order (optional)
+      family: filter by family (optional)
+      full: if "1", return full organism data instead of just names
     """
     query = request.GET.get('q', '').strip().lower()
     
@@ -1414,20 +1420,64 @@ def organisms_search(request):
     
     from apps.taxonomy.models import NCBIGenome
     
-    # Search for organism names containing the query
-    organisms = (
-        NCBIGenome.objects
-        .filter(
-            organism_name__icontains=query,
-            col_match_status='matched',
-            external_taxon__isnull=False,
-        )
-        .values_list('organism_name', flat=True)
-        .distinct()
-        .order_by('organism_name')[:50]  # Limit to 50 results
+    # Build queryset with scope filters
+    qs = NCBIGenome.objects.filter(
+        organism_name__icontains=query,
+        col_match_status='matched',
+        external_taxon__isnull=False,
     )
     
-    return JsonResponse({"organisms": list(organisms)})
+    # Apply scope filters if provided (using classification JSONField)
+    kingdom = request.GET.get('kingdom', '').strip()
+    phylum = request.GET.get('phylum', '').strip()
+    class_name = request.GET.get('class', '').strip()
+    order = request.GET.get('order', '').strip()
+    family = request.GET.get('family', '').strip()
+    
+    if kingdom:
+        qs = qs.filter(external_taxon__classification__kingdom=kingdom)
+    if phylum:
+        qs = qs.filter(external_taxon__classification__phylum=phylum)
+    if class_name:
+        qs = qs.filter(external_taxon__classification__class=class_name)
+    if order:
+        qs = qs.filter(external_taxon__classification__order=order)
+    if family:
+        qs = qs.filter(external_taxon__classification__family=family)
+    
+    # Return full data or just names
+    full_data = request.GET.get('full', '') == '1'
+    
+    if full_data:
+        organisms = list(
+            qs.select_related('external_taxon')
+            .order_by('organism_name')[:50]
+        )
+        organisms_full = []
+        for g in organisms:
+            ext = g.external_taxon
+            cls = ext.classification if ext else {}
+            organisms_full.append({
+                "organism_name": g.organism_name,
+                "accession": g.assembly_accession,
+                "assembly_level": g.assembly_level,
+                "phylum": cls.get("phylum"),
+                "class_name": cls.get("class"),
+                "order": cls.get("order"),
+                "family": cls.get("family"),
+                "genus": cls.get("genus"),
+            })
+        return JsonResponse({
+            "organisms": [o["organism_name"] for o in organisms_full],
+            "organisms_full": organisms_full,
+        })
+    else:
+        organisms = (
+            qs.values_list('organism_name', flat=True)
+            .distinct()
+            .order_by('organism_name')[:50]
+        )
+        return JsonResponse({"organisms": list(organisms)})
 
 
 @csrf_exempt
@@ -1558,6 +1608,7 @@ def sampling_execute(request):
         "warnings": result.warnings,
         "clades": result.clades,
         "species": result.species,
+        "available_species": result.available_species,  # All species in scope
     })
 
 

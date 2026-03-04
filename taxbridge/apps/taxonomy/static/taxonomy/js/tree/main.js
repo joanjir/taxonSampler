@@ -112,6 +112,9 @@ window.addEventListener("db-sampling:final", (ev) => {
   const result = ev.detail || null;
   if (!result) return;
 
+  // Store available species list for the "Add species" dropdown
+  window.__availableScopedSpecies = result.available_species || [];
+
   // Store as "pre-assembly" result (Step 2 output)
   selMgr.setLastSampling(result);
   selMgr.setBadgeMode("DB Sampling", true);
@@ -124,10 +127,187 @@ window.addEventListener("db-sampling:final", (ev) => {
   const st = document.getElementById("samplingStatus");
   if (st) st.classList.remove("d-none");
 
+  // Show "Add species from scope" panel
+  const addOrgWrap = document.getElementById("selAddOrgWrap");
+  if (addOrgWrap) {
+    addOrgWrap.classList.remove("d-none");
+    // Re-initialize Select2 now that the panel is visible
+    initAddOrganismSelect2();
+  }
+
   // Auto-advance wizard to Step 3
   if (window.__samplingWizard?.setStep) {
     window.__samplingWizard.setStep(3);
   }
+});
+
+// =========================================================================
+// Selection tab: Add/Remove species controls (Select2)
+// =========================================================================
+
+// Get available species from sampling result (species not yet selected)
+// Returns array of species objects (not just names)
+function getUnselectedSpecies() {
+  const allAvailable = window.__availableScopedSpecies || [];
+  const currentSelection = selMgr.getLastSampling()?.species || [];
+  const selectedNames = new Set(currentSelection.map(s => s.organism_name));
+  // allAvailable now contains full species data objects
+  return allAvailable.filter(sp => !selectedNames.has(sp.organism_name));
+}
+
+// Update the "available to add" counter badge
+function updateAddSpeciesCounter() {
+  const countEl = document.getElementById('selAddOrgCount');
+  if (!countEl) return;
+  const unselected = getUnselectedSpecies();
+  if (unselected.length > 0) {
+    countEl.textContent = `${unselected.length} available`;
+    countEl.style.display = '';
+  } else {
+    countEl.textContent = '';
+    countEl.style.display = 'none';
+  }
+}
+
+// Initialize Select2 for organism search using local data from sampling
+function initAddOrganismSelect2() {
+  const $sel = $('#selAddOrgSelect');
+  if (!$sel.length) return;
+  
+  // Destroy previous instance if exists
+  if ($sel.hasClass('select2-hidden-accessible')) {
+    $sel.select2('destroy');
+  }
+  
+  const unselectedList = getUnselectedSpecies();
+  
+  $sel.select2({
+    theme: 'bootstrap-5',
+    placeholder: unselectedList.length > 0 ? 'Select species to add...' : 'No more species available',
+    allowClear: true,
+    minimumInputLength: 0,
+    // Use organism_name as both id and text
+    data: unselectedList.map(sp => ({ id: sp.organism_name, text: sp.organism_name })),
+    matcher: function(params, data) {
+      // Custom matcher for filtering
+      if (!params.term || params.term.trim() === '') {
+        return data;
+      }
+      const term = params.term.toLowerCase();
+      if (data.text.toLowerCase().indexOf(term) > -1) {
+        return data;
+      }
+      return null;
+    }
+  });
+  
+  // On selection, add organism
+  $sel.on('select2:select', function(e) {
+    const orgName = e.params.data.id;
+    addOrganismToSelection(orgName);
+  });
+  
+  // Update counter badge
+  updateAddSpeciesCounter();
+  
+  console.log('[Select2] Initialized with', unselectedList.length, 'available species');
+}
+
+// Add organism to current selection
+function addOrganismToSelection(organismName) {
+  const currentResult = selMgr.getLastSampling();
+  if (!currentResult) return;
+
+  // Check if already in selection
+  const alreadyExists = currentResult.species.some(s => s.organism_name === organismName);
+  if (alreadyExists) {
+    console.log(`[main] ${organismName} already in selection, skipping`);
+    return;
+  }
+
+  // Find full species data from available_species
+  const allAvailable = window.__availableScopedSpecies || [];
+  const speciesData = allAvailable.find(sp => sp.organism_name === organismName);
+  
+  if (!speciesData) {
+    console.warn(`[main] Species data not found for ${organismName}, adding minimal entry`);
+    currentResult.species.push({ organism_name: organismName });
+  } else {
+    // Add with full taxonomic data for proper tree placement
+    currentResult.species.push({
+      organism_name: speciesData.organism_name,
+      accession: speciesData.accession || "",
+      taxid: speciesData.taxid || null,
+      scientific_name: speciesData.scientific_name || organismName,
+      kingdom: speciesData.kingdom || "",
+      phylum: speciesData.phylum || "",
+      class: speciesData.class || "",
+      order: speciesData.order || "",
+      family: speciesData.family || "",
+      genus: speciesData.genus || "",
+      col_name: speciesData.col_name || "",
+      genome_level: speciesData.genome_level || "",
+      refseq_category: speciesData.refseq_category || "",
+      quality_score: speciesData.quality_score || null,
+      species_score: speciesData.species_score || 0,
+      clade_group: speciesData.phylum || "(added)",  // Use phylum as default clade
+    });
+  }
+  
+  currentResult.total_selected = currentResult.species.length;
+  
+  // Update UI
+  selMgr.setLastSampling(currentResult);
+  selMgr.repaintSelection();
+  
+  // Update phylo tree
+  if (phyloTree) {
+    phyloTree.generate(currentResult);
+  }
+  
+  // Refresh Select2 dropdown (remove added species from options)
+  initAddOrganismSelect2();
+  
+  console.log(`[main] Added ${organismName} to selection. Total: ${currentResult.total_selected}`);
+}
+
+// Remove organism from selection (called from table row button or tree delete)
+window.removeOrganismFromSelection = function(organismName) {
+  const currentResult = selMgr.getLastSampling();
+  if (!currentResult || !currentResult.species) return;
+  
+  currentResult.species = currentResult.species.filter(s => s.organism_name !== organismName);
+  currentResult.total_selected = currentResult.species.length;
+  
+  // Update UI
+  selMgr.setLastSampling(currentResult);
+  selMgr.repaintSelection();
+  
+  // Update phylo tree
+  if (phyloTree) {
+    phyloTree.generate(currentResult);
+  }
+  
+  // Refresh the "Add species" dropdown to include the removed species
+  initAddOrganismSelect2();
+  
+  console.log(`[main] Removed ${organismName} from selection`);
+};
+
+// Listen for selection changes (from selection.js remove button)
+window.addEventListener("selection:changed", (ev) => {
+  const result = ev.detail || null;
+  if (!result) return;
+  
+  console.log("[main] selection:changed →", result.total_selected, "species");
+  
+  // Update phylo tree
+  if (phyloTree && result.species?.length) {
+    phyloTree.generate(result);
+  }
+  
+  // Refresh the "Add species" dropdown to reflect updated selection
+  initAddOrganismSelect2();
 });
 
 // Assembly Filter result → Selection tab + Phylo tree
@@ -288,6 +468,13 @@ document.getElementById("clearSamplingView")?.addEventListener("click", () => {
 
   const st = document.getElementById("samplingStatus");
   if (st) st.classList.add("d-none");
+
+  // Hide "Add species from scope" panel
+  const addOrgWrap = document.getElementById("selAddOrgWrap");
+  if (addOrgWrap) addOrgWrap.classList.add("d-none");
+
+  // Clear scope filters
+  window.__currentSamplingScope = null;
 
   renderer.setSamplingMode?.("");
   renderer.setSamplingRootKey?.(null);

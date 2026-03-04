@@ -216,54 +216,6 @@
           </div>
         </div>
 
-        <!-- ========== STEP 2b: EDIT SAMPLED ORGANISMS (optional) ========== -->
-        <div id="samStep2b" class="d-none" style="display:none">
-
-          <div class="alert alert-info py-2 px-2 mb-3">
-            <div class="small">
-              <i class="fa-solid fa-info-circle me-1"></i>
-              <strong>Edit selection:</strong> Add or remove organisms from the sampling results.
-            </div>
-          </div>
-
-          <!-- Sampled organisms list -->
-          <div class="mb-3">
-            <label class="form-label small mb-1 fw-semibold">
-              Sampled organisms
-              <span id="sampledCountBadge" class="badge bg-primary ms-1">0</span>
-            </label>
-            <div id="sampledOrganismsList" class="border rounded px-2 py-2" style="max-height: 200px; overflow-y: auto;">
-              <div class="text-muted small">No organisms sampled yet</div>
-            </div>
-          </div>
-
-          <!-- Add organism search -->
-          <div class="mb-3">
-            <label class="form-label small mb-1 fw-semibold">
-              Add organism
-              <span class="help-icon text-muted" data-bs-toggle="popover" data-bs-trigger="hover" data-bs-placement="top" data-bs-custom-class="popover-help" data-bs-content="Search for an organism name and add it to the selection."><i class="fa-solid fa-circle-question"></i></span>
-            </label>
-            <div class="input-group input-group-sm">
-              <input type="text" id="addOrganismSearch" class="form-control form-control-sm" placeholder="e.g., Homo sapiens, Mus musculus..." />
-              <button id="addOrganismBtn" class="btn btn-outline-primary" type="button" disabled>
-                <i class="fa-solid fa-plus me-1"></i>Add
-              </button>
-            </div>
-            <div id="addOrganismResults" class="mt-2 d-none">
-              <div class="small text-muted mb-2">Found organisms:</div>
-              <div id="addOrganismResultsList" class="border rounded px-2 py-2" style="max-height: 150px; overflow-y: auto;"></div>
-            </div>
-          </div>
-
-          <!-- Action buttons -->
-          <div class="d-grid gap-2">
-            <button id="proceedToAssemblyFilter" class="btn btn-sm btn-azure" type="button">
-              <i class="fa-solid fa-forward me-1"></i>
-              Continue to assembly filter
-            </button>
-          </div>
-        </div>
-
         <!-- ========== STEP 3: ASSEMBLY FILTERING (optional) ========== -->
         <div id="samStep3" class="d-none" style="display:none">
 

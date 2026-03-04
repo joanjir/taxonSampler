@@ -175,17 +175,46 @@ function renderDendrogram(container, newickStr, speciesCount) {
   }
   drawClade(root);
 
-  // ── Leaf labels ────────────────────────────────────────────────
+  // ── Leaf labels with delete buttons ─────────────────────────────
   function drawLeaves(node) {
     if (!node.children || !node.children.length) {
+      const labelX = xOf(node.rootDist) + 6;
+      const labelY = yOf(node.yIdx);
+      const displayName = prettyName(node.name);
+      
+      // Add delete button (× icon) BEFORE the name
       g.append("text")
-        .attr("x", xOf(node.rootDist) + 6)
-        .attr("y", yOf(node.yIdx))
+        .attr("x", labelX)
+        .attr("y", labelY)
+        .attr("dy", "0.35em")
+        .attr("font-size", "14px")
+        .attr("fill", "#dc3545")
+        .attr("cursor", "pointer")
+        .attr("class", "phylo-delete-btn")
+        .attr("data-organism", displayName)
+        .text("×")
+        .on("click", function() {
+          const orgName = d3.select(this).attr("data-organism");
+          if (window.removeOrganismFromSelection) {
+            window.removeOrganismFromSelection(orgName);
+          }
+        })
+        .on("mouseover", function() {
+          d3.select(this).attr("fill", "#a71d2a");
+        })
+        .on("mouseout", function() {
+          d3.select(this).attr("fill", "#dc3545");
+        });
+      
+      // Draw species name label after the ×
+      g.append("text")
+        .attr("x", labelX + 14)
+        .attr("y", labelY)
         .attr("dy", "0.35em")
         .attr("font-size", "12px")
         .attr("font-style", "italic")
         .attr("fill", "#222")
-        .text(prettyName(node.name));
+        .text(displayName);
     } else {
       node.children.forEach(drawLeaves);
     }
