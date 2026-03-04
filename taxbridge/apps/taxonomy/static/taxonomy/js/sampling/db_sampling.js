@@ -126,6 +126,43 @@ export function initDbSampling() {
           const dot = document.createElement("div");
           dot.className = "rt-dot";
           dot.style.left = (i / max * 100) + "%";
+          dot.dataset.rankIndex = i;
+          
+          // Make dot clickable
+          dot.style.cursor = "pointer";
+          dot.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const rankIdx = parseInt(dot.dataset.rankIndex, 10);
+            
+            // Prevent selecting disabled ranks
+            if (rankIdx < _minRankIdx) {
+              return;
+            }
+            
+            const curStart = parseInt(dom.startRank.value, 10);
+            const curEnd = parseInt(dom.endRank.value, 10);
+            
+            // Determine which handle to move based on proximity
+            if (rankIdx < curStart || (rankIdx === curStart && rankIdx > curEnd)) {
+              // Click left of range or on start → move start
+              dom.startRank.value = rankIdx;
+            } else if (rankIdx > curEnd || (rankIdx === curEnd && rankIdx < curStart)) {
+              // Click right of range or on end → move end
+              dom.endRank.value = rankIdx;
+            } else {
+              // Click within range → move closest handle
+              const distToStart = Math.abs(rankIdx - curStart);
+              const distToEnd = Math.abs(rankIdx - curEnd);
+              if (distToStart <= distToEnd) {
+                dom.startRank.value = rankIdx;
+              } else {
+                dom.endRank.value = rankIdx;
+              }
+            }
+            
+            enforceConstraints();
+          });
+          
           dom.rangeDots.appendChild(dot);
         }
       }
