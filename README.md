@@ -111,6 +111,7 @@ graph TB
 | Frontend | Bootstrap 5 (Tabler), D3.js v5, ES Modules | UI, interactive visualization |
 | Phylogenetics | ETE3 3.1 | Newick tree generation |
 | Spreadsheet I/O | openpyxl 3.1 | XLSX import and export |
+| Markdown | Markdown 3.7 + bleach 6.3 | User content rendering with XSS sanitization |
 
 ---
 
