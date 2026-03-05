@@ -105,6 +105,25 @@ if (typeof bootstrap !== "undefined" && bootstrap.Popover) {
 }
 
 // =========================================================================
+// Warn user before leaving page if there's unsaved sampling progress
+// =========================================================================
+let _hasSamplingProgress = false;
+
+// Track when user has sampling progress
+window.addEventListener("db-sampling:final", () => { _hasSamplingProgress = true; });
+window.addEventListener("sampling:import", () => { _hasSamplingProgress = true; });
+
+// Show browser confirmation dialog on page reload/close
+window.addEventListener("beforeunload", (e) => {
+  if (_hasSamplingProgress) {
+    // Standard way to show "Leave site?" dialog
+    e.preventDefault();
+    e.returnValue = ""; // Required for Chrome
+    return ""; // Required for some browsers
+  }
+});
+
+// =========================================================================
 // Sampling result (global event from samplingCtl)
 // =========================================================================
 // DB Sampling result → auto-advance to Step 3 (Assembly Filtering)
