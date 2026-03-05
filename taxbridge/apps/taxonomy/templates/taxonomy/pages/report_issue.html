@@ -4,41 +4,42 @@
 
 {% block extra_css %}
 <style>
-  /* ── Wizard transitions (Rule 1: Consistency / Rule 3: Feedback) ── */
-  .wizard-step { display: none; animation: fadeSlideIn .3s ease; }
+  /* Wizard transitions */
+  .wizard-step { display: none; animation: fadeSlideIn .25s ease; }
   .wizard-step.active { display: block; }
-  @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-  /* ── Stepper (Rule 4: Closure — clear progress) ── */
-  .stepper { display: flex; gap: 0; margin-bottom: 1.5rem; }
+  /* Stepper COMPACT */
+  .stepper { display: flex; gap: 0; margin-bottom: 1rem; }
   .stepper-item { flex: 1; text-align: center; position: relative; }
   .stepper-item .step-circle {
-    width: 36px; height: 36px; border-radius: 50%; display: inline-flex;
-    align-items: center; justify-content: center; font-weight: 600;
+    width: 26px; height: 26px; border-radius: 50%; display: inline-flex;
+    align-items: center; justify-content: center; font-weight: 600; font-size: .75rem;
     border: 2px solid var(--tblr-border-color); background: var(--tblr-bg-surface);
     color: var(--tblr-secondary); transition: all .3s ease; position: relative; z-index: 2;
   }
-  .stepper-item .step-label { display: block; font-size: .75rem; color: var(--tblr-secondary); margin-top: .35rem; transition: color .3s; }
-  .stepper-item.active .step-circle { border-color: var(--tblr-primary); color: var(--tblr-primary); background: var(--tblr-primary-lt); box-shadow: 0 0 0 4px rgba(32,107,196,.15); }
+  .stepper-item .step-label { display: block; font-size: .7rem; color: var(--tblr-secondary); margin-top: .2rem; transition: color .3s; }
+  .stepper-item.active .step-circle { border-color: var(--tblr-primary); color: var(--tblr-primary); background: var(--tblr-primary-lt); box-shadow: 0 0 0 3px rgba(32,107,196,.15); }
   .stepper-item.active .step-label { color: var(--tblr-primary); font-weight: 600; }
   .stepper-item.done .step-circle { border-color: var(--tblr-success); background: var(--tblr-success); color: #fff; }
   .stepper-item.done .step-label { color: var(--tblr-success); }
   .stepper-item:not(:last-child)::after {
-    content: ''; position: absolute; top: 17px; left: calc(50% + 22px); right: calc(-50% + 22px);
+    content: ''; position: absolute; top: 12px; left: calc(50% + 16px); right: calc(-50% + 16px);
     height: 2px; background: var(--tblr-border-color); z-index: 1; transition: background .3s;
   }
   .stepper-item.done:not(:last-child)::after { background: var(--tblr-success); }
 
-  /* ── Type cards (Rule 7: Control / Rule 8: Reduce memory load) ── */
+  /* Type cards COMPACT horizontal */
   .type-card {
-    cursor: pointer; border: 2px solid var(--tblr-border-color); border-radius: .5rem;
-    padding: 1.25rem; text-align: center; transition: all .2s ease; height: 100%;
+    cursor: pointer; border: 2px solid var(--tblr-border-color); border-radius: .4rem;
+    padding: .5rem .75rem; display: flex; align-items: center; gap: .5rem;
+    transition: all .2s ease; height: 100%;
   }
-  .type-card:hover { border-color: var(--tblr-primary); background: var(--tblr-primary-lt); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
-  .type-card.selected { border-color: var(--tblr-primary); background: var(--tblr-primary-lt); box-shadow: 0 0 0 3px rgba(32,107,196,.25); }
-  .type-card .type-icon { font-size: 2rem; margin-bottom: .5rem; }
-  .type-card .type-name { font-weight: 600; font-size: .95rem; }
-  .type-card .type-desc { font-size: .78rem; color: var(--tblr-secondary); margin-top: .25rem; }
+  .type-card:hover { border-color: var(--tblr-primary); background: var(--tblr-primary-lt); }
+  .type-card.selected { border-color: var(--tblr-primary); background: var(--tblr-primary-lt); box-shadow: 0 0 0 2px rgba(32,107,196,.25); }
+  .type-card .type-icon { font-size: 1.3rem; flex-shrink: 0; }
+  .type-card .type-name { font-weight: 600; font-size: .85rem; line-height: 1.2; }
+  .type-card .type-desc { display: none; }
 
   /* ── Inline validation (Rule 5: Prevent errors) ── */
   .field-status { font-size: .78rem; margin-top: .25rem; display: none; }
@@ -46,9 +47,25 @@
   .field-status.valid { color: var(--tblr-success); }
   .field-status.invalid { color: var(--tblr-danger); }
 
-  /* ── Review table ── */
-  .review-table th { width: 140px; vertical-align: top; font-weight: 600; color: var(--tblr-secondary); }
-  .review-table td { word-break: break-word; }
+  /* Review table COMPACT */
+  .review-table th { width: 100px; vertical-align: top; font-weight: 600; color: var(--tblr-secondary); font-size: .8rem; padding: .4rem .5rem; }
+  .review-table td { word-break: break-word; font-size: .85rem; padding: .4rem .5rem; }
+
+  /* Markdown preview (GitHub style) */
+  #issuePreviewContent { font-size: .85rem; line-height: 1.5; }
+  #issuePreviewContent h2 { font-size: 1.25rem; border-bottom: 1px solid var(--tblr-border-color); padding-bottom: .3rem; margin-top: 0; }
+  #issuePreviewContent h3 { font-size: 1rem; margin-top: 1rem; margin-bottom: .5rem; }
+  #issuePreviewContent p { margin-bottom: .75rem; }
+  #issuePreviewContent table { width: 100%; border-collapse: collapse; margin: .5rem 0; font-size: .8rem; }
+  #issuePreviewContent th, #issuePreviewContent td { border: 1px solid var(--tblr-border-color); padding: .3rem .5rem; }
+  #issuePreviewContent th { background: var(--tblr-bg-surface-secondary); }
+  #issuePreviewContent code { background: var(--tblr-bg-surface-secondary); padding: .1rem .3rem; border-radius: .2rem; font-size: .8rem; }
+
+  /* Compact card body */
+  .wizard-step .card-body { padding: .75rem 1rem; }
+  .wizard-step .card-header { padding: .5rem 1rem; }
+  .wizard-step .card-footer { padding: .5rem 1rem; }
+  .wizard-step .card-title { font-size: .95rem; margin: 0; }
 
   /* ── Toast (Rule 3: Informative feedback) ── */
   .issue-toast {
@@ -102,46 +119,40 @@
       <div class="card">
         <div class="card-header"><h3 class="card-title">What kind of issue are you reporting?</h3></div>
         <div class="card-body">
-          <div class="row g-3">
-            <div class="col-6 col-md-4">
+          <div class="row g-2">
+            <div class="col-6 col-lg">
               <div class="type-card" data-type="bug" tabindex="0" role="button" aria-label="Bug Report">
                 <div class="type-icon">🐛</div>
-                <div class="type-name">Bug Report</div>
-                <div class="type-desc">Something is broken or not working as expected</div>
+                <div class="type-name">Bug</div>
               </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-lg">
               <div class="type-card" data-type="feature" tabindex="0" role="button" aria-label="Feature Request">
                 <div class="type-icon">✨</div>
-                <div class="type-name">Feature Request</div>
-                <div class="type-desc">Suggest a new feature or improvement</div>
+                <div class="type-name">Feature</div>
               </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-lg">
               <div class="type-card" data-type="data" tabindex="0" role="button" aria-label="Data Issue">
                 <div class="type-icon">🗄️</div>
                 <div class="type-name">Data Issue</div>
-                <div class="type-desc">Incorrect taxonomy, missing species, or wrong data</div>
               </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-lg">
               <div class="type-card" data-type="question" tabindex="0" role="button" aria-label="Question">
                 <div class="type-icon">❓</div>
                 <div class="type-name">Question</div>
-                <div class="type-desc">Ask for help or clarification</div>
               </div>
             </div>
-            <div class="col-6 col-md-4">
+            <div class="col-6 col-lg">
               <div class="type-card" data-type="docs" tabindex="0" role="button" aria-label="Documentation">
                 <div class="type-icon">📖</div>
-                <div class="type-name">Documentation</div>
-                <div class="type-desc">Improve or fix documentation</div>
+                <div class="type-name">Docs</div>
               </div>
             </div>
           </div>
-          <!-- Hint (Rule 5: Prevent errors — guide before user acts) -->
-          <div class="text-secondary text-center mt-3 small" id="step1Hint">
-            <i class="ti ti-info-circle me-1"></i>Select a category to continue. Already reported? <a href="https://github.com/joanjir/taxonSampler/issues" target="_blank">Check existing issues first →</a>
+          <div class="text-secondary text-center mt-2 small" id="step1Hint">
+            <i class="ti ti-info-circle me-1"></i>Select a category. <a href="https://github.com/joanjir/taxonSampler/issues" target="_blank">Check existing issues →</a>
           </div>
         </div>
         <div class="card-footer text-end">
@@ -161,76 +172,68 @@
         </div>
         <div class="card-body">
 
-          <!-- Severity (bugs only, animated) -->
-          <div class="mb-3" id="severityGroup" style="display:none;">
-            <label class="form-label">Severity</label>
-            <div class="form-selectgroup">
-              <label class="form-selectgroup-item">
-                <input type="radio" name="severity" value="low" class="form-selectgroup-input" checked>
-                <span class="form-selectgroup-label"><i class="ti ti-arrow-down text-success me-1"></i>Low</span>
-              </label>
-              <label class="form-selectgroup-item">
-                <input type="radio" name="severity" value="medium" class="form-selectgroup-input">
-                <span class="form-selectgroup-label"><i class="ti ti-minus text-warning me-1"></i>Medium</span>
-              </label>
-              <label class="form-selectgroup-item">
-                <input type="radio" name="severity" value="high" class="form-selectgroup-input">
-                <span class="form-selectgroup-label"><i class="ti ti-arrow-up text-danger me-1"></i>High</span>
-              </label>
-              <label class="form-selectgroup-item">
-                <input type="radio" name="severity" value="critical" class="form-selectgroup-input">
-                <span class="form-selectgroup-label"><i class="ti ti-alert-triangle text-danger me-1"></i>Critical</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Title -->
-          <div class="mb-3">
-            <label class="form-label required" for="issueTitle">Title</label>
-            <input id="issueTitle" type="text" class="form-control" placeholder="" required maxlength="200" autocomplete="off">
-            <div class="d-flex justify-content-between">
-              <span class="field-status" id="titleStatus"></span>
-              <span class="form-hint" id="titleHint">0 / 200</span>
-            </div>
-          </div>
-
-          <!-- Description -->
-          <div class="mb-3">
-            <label class="form-label required" for="issueDescription">Description</label>
-            <textarea id="issueDescription" class="form-control" rows="7" placeholder="" required></textarea>
-            <div class="d-flex justify-content-between">
-              <span class="field-status" id="descStatus"></span>
-              <span class="form-hint" id="descHint">Minimum 20 characters</span>
-            </div>
-          </div>
-
-          <!-- Steps to reproduce (bugs only) -->
-          <div class="mb-3" id="stepsGroup" style="display:none;">
-            <label class="form-label" for="issueSteps">Steps to Reproduce <span class="text-secondary">(optional)</span></label>
-            <textarea id="issueSteps" class="form-control" rows="3" placeholder="1. Go to…&#10;2. Click on…&#10;3. See error…"></textarea>
-          </div>
-
-          <!-- Expected vs Actual (bugs only) -->
-          <div class="row" id="expectedActualGroup" style="display:none;">
-            <div class="col-md-6 mb-3">
-              <label class="form-label" for="issueExpected">Expected Behavior <span class="text-secondary">(optional)</span></label>
-              <textarea id="issueExpected" class="form-control" rows="2" placeholder="What should happen?"></textarea>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label" for="issueActual">Actual Behavior <span class="text-secondary">(optional)</span></label>
-              <textarea id="issueActual" class="form-control" rows="2" placeholder="What actually happened?"></textarea>
-            </div>
-          </div>
-
-          <!-- Tip -->
-          <div class="alert alert-info alert-sm mb-0">
-            <div class="d-flex align-items-start">
-              <i class="ti ti-bulb alert-icon me-2" style="font-size:1.2rem;"></i>
-              <div class="small">
-                <strong>Tip:</strong> Be specific — include species names, page URLs, or error messages.
-                You can add screenshots later on the GitHub issue page.
+          <!-- Severity + Title row (bugs: inline) -->
+          <div class="row mb-2" id="severityTitleRow">
+            <div class="col-auto" id="severityGroup" style="display:none;">
+              <label class="form-label">Severity</label>
+              <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" name="severity" value="low" id="sevLow" checked>
+                <label class="btn btn-outline-success btn-sm py-1 px-2" for="sevLow">Low</label>
+                <input type="radio" class="btn-check" name="severity" value="medium" id="sevMed">
+                <label class="btn btn-outline-warning btn-sm py-1 px-2" for="sevMed">Med</label>
+                <input type="radio" class="btn-check" name="severity" value="high" id="sevHigh">
+                <label class="btn btn-outline-danger btn-sm py-1 px-2" for="sevHigh">High</label>
+                <input type="radio" class="btn-check" name="severity" value="critical" id="sevCrit">
+                <label class="btn btn-outline-dark btn-sm py-1 px-2" for="sevCrit">Critical</label>
               </div>
             </div>
+            <div class="col">
+              <label class="form-label required" for="issueTitle">Title</label>
+              <input id="issueTitle" type="text" class="form-control form-control-sm" placeholder="" required maxlength="200" autocomplete="off">
+            </div>
+          </div>
+          <div class="d-flex justify-content-end mb-1">
+            <span class="form-hint small" id="titleHint">0 / 200</span>
+          </div>
+          <span class="field-status" id="titleStatus"></span>
+
+          <!-- Description -->
+          <div class="mb-2">
+            <label class="form-label required" for="issueDescription">Description</label>
+            <textarea id="issueDescription" class="form-control form-control-sm" rows="3" placeholder="" required></textarea>
+            <div class="d-flex justify-content-end">
+              <span class="form-hint small" id="descHint">Min 20 chars</span>
+            </div>
+            <span class="field-status" id="descStatus"></span>
+          </div>
+
+          <!-- Email + Steps row (bugs: side by side) -->
+          <div class="row mb-2">
+            <div class="col-md-6">
+              <label class="form-label" for="issueEmail">Email <span class="text-secondary">(for updates)</span></label>
+              <input id="issueEmail" type="email" class="form-control form-control-sm" placeholder="you@example.com" autocomplete="email">
+            </div>
+            <div class="col-md-6" id="stepsGroup" style="display:none;">
+              <label class="form-label" for="issueSteps">Steps <span class="text-secondary">(opt)</span></label>
+              <input id="issueSteps" type="text" class="form-control form-control-sm" placeholder="1. Go to… 2. Click… 3. Error">
+            </div>
+          </div>
+
+          <!-- Expected vs Actual (bugs only - single row) -->
+          <div class="row mb-2" id="expectedActualGroup" style="display:none;">
+            <div class="col-6">
+              <label class="form-label" for="issueExpected">Expected <span class="text-secondary">(opt)</span></label>
+              <input id="issueExpected" type="text" class="form-control form-control-sm" placeholder="Should happen...">
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="issueActual">Actual <span class="text-secondary">(opt)</span></label>
+              <input id="issueActual" type="text" class="form-control form-control-sm" placeholder="Actually happened...">
+            </div>
+          </div>
+
+          <!-- Tip (compact) -->
+          <div class="text-secondary small">
+            <i class="ti ti-bulb me-1"></i>Be specific — include species names, URLs, or error messages.
           </div>
 
         </div>
@@ -248,11 +251,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Auto-save indicator (Rule 3: Feedback) -->
-      <div class="text-center mt-2 small text-secondary" id="autosaveStatus">
-        <i class="ti ti-device-floppy me-1"></i>Draft auto-saved locally
-      </div>
     </div>
 
     <!-- ══════ STEP 3 — Review & Submit (Rule 4: Closure / Rule 6: Reversal) ══════ -->
@@ -267,6 +265,7 @@
               <tr><th>Type</th><td id="reviewType"></td></tr>
               <tr id="reviewSeverityRow" style="display:none;"><th>Severity</th><td id="reviewSeverity"></td></tr>
               <tr><th>Title</th><td id="reviewTitle" class="fw-bold"></td></tr>
+              <tr id="reviewEmailRow" style="display:none;"><th>Email</th><td id="reviewEmail"></td></tr>
               <tr><th>Description</th><td id="reviewDesc" style="white-space:pre-wrap;"></td></tr>
               <tr id="reviewStepsRow" style="display:none;"><th>Steps to Reproduce</th><td id="reviewSteps" style="white-space:pre-wrap;"></td></tr>
               <tr id="reviewExpectedRow" style="display:none;"><th>Expected / Actual</th><td id="reviewExpectedActual"></td></tr>
@@ -279,12 +278,12 @@
         </div>
 
         <!-- Markdown preview toggle -->
-        <div class="card-body border-top pt-3 pb-2">
+        <div class="card-body border-top pt-2 pb-2">
           <a class="btn btn-ghost-secondary btn-sm" data-bs-toggle="collapse" href="#mdPreview" role="button" aria-expanded="false">
-            <i class="ti ti-code me-1"></i>View as Markdown
+            <i class="ti ti-eye me-1"></i>Preview as GitHub will show it
           </a>
           <div class="collapse mt-2" id="mdPreview">
-            <pre id="issuePreviewContent" class="bg-dark text-light p-3 rounded" style="white-space:pre-wrap; font-size:.78rem; max-height:280px; overflow-y:auto;"></pre>
+            <div id="issuePreviewContent" class="border rounded p-3" style="max-height:280px; overflow-y:auto; background: var(--tblr-bg-surface);"></div>
           </div>
         </div>
 
@@ -310,6 +309,8 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Marked.js for Markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
 (function () {
   'use strict';
@@ -331,6 +332,7 @@
   const stepsEl     = document.getElementById('issueSteps');
   const expectedEl  = document.getElementById('issueExpected');
   const actualEl    = document.getElementById('issueActual');
+  const emailEl     = document.getElementById('issueEmail');
   const titleHint   = document.getElementById('titleHint');
   const descHint    = document.getElementById('descHint');
   const titleStatus = document.getElementById('titleStatus');
@@ -340,7 +342,6 @@
   const stepsGroup  = document.getElementById('stepsGroup');
   const eaGroup     = document.getElementById('expectedActualGroup');
   const step2Badge  = document.getElementById('step2Badge');
-  const autosave    = document.getElementById('autosaveStatus');
 
   let currentStep = 1;
   let selectedType = '';
@@ -460,6 +461,7 @@
 
   titleEl.addEventListener('input', () => { validateStep2(); debounceSave(); });
   descEl.addEventListener('input', () => { validateStep2(); debounceSave(); });
+  if (emailEl)     emailEl.addEventListener('input', debounceSave);
   if (stepsEl)   stepsEl.addEventListener('input', debounceSave);
   if (expectedEl) expectedEl.addEventListener('input', debounceSave);
   if (actualEl)  actualEl.addEventListener('input', debounceSave);
@@ -471,6 +473,7 @@
   btnReset2.addEventListener('click', () => {
     if (!confirm('Clear all fields and start over?')) return;
     titleEl.value = ''; descEl.value = '';
+    if (emailEl) emailEl.value = '';
     if (stepsEl) stepsEl.value = '';
     if (expectedEl) expectedEl.value = '';
     if (actualEl) actualEl.value = '';
@@ -494,6 +497,14 @@
     document.getElementById('reviewDesc').textContent = descEl.value.trim();
     document.getElementById('reviewEnv').textContent = envInfo;
 
+    // Show email in review if provided
+    const emailVal = emailEl ? emailEl.value.trim() : '';
+    const emailRow = document.getElementById('reviewEmailRow');
+    if (emailRow) {
+      emailRow.style.display = emailVal ? '' : 'none';
+      document.getElementById('reviewEmail').textContent = emailVal;
+    }
+
     if (selectedType === 'bug') {
       const sev = document.querySelector('input[name="severity"]:checked');
       document.getElementById('reviewSeverityRow').style.display = '';
@@ -515,7 +526,8 @@
       document.getElementById('reviewExpectedRow').style.display = 'none';
     }
 
-    previewEl.textContent = buildMarkdown();
+    // Render Markdown as HTML preview
+    previewEl.innerHTML = marked.parse(buildMarkdown());
   }
 
   btnBack3.addEventListener('click', () => goToStep(2));
@@ -525,6 +537,10 @@
     const meta = TYPES[selectedType] || {};
     let md = '## ' + meta.label + '\n\n';
     md += '### Description\n' + descEl.value.trim() + '\n\n';
+
+    // Include email if provided
+    const emailVal = emailEl ? emailEl.value.trim() : '';
+    if (emailVal) md += '**Contact Email:** ' + emailVal + '\n\n';
 
     if (selectedType === 'bug') {
       const sev = document.querySelector('input[name="severity"]:checked');
@@ -634,6 +650,7 @@
     selectedType = '';
     titleEl.value = '';
     descEl.value = '';
+    if (emailEl) emailEl.value = '';
     if (stepsEl) stepsEl.value = '';
     if (expectedEl) expectedEl.value = '';
     if (actualEl) actualEl.value = '';
@@ -672,16 +689,13 @@
       severity: selectedType === 'bug' ? (document.querySelector('input[name="severity"]:checked') || {}).value : null,
       title: titleEl.value,
       desc: descEl.value,
+      email: emailEl ? emailEl.value : '',
       steps: stepsEl ? stepsEl.value : '',
       expected: expectedEl ? expectedEl.value : '',
       actual: actualEl ? actualEl.value : '',
       ts: Date.now()
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(draft)); } catch (_) {}
-    if (autosave) {
-      autosave.innerHTML = '<i class="ti ti-check me-1 text-success"></i>Draft saved just now';
-      setTimeout(() => { autosave.innerHTML = '<i class="ti ti-device-floppy me-1"></i>Draft auto-saved locally'; }, 2000);
-    }
   }
 
   function restoreDraft() {
@@ -695,6 +709,7 @@
     selectType(draft.type);
     titleEl.value = draft.title || '';
     descEl.value = draft.desc || '';
+    if (emailEl) emailEl.value = draft.email || '';
     if (stepsEl) stepsEl.value = draft.steps || '';
     if (expectedEl) expectedEl.value = draft.expected || '';
     if (actualEl) actualEl.value = draft.actual || '';
@@ -722,8 +737,8 @@
 
   function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-  // ── Init ──
-  restoreDraft();
+  // ── Init ── (always start fresh)
+  localStorage.removeItem(STORAGE_KEY);
 })();
 </script>
 {% endblock %}
