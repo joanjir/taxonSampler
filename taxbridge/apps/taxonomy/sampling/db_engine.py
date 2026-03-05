@@ -579,6 +579,7 @@ def run_db_sampling(
 
     # ── Build available_species with full data ──
     # Include all species in scope with their taxonomic classification
+    # and ALL genome metadata (needed when user adds species manually)
     _selected_names = {sp.get("organism_name") for sp in final_selected}
     _available_species_data: List[Dict[str, Any]] = []
     
@@ -588,10 +589,12 @@ def run_db_sampling(
             continue
         cls = g.external_taxon.classification or {} if g.external_taxon else {}
         _available_species_data.append({
+            # Identification
             "organism_name": org_name,
             "accession": g.accession,
             "taxid": g.taxon.taxid if g.taxon else None,
             "scientific_name": g.taxon.scientific_name if g.taxon else org_name,
+            # Taxonomy (for tree placement and Excel)
             "kingdom": cls.get("kingdom", ""),
             "phylum": cls.get("phylum", ""),
             "class": cls.get("class", ""),
@@ -599,9 +602,23 @@ def run_db_sampling(
             "family": cls.get("family", ""),
             "genus": cls.get("genus", ""),
             "col_name": g.external_taxon.name if g.external_taxon else "",
+            # Assembly metadata (for Excel export - scientific articles)
             "genome_level": g.genome_level or "",
             "refseq_category": g.refseq_category or "",
+            "genome_coverage": g.genome_coverage,
+            "total_sequence_length": g.total_sequence_length,
+            "gc_percent": g.gc_percent,
+            "contig_n50_kb": g.contig_n50_kb,
+            "scaffold_n50_kb": g.scaffold_n50_kb,
+            "scaffold_count": g.scaffold_count,
+            "chromosome_count": g.chromosome_count,
+            "genes": g.genes,
+            "protein_coding": g.protein_coding,
             "quality_score": g.quality_score,
+            "release_date": g.release_date or "",
+            "source_database": g.source_database or "",
+            "sequencing_tech": g.sequencing_tech or "",
+            "busco_complete": g.busco_complete,
             "species_score": compute_species_score(g),
         })
 

@@ -305,12 +305,14 @@ function addOrganismToSelection(organismName) {
     console.warn(`[main] Species data not found for ${organismName}, adding minimal entry`);
     currentResult.species.push({ organism_name: organismName });
   } else {
-    // Add with full taxonomic data for proper tree placement
+    // Add with ALL data for proper Excel export (scientific articles need full metadata)
     currentResult.species.push({
+      // Identification
       organism_name: speciesData.organism_name,
       accession: speciesData.accession || "",
       taxid: speciesData.taxid || null,
       scientific_name: speciesData.scientific_name || organismName,
+      // Taxonomy (for tree placement)
       kingdom: speciesData.kingdom || "",
       phylum: speciesData.phylum || "",
       class: speciesData.class || "",
@@ -318,11 +320,25 @@ function addOrganismToSelection(organismName) {
       family: speciesData.family || "",
       genus: speciesData.genus || "",
       col_name: speciesData.col_name || "",
+      clade_group: speciesData.phylum || "(added)",  // Use phylum as default clade
+      // Assembly metadata (for Excel export)
       genome_level: speciesData.genome_level || "",
       refseq_category: speciesData.refseq_category || "",
-      quality_score: speciesData.quality_score || null,
+      genome_coverage: speciesData.genome_coverage ?? null,
+      total_sequence_length: speciesData.total_sequence_length ?? null,
+      gc_percent: speciesData.gc_percent ?? null,
+      contig_n50_kb: speciesData.contig_n50_kb ?? null,
+      scaffold_n50_kb: speciesData.scaffold_n50_kb ?? null,
+      scaffold_count: speciesData.scaffold_count ?? null,
+      chromosome_count: speciesData.chromosome_count ?? null,
+      genes: speciesData.genes ?? null,
+      protein_coding: speciesData.protein_coding ?? null,
+      quality_score: speciesData.quality_score ?? null,
+      release_date: speciesData.release_date || "",
+      source_database: speciesData.source_database || "",
+      sequencing_tech: speciesData.sequencing_tech || "",
+      busco_complete: speciesData.busco_complete ?? null,
       species_score: speciesData.species_score || 0,
-      clade_group: speciesData.phylum || "(added)",  // Use phylum as default clade
     });
   }
   

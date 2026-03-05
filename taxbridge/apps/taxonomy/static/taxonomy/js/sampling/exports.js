@@ -129,39 +129,60 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       const XLSX = await loadXLSX();
       const species = last.species || [];
 
-      // Build rows with all available fields
-      const rows = species.map((s, i) => ({
-        "#":               i + 1,
-        "Organism Name":   s.organism_name || "",
-        "Scientific Name": s.scientific_name || s.organism_name || "",
-        "TaxID":           s.taxid || "",
-        "Accession":       s.accession || "",
-        "Kingdom":         s.kingdom || "",
-        "Phylum":          s.phylum || "",
-        "Class":           s.class || "",
-        "Order":           s.order || "",
-        "Family":          s.family || "",
-        "Genus":           s.genus || "",
-        "COL Name":        s.col_name || "",
-        "Clade Group":     s.clade_group || "",
-        "Genome Level":    s.genome_level || "",
-        "RefSeq Category": s.refseq_category || "",
-        "Coverage":        s.genome_coverage ?? "",
-        "Genome Size (bp)": s.total_sequence_length ?? "",
-        "GC %":            s.gc_percent ?? "",
-        "Contig N50 (kb)": s.contig_n50_kb ?? "",
-        "Scaffold N50 (kb)": s.scaffold_n50_kb ?? "",
-        "Scaffolds":       s.scaffold_count ?? "",
-        "Chromosomes":     s.chromosome_count ?? "",
-        "Genes":           s.genes ?? "",
-        "Protein Coding":  s.protein_coding ?? "",
-        "Quality Score":   s.quality_score ?? "",
-        "Species Score":   s.species_score ?? "",
-        "Release Date":    s.release_date || "",
-        "Source DB":       s.source_database || "",
-        "Sequencing Tech": s.sequencing_tech || "",
-        "BUSCO Complete %": s.busco_complete ?? "",
-      }));
+      // Build rows with fields organized for scientific publication supplementary tables
+      // Order follows common conventions in genomics papers: ID → Taxonomy → Assembly → Quality
+      const rows = species.map((s, i) => {
+        // Convert bytes to Mb for readability (common in publications)
+        const genomeSizeMb = s.total_sequence_length 
+          ? (s.total_sequence_length / 1_000_000).toFixed(2) 
+          : "";
+        // Convert kb to Mb for N50 (more standard in publications)
+        const scaffoldN50Mb = s.scaffold_n50_kb 
+          ? (s.scaffold_n50_kb / 1000).toFixed(3) 
+          : "";
+        const contigN50Mb = s.contig_n50_kb 
+          ? (s.contig_n50_kb / 1000).toFixed(3) 
+          : "";
+        
+        return {
+          // === Identification ===
+          "#":                    i + 1,
+          "Organism":             s.organism_name || "",
+          "Assembly Accession":   s.accession || "",
+          "NCBI TaxID":           s.taxid || "",
+          // === Taxonomy (hierarchical) ===
+          "Kingdom":              s.kingdom || "",
+          "Phylum":               s.phylum || "",
+          "Class":                s.class || "",
+          "Order":                s.order || "",
+          "Family":               s.family || "",
+          "Genus":                s.genus || "",
+          // === Assembly metrics ===
+          "Assembly Level":       s.genome_level || "",
+          "RefSeq Category":      s.refseq_category || "",
+          "Genome Size (Mb)":     genomeSizeMb,
+          "GC Content (%)":       s.gc_percent ? s.gc_percent.toFixed(1) : "",
+          "Scaffold N50 (Mb)":    scaffoldN50Mb,
+          "Contig N50 (Mb)":      contigN50Mb,
+          "Coverage (X)":         s.genome_coverage ?? "",
+          "Scaffolds":            s.scaffold_count ?? "",
+          "Chromosomes":          s.chromosome_count ?? "",
+          // === Annotation ===
+          "Total Genes":          s.genes ?? "",
+          "Protein-Coding":       s.protein_coding ?? "",
+          "BUSCO Complete (%)":   s.busco_complete ?? "",
+          // === Quality scores ===
+          "Quality Score":        s.quality_score ? s.quality_score.toFixed(2) : "",
+          "Assembly Score":       s.assembly_score ? s.assembly_score.toFixed(2) : "",
+          // === Metadata ===
+          "Release Date":         s.release_date || "",
+          "Source Database":      s.source_database || "",
+          "Sequencing Tech":      s.sequencing_tech || "",
+          // === Sampling info ===
+          "Clade Group":          s.clade_group || "",
+          "COL Match":            s.col_name || "",
+        };
+      });
 
       // Create workbook with two sheets: Species + Clades
       const wb = XLSX.utils.book_new();
