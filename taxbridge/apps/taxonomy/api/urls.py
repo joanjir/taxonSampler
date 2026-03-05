@@ -68,4 +68,7 @@ urlpatterns = [
     path("discovery/species/", api_discovered_species, name="discovered-species"),
     path("discovery/<int:species_id>/import/", api_import_discovered, name="discovery-import"),
     path("discovery/<int:species_id>/dismiss/", api_dismiss_discovered, name="discovery-dismiss"),
+    
+    # Utilities
+    path("render-markdown/", views.render_markdown, name="render-markdown"),
 ]

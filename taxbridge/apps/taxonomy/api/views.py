@@ -1905,3 +1905,31 @@ def assembly_filter(request):
         "warnings": result.warnings,
         "species": result.species,
     })
+
+
+# =============================================================================
+# Markdown rendering endpoint
+# =============================================================================
+@require_POST
+def render_markdown(request):
+    """
+    Render Markdown text to HTML using Python's markdown library.
+    
+    POST body: { "text": "# Markdown content..." }
+    Response: { "html": "<h1>Markdown content...</h1>" }
+    """
+    import markdown
+    
+    try:
+        data = json.loads(request.body)
+        text = data.get("text", "")
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    
+    # Render with tables extension for GitHub-style tables
+    html = markdown.markdown(
+        text,
+        extensions=["tables", "fenced_code", "nl2br"]
+    )
+    
+    return JsonResponse({"html": html})

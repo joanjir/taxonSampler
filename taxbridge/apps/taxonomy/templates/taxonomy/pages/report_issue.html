@@ -309,13 +309,12 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Marked.js for Markdown rendering -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
 (function () {
   'use strict';
   const GITHUB_REPO = 'https://github.com/joanjir/taxonSampler';
   const STORAGE_KEY = 'taxonsampler_issue_draft';
+  const MARKDOWN_URL = '{% url "taxonomy_api:render-markdown" %}';
 
   // ── DOM refs ──
   const steps       = document.querySelectorAll('.wizard-step');
@@ -526,8 +525,17 @@
       document.getElementById('reviewExpectedRow').style.display = 'none';
     }
 
-    // Render Markdown as HTML preview
-    previewEl.innerHTML = marked.parse(buildMarkdown());
+    // Render Markdown as HTML preview via Python backend
+    const mdText = buildMarkdown();
+    previewEl.innerHTML = '<span class="text-secondary"><i class="ti ti-loader spinner-border spinner-border-sm me-1"></i>Loading preview...</span>';
+    fetch(MARKDOWN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+      body: JSON.stringify({ text: mdText })
+    })
+    .then(r => r.json())
+    .then(data => { previewEl.innerHTML = data.html || '<em>Preview unavailable</em>'; })
+    .catch(() => { previewEl.innerHTML = '<em>Preview unavailable</em>'; });
   }
 
   btnBack3.addEventListener('click', () => goToStep(2));

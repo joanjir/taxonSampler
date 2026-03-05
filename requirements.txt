@@ -17,6 +17,9 @@ sqlparse==0.5.5
 tzdata==2025.3
 urllib3==2.6.2
 
+# Markdown rendering
+Markdown==3.7
+
 # Celery (Task Queue)
 celery==5.4.0
 redis==5.2.1
