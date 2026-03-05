@@ -14,7 +14,7 @@ import { copyToClipboard } from "../tree/ui.js";
 import { saveAs } from "../shared/save_as.js";
 
 /**
- * Dynamically load SheetJS (xlsx) from CDN if not already loaded.
+ * Dynamically load SheetJS with style support (xlsx-js-style) from CDN.
  * Returns the XLSX global.
  */
 let _xlsxPromise = null;
@@ -23,7 +23,8 @@ function loadXLSX() {
   if (_xlsxPromise) return _xlsxPromise;
   _xlsxPromise = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    // Use xlsx-js-style for cell styling support (yellow headers, bold, etc.)
+    s.src = "https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js";
     s.onload = () => resolve(window.XLSX);
     s.onerror = () => reject(new Error("Failed to load SheetJS library"));
     document.head.appendChild(s);
@@ -172,6 +173,23 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
         wch: Math.max(k.length, ...rows.map(r => String(r[k] ?? "").length).slice(0, 50)) + 2
       }));
       wsSpecies["!cols"] = colWidths;
+      
+      // Freeze header row (first row stays fixed while scrolling)
+      wsSpecies["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", state: "frozen" };
+      
+      // Apply yellow background and bold font to header row
+      const headerRange = XLSX.utils.decode_range(wsSpecies["!ref"]);
+      for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (wsSpecies[cellRef]) {
+          wsSpecies[cellRef].s = {
+            fill: { patternType: "solid", fgColor: { rgb: "FFFF00" } },
+            font: { bold: true, color: { rgb: "000000" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+      }
+      
       XLSX.utils.book_append_sheet(wb, wsSpecies, "Species");
 
       // Sheet 2: Clades allocation
@@ -184,6 +202,23 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       }));
       if (clades.length) {
         const wsClades = XLSX.utils.json_to_sheet(clades);
+        
+        // Freeze header row
+        wsClades["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", state: "frozen" };
+        
+        // Apply yellow background to header row
+        const cladesRange = XLSX.utils.decode_range(wsClades["!ref"]);
+        for (let col = cladesRange.s.c; col <= cladesRange.e.c; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+          if (wsClades[cellRef]) {
+            wsClades[cellRef].s = {
+              fill: { patternType: "solid", fgColor: { rgb: "FFFF00" } },
+              font: { bold: true, color: { rgb: "000000" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          }
+        }
+        
         XLSX.utils.book_append_sheet(wb, wsClades, "Clades");
       }
 
