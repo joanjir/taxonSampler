@@ -168,24 +168,25 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
       // Sheet 1: Species
       const wsSpecies = XLSX.utils.json_to_sheet(rows);
+      
       // Auto-width columns
       const colWidths = Object.keys(rows[0] || {}).map(k => ({
         wch: Math.max(k.length, ...rows.map(r => String(r[k] ?? "").length).slice(0, 50)) + 2
       }));
       wsSpecies["!cols"] = colWidths;
       
-      // Freeze header row (first row stays fixed while scrolling)
-      wsSpecies["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", state: "frozen" };
-      
-      // Apply yellow background and bold font to header row
+      // Apply yellow background and bold font to header row (row 0)
       const headerRange = XLSX.utils.decode_range(wsSpecies["!ref"]);
       for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
         const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
         if (wsSpecies[cellRef]) {
           wsSpecies[cellRef].s = {
             fill: { patternType: "solid", fgColor: { rgb: "FFFF00" } },
-            font: { bold: true, color: { rgb: "000000" } },
-            alignment: { horizontal: "center", vertical: "center" }
+            font: { bold: true, sz: 11 },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: {
+              bottom: { style: "thin", color: { rgb: "000000" } }
+            }
           };
         }
       }
@@ -203,9 +204,6 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       if (clades.length) {
         const wsClades = XLSX.utils.json_to_sheet(clades);
         
-        // Freeze header row
-        wsClades["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", state: "frozen" };
-        
         // Apply yellow background to header row
         const cladesRange = XLSX.utils.decode_range(wsClades["!ref"]);
         for (let col = cladesRange.s.c; col <= cladesRange.e.c; col++) {
@@ -213,8 +211,11 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
           if (wsClades[cellRef]) {
             wsClades[cellRef].s = {
               fill: { patternType: "solid", fgColor: { rgb: "FFFF00" } },
-              font: { bold: true, color: { rgb: "000000" } },
-              alignment: { horizontal: "center", vertical: "center" }
+              font: { bold: true, sz: 11 },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: {
+                bottom: { style: "thin", color: { rgb: "000000" } }
+              }
             };
           }
         }
@@ -226,6 +227,8 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const xlsxBlob = new Blob([wbOut], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       await saveAs(xlsxBlob, "sampling_report.xlsx", xlsxBlob.type);
+      
+      console.log("[exports] Excel export complete with styled headers");
     } catch (err) {
       console.error("[exports] Excel export error:", err);
       Swal.fire({ icon: 'error', title: 'Export failed', text: 'Excel export failed: ' + (err.message || err), confirmButtonColor: '#198754' });
