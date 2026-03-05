@@ -1676,7 +1676,10 @@ def sampling_newick(request):
 
     try:
         from ete3 import Tree
+    except ImportError as ie:
+        return JsonResponse({"error": f"ete3 import failed: {ie}"}, status=500)
 
+    try:
         # Build ETE3 tree from taxonomy hierarchy
         root = Tree()
         root.name = "Root"
@@ -1795,8 +1798,6 @@ def sampling_newick(request):
         resp["Content-Disposition"] = 'attachment; filename="sampling_taxonomic.newick"'
         return resp
 
-    except ImportError:
-        return JsonResponse({"error": "ete3 is not installed"}, status=500)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
