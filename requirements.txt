@@ -19,6 +19,7 @@ urllib3==2.6.2
 
 # Markdown rendering
 Markdown==3.7
+bleach==6.3.0
 
 # Celery (Task Queue)
 celery==5.4.0

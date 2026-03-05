@@ -1914,11 +1914,13 @@ def assembly_filter(request):
 def render_markdown(request):
     """
     Render Markdown text to HTML using Python's markdown library.
+    Output is sanitized with bleach to prevent XSS attacks.
     
     POST body: { "text": "# Markdown content..." }
     Response: { "html": "<h1>Markdown content...</h1>" }
     """
     import markdown
+    import bleach
     
     try:
         data = json.loads(request.body)
@@ -1926,10 +1928,33 @@ def render_markdown(request):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     
-    # Render with tables extension for GitHub-style tables
-    html = markdown.markdown(
+    # Render markdown with extensions
+    raw_html = markdown.markdown(
         text,
         extensions=["tables", "fenced_code", "nl2br"]
     )
     
-    return JsonResponse({"html": html})
+    # Sanitize HTML to prevent XSS - allow only safe tags and attributes
+    allowed_tags = [
+        "h1", "h2", "h3", "h4", "h5", "h6",
+        "p", "br", "hr",
+        "strong", "em", "b", "i", "u", "s", "code", "pre",
+        "ul", "ol", "li",
+        "table", "thead", "tbody", "tr", "th", "td",
+        "blockquote", "a", "img",
+    ]
+    allowed_attrs = {
+        "a": ["href", "title", "rel"],
+        "img": ["src", "alt", "title"],
+        "th": ["align"],
+        "td": ["align"],
+    }
+    
+    safe_html = bleach.clean(
+        raw_html,
+        tags=allowed_tags,
+        attributes=allowed_attrs,
+        strip=True
+    )
+    
+    return JsonResponse({"html": safe_html})
