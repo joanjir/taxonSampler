@@ -4,44 +4,7 @@
 {% block title %}About · TaxonSampler{% endblock %}
 
 {% block extra_css %}
-<style>
-  .about-hero {
-    background: linear-gradient(135deg, var(--tblr-primary) 0%, var(--tblr-primary-darken) 100%);
-    color: white;
-    padding: 2rem;
-    border-radius: .5rem;
-    margin-bottom: 1.5rem;
-  }
-  .about-hero h1 { font-size: 2rem; margin-bottom: .5rem; }
-  .about-hero p { opacity: .9; margin: 0; }
-  
-  .feature-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: .5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  
-  .ref-card {
-    border-left: 4px solid var(--tblr-primary);
-    background: var(--tblr-bg-surface);
-  }
-  
-  .tech-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    padding: .35rem .6rem;
-    border-radius: .25rem;
-    font-size: .8rem;
-    background: var(--tblr-bg-surface-secondary);
-    border: 1px solid var(--tblr-border-color);
-  }
-</style>
+<link rel="stylesheet" href="{% static 'taxonomy/css/about.css' %}">
 {% endblock %}
 
 {% block content %}

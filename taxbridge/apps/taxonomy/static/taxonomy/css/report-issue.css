@@ -1,0 +1,109 @@
+/* ══════════════════════════════════════════════════════════════
+   Report Issue Wizard Styles
+   ══════════════════════════════════════════════════════════════ */
+
+/* Wizard transitions */
+.wizard-step { display: none; animation: fadeSlideIn .25s ease; }
+.wizard-step.active { display: block; }
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Stepper COMPACT */
+.stepper { display: flex; gap: 0; margin-bottom: 1rem; }
+.stepper-item { flex: 1; text-align: center; position: relative; }
+.stepper-item .step-circle {
+  width: 26px; height: 26px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-weight: 600; font-size: .75rem;
+  border: 2px solid var(--tblr-border-color); background: var(--tblr-bg-surface);
+  color: var(--tblr-secondary); transition: all .3s ease; position: relative; z-index: 2;
+}
+.stepper-item .step-label {
+  display: block; font-size: .7rem; color: var(--tblr-secondary);
+  margin-top: .2rem; transition: color .3s;
+}
+.stepper-item.active .step-circle {
+  border-color: var(--tblr-primary); color: var(--tblr-primary);
+  background: var(--tblr-primary-lt); box-shadow: 0 0 0 3px rgba(32,107,196,.15);
+}
+.stepper-item.active .step-label { color: var(--tblr-primary); font-weight: 600; }
+.stepper-item.done .step-circle {
+  border-color: var(--tblr-success); background: var(--tblr-success); color: #fff;
+}
+.stepper-item.done .step-label { color: var(--tblr-success); }
+.stepper-item:not(:last-child)::after {
+  content: ''; position: absolute; top: 12px; left: calc(50% + 16px); right: calc(-50% + 16px);
+  height: 2px; background: var(--tblr-border-color); z-index: 1; transition: background .3s;
+}
+.stepper-item.done:not(:last-child)::after { background: var(--tblr-success); }
+
+/* Type cards COMPACT horizontal */
+.type-card {
+  cursor: pointer; border: 2px solid var(--tblr-border-color); border-radius: .4rem;
+  padding: .5rem .75rem; display: flex; align-items: center; gap: .5rem;
+  transition: all .2s ease; height: 100%;
+}
+.type-card:hover { border-color: var(--tblr-primary); background: var(--tblr-primary-lt); }
+.type-card.selected {
+  border-color: var(--tblr-primary); background: var(--tblr-primary-lt);
+  box-shadow: 0 0 0 2px rgba(32,107,196,.25);
+}
+.type-card .type-icon { font-size: 1.3rem; flex-shrink: 0; }
+.type-card .type-name { font-weight: 600; font-size: .85rem; line-height: 1.2; }
+.type-card .type-desc { display: none; }
+
+/* ── Inline validation (Rule 5: Prevent errors) ── */
+.field-status { font-size: .78rem; margin-top: .25rem; display: none; }
+.field-status.show { display: block; }
+.field-status.valid { color: var(--tblr-success); }
+.field-status.invalid { color: var(--tblr-danger); }
+
+/* Review table COMPACT */
+.review-table th {
+  width: 100px; vertical-align: top; font-weight: 600;
+  color: var(--tblr-secondary); font-size: .8rem; padding: .4rem .5rem;
+}
+.review-table td { word-break: break-word; font-size: .85rem; padding: .4rem .5rem; }
+
+/* Markdown preview (GitHub style) */
+#issuePreviewContent { font-size: .85rem; line-height: 1.5; }
+#issuePreviewContent h2 {
+  font-size: 1.25rem; border-bottom: 1px solid var(--tblr-border-color);
+  padding-bottom: .3rem; margin-top: 0;
+}
+#issuePreviewContent h3 { font-size: 1rem; margin-top: 1rem; margin-bottom: .5rem; }
+#issuePreviewContent p { margin-bottom: .75rem; }
+#issuePreviewContent table {
+  width: 100%; border-collapse: collapse; margin: .5rem 0; font-size: .8rem;
+}
+#issuePreviewContent th, #issuePreviewContent td {
+  border: 1px solid var(--tblr-border-color); padding: .3rem .5rem;
+}
+#issuePreviewContent th { background: var(--tblr-bg-surface-secondary); }
+#issuePreviewContent code {
+  background: var(--tblr-bg-surface-secondary); padding: .1rem .3rem;
+  border-radius: .2rem; font-size: .8rem;
+}
+
+/* Compact card body */
+.wizard-step .card-body { padding: .75rem 1rem; }
+.wizard-step .card-header { padding: .5rem 1rem; }
+.wizard-step .card-footer { padding: .5rem 1rem; }
+.wizard-step .card-title { font-size: .95rem; margin: 0; }
+
+/* ── Toast (Rule 3: Informative feedback) ── */
+.issue-toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+  min-width: 320px; animation: slideInUp .4s ease;
+}
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Keyboard hint ── */
+kbd {
+  font-size: .7rem; padding: .15rem .35rem; border-radius: .2rem;
+  background: var(--tblr-bg-surface-secondary); border: 1px solid var(--tblr-border-color);
+}
