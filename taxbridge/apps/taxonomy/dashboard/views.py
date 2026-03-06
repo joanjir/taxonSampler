@@ -238,3 +238,17 @@ def create_github_issue(request):
         return JsonResponse({
             "error": f"Request failed: {str(e)}",
         }, status=502)
+
+
+# ─────────────────────────────────────────
+# Static Pages
+# ─────────────────────────────────────────
+
+def about(request):
+    """About page with software information and methodology."""
+    return render(request, "taxonomy/pages/about.html")
+
+
+def tutorials(request):
+    """Tutorials page with step-by-step guides for sampling strategies."""
+    return render(request, "taxonomy/pages/tutorials.html")
