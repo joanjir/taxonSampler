@@ -140,11 +140,13 @@
           <div class="accordion-body">
             <p>The Filters panel on the right side of the Taxonomy page guides you through a three-step wizard to configure and execute your sampling. Here's how each step works.</p>
             
-            <!-- VIDEO PLACEHOLDER -->
-            <div class="video-placeholder" id="video-sampling-wizard">
-              <i class="ti ti-player-play"></i>
-              <div class="video-title">Video: The 3-Step Sampling Wizard</div>
-              <div class="video-duration">~8 min</div>
+            <!-- Embedded tutorial video -->
+            <div class="video-embed mb-3" id="video-sampling-wizard">
+              <video controls preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-sampling-wizard.jpg' %}">
+                <source src="{% static 'taxonomy/videos/tutorial2.mp4' %}" type="video/mp4">
+                Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial2.mp4' %}">download the video</a> instead.
+              </video>
+              <div class="mt-2 small text-muted">Video: The 3-Step Sampling Wizard — ~8 min</div>
             </div>
             
             <h5 class="mt-3 mb-3">Step 1 — Scope &amp; Targets</h5>
