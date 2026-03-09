@@ -7,6 +7,32 @@
 <link rel="stylesheet" href="{% static 'taxonomy/css/about.css' %}">
 {% endblock %}
 
+{% block extra_js %}
+<script>
+  // Ensure tutorial videos replay even if loop attribute fails in some browsers
+  (function(){
+    function attachReplay(id){
+      try{
+        var container = document.getElementById(id);
+        if(!container) return;
+        var v = container.querySelector('video');
+        if(!v) return;
+        v.addEventListener('ended', function(){
+          // restart playback; some browsers require currentTime reset
+          try{ v.currentTime = 0; v.play(); }catch(e){ /* noop */ }
+        });
+      }catch(e){console.error('attachReplay error', e);}    
+    }
+    // Attach to known tutorial videos
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded', function(){ attachReplay('video-getting-started'); attachReplay('video-sampling-wizard'); });
+    } else {
+      attachReplay('video-getting-started'); attachReplay('video-sampling-wizard');
+    }
+  })();
+</script>
+{% endblock %}
+
 {% block content %}
 <!-- Page Header (same style as Report Issue) -->
 <div class="page-header d-print-none mb-2">
