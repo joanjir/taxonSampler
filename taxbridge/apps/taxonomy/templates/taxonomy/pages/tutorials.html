@@ -72,11 +72,13 @@
           <div class="accordion-body">
             <p>Learn the fundamentals of navigating TaxonSampler and understanding its core workflow for taxonomic sampling.</p>
             
-            <!-- VIDEO PLACEHOLDER -->
-            <div class="video-placeholder" id="video-getting-started">
-              <i class="ti ti-player-play"></i>
-              <div class="video-title">Video: Getting Started with TaxonSampler</div>
-              <div class="video-duration">~5 min</div>
+            <!-- Embedded tutorial video -->
+            <div class="video-embed mb-3" id="video-getting-started">
+              <video controls preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-getting-started.jpg' %}">
+                <source src="{% static 'taxonomy/videos/tutorial1.mp4' %}" type="video/mp4">
+                Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial1.mp4' %}">download the video</a> instead.
+              </video>
+              <div class="mt-2 small text-muted">Video: Getting Started with TaxonSampler — ~5 min</div>
             </div>
             
             <h5 class="mt-3 mb-3">Steps</h5>
@@ -85,7 +87,7 @@
               <span class="step-number">1</span>
               <div>
                 <strong>Access the Taxonomy Tree</strong>
-                <p class="text-secondary small mb-0">From the sidebar, click <strong>Taxonomy</strong> to open the interactive hierarchical tree view. This displays the complete taxonomic classification imported from the Catalogue of Life (COL), showing only species that have genome assemblies in NCBI.</p>
+                <p class="text-secondary small mb-0">In the header menu, click <strong>Taxonomy</strong> to open the interactive hierarchical tree view. This displays the complete taxonomic classification imported from the Catalogue of Life (COL), showing only species that have genome assemblies in NCBI.</p>
               </div>
             </div>
             
@@ -113,13 +115,7 @@
               </div>
             </div>
             
-            <div class="step-item">
-              <span class="step-number">5</span>
-              <div>
-                <strong>Define a Sampling Scope</strong>
-                <p class="text-secondary small mb-0">Click on a node in the tree (e.g., a family or order), then in the <strong>Filters</strong> panel on the right side, click <strong>"Use selected node"</strong> to set it as the root of your sampling. This begins the 3-step sampling wizard.</p>
-              </div>
-            </div>
+            
             
             <div class="info-box">
               <i class="ti ti-info-circle me-1"></i>
