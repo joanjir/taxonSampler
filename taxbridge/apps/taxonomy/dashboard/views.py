@@ -177,7 +177,9 @@ def create_github_issue(request):
     """
     import urllib.request
     import urllib.error
+    import logging
     from django.conf import settings
+    logger = logging.getLogger(__name__)
 
     try:
         payload = json.loads(request.body.decode("utf-8"))
@@ -195,9 +197,48 @@ def create_github_issue(request):
     repo = getattr(settings, "GITHUB_REPO", "joanjir/taxonSampler")
 
     if not token:
+        # Log masked token state for debugging (do not log actual token)
+        logger.debug("create_github_issue invoked but no GITHUB_TOKEN present (REPORT_ALWAYS_GITHUB=%s)", getattr(settings, 'REPORT_ALWAYS_GITHUB', True))
+        # Respect REPORT_ALWAYS_GITHUB: if True, require GITHUB_TOKEN and do not fallback to email
+        always_github = getattr(settings, "REPORT_ALWAYS_GITHUB", True)
+        if always_github:
+            return JsonResponse({
+                "error": "GITHUB_TOKEN not configured",
+                "detail": "Server requires a GITHUB_TOKEN to create issues. Configure GITHUB_TOKEN in settings/.env.",
+                "report_always_github": True,
+                "token_present": False,
+            }, status=503)
+
+        # Otherwise allow email fallback if configured
+        report_email = getattr(settings, "REPORT_EMAIL", "") or ""
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "webmaster@localhost")
+        if report_email:
+            try:
+                from django.core.mail import send_mail
+
+                subject = f"[Report Issue] {title}"
+                # Use the same body content as would be sent to GitHub
+                message = body
+                send_mail(subject, message, from_email, [report_email], fail_silently=False)
+                return JsonResponse({
+                    "success": True,
+                    "emailed": True,
+                    "recipient": report_email,
+                    "token_present": False,
+                })
+            except Exception as e:
+                logger.exception("Failed to send report email")
+                return JsonResponse({
+                    "error": "Failed to send report email",
+                    "detail": str(e),
+                    "token_present": False,
+                }, status=502)
+
+        # No token and no report email configured: instruct frontend to fallback
         return JsonResponse({
             "error": "GITHUB_TOKEN not configured",
             "fallback": True,
+            "token_present": False,
         }, status=503)
 
     # Build GitHub API request

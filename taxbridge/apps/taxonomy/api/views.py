@@ -1958,3 +1958,257 @@ def render_markdown(request):
     )
     
     return JsonResponse({"html": safe_html})
+
+
+# =============================================================================
+# Taxon Detail endpoint (for double-click modal on tree)
+# =============================================================================
+@require_GET
+def taxon_detail(request):
+    """
+    Return detailed info about a taxon by tree key, name, or external_id.
+    Used by the taxon detail modal when double-clicking a species node.
+    
+    Query params:
+      - key: tree path key (e.g. "dataset:Root|kingdom:Animalia|...|species:Foo bar")
+      - name: species name (e.g. "Foo bar")
+      - external_id: COL external_id (e.g. "5T6MX")
+    
+    Returns JSON with COL info, NCBI info, classification path, genomes.
+    """
+    from apps.taxonomy.models import NCBIGenome, TaxonCrosswalk
+    
+    key = request.GET.get("key", "").strip()
+    name = request.GET.get("name", "").strip()
+    external_id = request.GET.get("external_id", "").strip()
+    
+    if not key and not name and not external_id:
+        return JsonResponse({"error": "Provide 'key', 'name', or 'external_id'."}, status=400)
+    
+    # Find the ExternalTaxon
+    ext = None
+    
+    # 1) Try by tree path key — extract species name from the last segment
+    if key and not ext:
+        # key format: "dataset:Root|kingdom:Animalia|...|species:Foo bar"
+        segments = key.split("|")
+        if segments:
+            last = segments[-1]  # e.g. "species:Foo bar"
+            if ":" in last:
+                _rank, sp_name = last.split(":", 1)
+                # Try accepted first, then any status
+                ext = ExternalTaxon.objects.filter(
+                    name__iexact=sp_name, system="col", status="accepted"
+                ).first()
+                if not ext:
+                    ext = ExternalTaxon.objects.filter(
+                        name__iexact=sp_name, system="col"
+                    ).first()
+    
+    # 2) Try by name directly
+    if not ext and name:
+        # Try accepted first, then any status
+        ext = ExternalTaxon.objects.filter(
+            name__iexact=name, system="col", status="accepted"
+        ).first()
+        if not ext:
+            ext = ExternalTaxon.objects.filter(
+                name__iexact=name, system="col"
+            ).first()
+    
+    # 3) Try by external_id
+    if not ext and external_id:
+        ext = ExternalTaxon.objects.filter(external_id=external_id).first()
+    
+    # 4) If it's a synonym, also try to get the accepted taxon for richer data
+    accepted_ext = None
+    if ext and ext.status != "accepted" and ext.accepted:
+        accepted_ext = ext.accepted
+    
+    if not ext:
+        # Try looking up in NCBI Taxon directly (species not from COL)
+        ncbi_taxon = Taxon.objects.filter(scientific_name__iexact=(name or "")).first()
+        if not ncbi_taxon and key:
+            segments = key.split("|")
+            if segments:
+                last = segments[-1]
+                if ":" in last:
+                    _r, sp_n = last.split(":", 1)
+                    ncbi_taxon = Taxon.objects.filter(scientific_name__iexact=sp_n).first()
+        
+        if ncbi_taxon:
+            # Build response from NCBI data directly
+            taxid = ncbi_taxon.taxid
+            ncbi_info = {
+                "taxid": taxid,
+                "scientific_name": ncbi_taxon.scientific_name,
+                "link": f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id={taxid}",
+            }
+            
+            # Try to find closest COL match:
+            # 1) Try binomial (first 2 words) if name has 3+ words (subspecies)
+            sp_name = ncbi_taxon.scientific_name
+            col_closest = None
+            name_parts = sp_name.split()
+            if len(name_parts) >= 3:
+                binomial = " ".join(name_parts[:2])
+                col_closest = ExternalTaxon.objects.filter(
+                    name__iexact=binomial, system="col", status="accepted"
+                ).first()
+            
+            # 2) Try genus match
+            if not col_closest and name_parts:
+                col_closest = ExternalTaxon.objects.filter(
+                    name__iexact=name_parts[0], system="col",
+                    rank__iexact="genus", status="accepted"
+                ).first()
+            
+            # Build COL info from closest match
+            col_info = {
+                "id": None,
+                "name": sp_name,
+                "rank": ncbi_taxon.rank,
+                "status": "NCBI only (no COL record)",
+                "link": None,
+            }
+            class_path = []
+            if col_closest:
+                col_info["closest_col_id"] = col_closest.external_id
+                col_info["closest_col_name"] = col_closest.name
+                col_info["closest_col_rank"] = col_closest.rank
+                col_info["closest_col_link"] = f"https://www.catalogueoflife.org/data/taxon/{col_closest.external_id}"
+                # Use its classification path
+                class_path = col_closest.classification_path or []
+                if not class_path and col_closest.classification:
+                    rank_order = [
+                        "superkingdom", "domain", "kingdom", "phylum", "subphylum",
+                        "class", "subclass", "order", "suborder",
+                        "family", "subfamily", "genus", "subgenus",
+                        "species", "subspecies",
+                    ]
+                    for r in rank_order:
+                        if r in col_closest.classification:
+                            class_path.append({"rank": r, "name": col_closest.classification[r]})
+                # Ensure root → leaf order
+                if len(class_path) >= 2:
+                    rank_priority = {
+                        "domain": 0, "superkingdom": 0, "kingdom": 1, "phylum": 2,
+                        "subphylum": 3, "class": 4, "subclass": 5, "order": 6,
+                        "suborder": 7, "family": 8, "subfamily": 9, "genus": 10,
+                        "subgenus": 11, "species": 12, "subspecies": 13,
+                    }
+                    first_pri = rank_priority.get((class_path[0].get("rank") or "").lower(), 99)
+                    last_pri = rank_priority.get((class_path[-1].get("rank") or "").lower(), 99)
+                    if first_pri > last_pri:
+                        class_path = list(reversed(class_path))
+            
+            # Try to find genomes
+            genomes = []
+            qs = NCBIGenome.objects.filter(
+                taxon__taxid=taxid
+            ).order_by("-refseq_category", "-scaffold_n50_kb")[:10]
+            for g in qs:
+                genomes.append({
+                    "accession": g.accession,
+                    "organism_name": g.organism_name or "",
+                    "assembly_level": g.genome_level or "",
+                    "scaffold_n50_kb": g.scaffold_n50_kb,
+                    "refseq_category": g.refseq_category or "",
+                    "link": f"https://www.ncbi.nlm.nih.gov/datasets/genome/{g.accession}/",
+                })
+            
+            return JsonResponse({
+                "col": col_info,
+                "ncbi": ncbi_info,
+                "classification_path": class_path,
+                "genomes": genomes,
+                "genome_count": len(genomes),
+            })
+        
+        return JsonResponse({"error": "Taxon not found."}, status=404)
+    
+    # COL info
+    col_info = {
+        "id": ext.external_id,
+        "name": ext.name,
+        "rank": ext.rank,
+        "status": ext.status,
+        "link": f"https://www.catalogueoflife.org/data/taxon/{ext.external_id}",
+    }
+    # If synonym, add accepted info
+    if accepted_ext:
+        col_info["accepted_name"] = accepted_ext.name
+        col_info["accepted_id"] = accepted_ext.external_id
+    
+    # Classification path — use accepted taxon's path if available (richer data)
+    source_ext = accepted_ext or ext
+    class_path = source_ext.classification_path or []
+    if not class_path and source_ext.classification:
+        # Fallback: build from dict
+        rank_order = [
+            "superkingdom", "domain", "kingdom", "phylum", "subphylum",
+            "class", "subclass", "order", "suborder",
+            "family", "subfamily", "genus", "subgenus",
+            "species", "subspecies",
+        ]
+        for r in rank_order:
+            if r in source_ext.classification:
+                class_path.append({"rank": r, "name": source_ext.classification[r]})
+    
+    # Ensure path is root → leaf order
+    # Detect if it's leaf → root by checking if the first item is a lower rank than the last
+    if len(class_path) >= 2:
+        rank_priority = {
+            "domain": 0, "superkingdom": 0, "kingdom": 1, "phylum": 2,
+            "subphylum": 3, "class": 4, "subclass": 5, "order": 6,
+            "suborder": 7, "family": 8, "subfamily": 9, "genus": 10,
+            "subgenus": 11, "species": 12, "subspecies": 13,
+        }
+        first_rank = (class_path[0].get("rank") or "").lower()
+        last_rank = (class_path[-1].get("rank") or "").lower()
+        first_pri = rank_priority.get(first_rank, 99)
+        last_pri = rank_priority.get(last_rank, 99)
+        if first_pri > last_pri:
+            # It's leaf → root, reverse it
+            class_path = list(reversed(class_path))
+    
+    # NCBI info via crosswalk — check both the original and accepted taxon
+    ncbi_info = None
+    for check_ext in [ext, accepted_ext]:
+        if check_ext is None:
+            continue
+        xw = TaxonCrosswalk.objects.filter(
+            external_taxon=check_ext, is_active=True
+        ).select_related("ncbi_taxon").first()
+        if xw and xw.ncbi_taxon:
+            taxid = xw.ncbi_taxon.taxid
+            ncbi_info = {
+                "taxid": taxid,
+                "scientific_name": xw.ncbi_taxon.scientific_name,
+                "link": f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id={taxid}",
+            }
+            break
+    
+    # Linked genomes
+    genomes = []
+    if ncbi_info:
+        qs = NCBIGenome.objects.filter(
+            taxon__taxid=ncbi_info["taxid"]
+        ).order_by("-refseq_category", "-scaffold_n50_kb")[:10]
+        for g in qs:
+            genomes.append({
+                "accession": g.accession,
+                "organism_name": g.organism_name or "",
+                "assembly_level": g.genome_level or "",
+                "scaffold_n50_kb": g.scaffold_n50_kb,
+                "refseq_category": g.refseq_category or "",
+                "link": f"https://www.ncbi.nlm.nih.gov/datasets/genome/{g.accession}/",
+            })
+    
+    return JsonResponse({
+        "col": col_info,
+        "ncbi": ncbi_info,
+        "classification_path": class_path,
+        "genomes": genomes,
+        "genome_count": len(genomes),
+    })

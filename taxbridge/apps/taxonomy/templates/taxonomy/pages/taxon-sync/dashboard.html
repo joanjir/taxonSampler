@@ -1,32 +1,26 @@
 ﻿{% extends "taxonomy/layout/app_shell.html" %}
 
-{% block title %}Taxon Sync - TaxaBridge{% endblock %}
+{% block title %}Taxon Sync · TaxonSampler{% endblock %}
 
 {% block content %}
-<div class="page-header d-print-none">
-  <div class="container-xl">
-    <div class="row g-2 align-items-center">
-      <div class="col">
-        <h2 class="page-title d-flex align-items-center">
-          <i class="ti ti-arrows-exchange me-2"></i> Taxon Synchronization
-          <span class="ms-2" id="taxonSyncHelp" tabindex="0" 
-                data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="right" 
-                data-bs-html="true" data-bs-custom-class="popover-help"
-                data-bs-content="<div class='small'><strong>Taxon Sync</strong> downloads genome metadata from NCBI Datasets API and links each taxon with the Catalogue of Life (COL) using the ChecklistBank API.<br><br><strong>Process:</strong><br>1. Fetch genomes by kingdom from NCBI<br>2. Create/update local taxa records<br>3. Match each taxon name with COL<br>4. Store crosswalk relationships</div>"
-                style="cursor: pointer;"><i class="ti ti-info-circle text-primary" style="font-size: 1.25rem;"></i></span>
-        </h2>
-        <div class="text-secondary mt-1">
-          Download from NCBI and link with Catalogue of Life
-        </div>
-      </div>
+<div class="page-header d-print-none mb-2">
+  <div class="row align-items-center">
+    <div class="col">
+      <div class="page-pretitle">TaxonSampler</div>
+      <h2 class="page-title d-flex align-items-center">
+        <i class="ti ti-arrows-exchange me-2"></i> Taxon Synchronization
+        <span class="ms-2" id="taxonSyncHelp" tabindex="0" 
+              data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="right" 
+              data-bs-html="true" data-bs-custom-class="popover-help"
+              data-bs-content="<div class='small'><strong>Taxon Sync</strong> downloads genome metadata from NCBI Datasets API and links each taxon with the Catalogue of Life (COL) using the ChecklistBank API.<br><br><strong>Process:</strong><br>1. Fetch genomes by kingdom from NCBI<br>2. Create/update local taxa records<br>3. Match each taxon name with COL<br>4. Store crosswalk relationships</div>"
+              style="cursor: pointer;"><i class="ti ti-info-circle text-primary" style="font-size: 1.25rem;"></i></span>
+      </h2>
     </div>
   </div>
 </div>
 
-<div class="page-body">
-  <div class="container-xl">
-    <!-- Stats Cards -->
-    <div class="row row-deck row-cards mb-4">
+<!-- Stats Cards -->
+<div class="row row-deck row-cards mb-4">
       <div class="col-sm-6 col-lg-3">
         <div class="card">
           <div class="card-body">
@@ -586,8 +580,6 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
 
 <!-- View Genome Modal -->
 <div class="modal modal-blur fade" id="viewGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">

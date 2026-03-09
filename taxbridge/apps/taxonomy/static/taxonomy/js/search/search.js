@@ -50,7 +50,7 @@ export function createSearchController({ renderer, searchEndpoint }) {
     }
   }
 
-  function revealActiveHit({ fit = false } = {}) {
+  function revealActiveHit({ fit = true } = {}) {
     const hit = searchState.hits[searchState.idx];
     if (!hit?.key) return;
 

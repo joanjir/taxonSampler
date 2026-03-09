@@ -18,6 +18,9 @@ export function createUIRefs() {
     loadBtn: document.getElementById("loadBtn"),
     fitBtn: document.getElementById("fitBtn"),
     collapseAllBtn: document.getElementById("collapseAllBtn"),
+    zoomInBtn: document.getElementById("zoomInBtn"),
+    zoomOutBtn: document.getElementById("zoomOutBtn"),
+    homeBtn: document.getElementById("homeBtn"),
 
     clearFilters: document.getElementById("clearFilters"),
     clearSel: document.getElementById("clearSel"),

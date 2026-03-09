@@ -71,4 +71,7 @@ urlpatterns = [
     
     # Utilities
     path("render-markdown/", views.render_markdown, name="render-markdown"),
+    
+    # Taxon Detail (double-click modal)
+    path("taxon/detail/", views.taxon_detail, name="taxon-detail"),
 ]

@@ -31,6 +31,10 @@ import {
 // --- API transport ---
 import { loadTreeData } from "../shared/api.js";
 
+// Flag: suppress errors when page is unloading (reload / navigation)
+let _pageUnloading = false;
+window.addEventListener("beforeunload", () => { _pageUnloading = true; });
+
 // --- Core renderer ---
 import { createTreeRenderer } from "./logic/renderer.js";
 
@@ -45,6 +49,7 @@ import { initExportHandlers } from "../sampling/exports.js";
 import { initDbSampling } from "../sampling/db_sampling.js";
 import { initPhyloTree } from "../sampling/phylo_tree.js";
 import { initAssemblyFilter } from "../sampling/assembly_filter.js";
+import { initTaxonDetail } from "./taxon_detail.js";
 
 // =========================================================================
 // Init (ES module scope = no IIFE needed)
@@ -96,6 +101,9 @@ const assemblyFilter = initAssemblyFilter();
 // ---- 11) Search controller ----
 const searchCtl = createSearchController({ renderer, searchEndpoint });
 searchCtl.bindUI();
+
+// ---- 12) Taxon Detail modal (double-click on species) ----
+const taxonDetail = initTaxonDetail({ renderer });
 
 // ---- 12) Bootstrap popovers (HTML help icons) ----
 if (typeof bootstrap !== "undefined" && bootstrap.Popover) {
@@ -675,6 +683,14 @@ async function load() {
     // Signal that the tree is fully loaded — enables the wizard panel
     window.dispatchEvent(new CustomEvent("tree:loaded"));
   } catch (err) {
+    // Ignore abort/network errors caused by page reload or navigation
+    if (_pageUnloading
+        || err?.name === 'AbortError' || err?.code === 20
+        || err?.message?.includes('abort')
+        || (err?.name === 'TypeError' && err?.message?.includes('Failed to fetch'))) {
+      console.log("[tree] Load aborted (page unload).");
+      return;
+    }
     console.error(err);
     showLoadError(ui.mount, `Error loading taxonomy: ${err?.message || err}`);
   }
@@ -685,8 +701,20 @@ async function load() {
 // =========================================================================
 ui.loadBtn?.addEventListener("click", load);
 
+ui.zoomInBtn?.addEventListener("click", () => {
+  renderer.zoomIn?.();
+});
+
+ui.zoomOutBtn?.addEventListener("click", () => {
+  renderer.zoomOut?.();
+});
+
 ui.fitBtn?.addEventListener("click", () => {
   renderer.fitToView?.();
+});
+
+ui.homeBtn?.addEventListener("click", () => {
+  renderer.centerOnRoot?.();
 });
 
 ui.collapseAllBtn?.addEventListener("click", () => {

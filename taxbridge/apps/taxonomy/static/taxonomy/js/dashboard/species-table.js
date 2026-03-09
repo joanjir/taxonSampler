@@ -159,7 +159,7 @@
             <button class="btn btn-sm btn-ghost-primary" onclick="viewGenome('${g.accession}')" title="View details">
               <i class="ti ti-eye"></i>
             </button>
-            ${(g.col_match_status === 'unmatched' || g.col_match_status === 'not_in_col' || g.col_match_status === 'mismatch' || g.col_match_status === 'manual') ? `
+            ${(g.col_match_status === 'unmatched' || g.col_match_status === 'not_in_col' || g.col_match_status === 'mismatch' || g.col_match_status === 'manual' || g.col_status === 'synonym') ? `
             <button class="btn btn-sm btn-ghost-secondary" onclick="editGenome('${g.accession}')" title="Manual COL match">
               <i class="ti ti-edit"></i>
             </button>

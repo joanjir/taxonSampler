@@ -21,6 +21,22 @@
   margin-bottom: 1.5rem;
 }
 
+/* Video placeholder */
+.video-placeholder {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: .5rem;
+  padding: 2rem;
+  text-align: center;
+  color: rgba(255,255,255,.7);
+  margin: 1rem 0;
+  border: 2px dashed rgba(255,255,255,.2);
+}
+.video-placeholder i { font-size: 3rem; margin-bottom: .5rem; display: block; }
+.video-placeholder .video-title { font-weight: 600; color: white; margin-bottom: .25rem; }
+.video-placeholder .video-duration { font-size: .8rem; opacity: .6; }
+.video-placeholder.has-video { border: none; padding: 0; background: #000; }
+.video-placeholder.has-video iframe { border-radius: .5rem; }
+
 .feature-icon {
   width: 48px;
   height: 48px;

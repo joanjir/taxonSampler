@@ -1,17 +1,22 @@
 {% load static %}
-<header class="navbar navbar-expand-md d-print-none" data-bs-theme="light">
+<header class="navbar navbar-expand-lg d-print-none" data-bs-theme="light">
   <div class="container-xl">
     <!-- Brand -->
-    <a class="navbar-brand navbar-brand-autodark me-4" href="{% url 'taxonomy:home' %}">
-      <img src="{% static 'taxonomy/img/taxonlogo.png' %}" alt="TaxonSampler" height="22" style="max-width:150px; object-fit:contain;">
+    <a class="navbar-brand navbar-brand-autodark d-flex align-items-center" href="{% url 'taxonomy:home' %}">
+      <img src="{% static 'taxonomy/img/taxonlogo.png' %}" alt="TaxonSampler" />
     </a>
     <!-- Mobile toggler -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
     <div class="collapse navbar-collapse" id="navbar-menu">
-      <ul class="navbar-nav me-auto">
+      <ul class="navbar-nav">
         <li class="nav-item">
           <a class="nav-link" href="{% url 'taxonomy:home' %}"><i class="ti ti-home me-1"></i> Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'taxonomy:about' %}"><i class="ti ti-info-circle me-1"></i> About</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="{% url 'taxonomy:tree' %}"><i class="ti ti-hierarchy-2 me-1"></i> Taxonomy</a>
@@ -23,79 +28,37 @@
           <a class="nav-link" href="{% url 'taxonomy:report-issue' %}"><i class="ti ti-bug me-1"></i> Report Issue</a>
         </li>
       </ul>
-      {% if show_tree_controls %}
-        <!-- Advanced Search button -->
-        <div class="d-flex align-items-center ms-md-auto mt-2 mt-md-0 me-3" id="rankNavContainer">
-          <button id="advancedSearchBtn" class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#advancedSearchModal">
-            <i class="fa-solid fa-filter me-1"></i>Advanced Search
-          </button>
-          <!-- Active filter badge -->
-          <span id="activeFilterBadge" class="badge bg-primary-lt text-primary ms-2" style="display:none;">
-            <span id="activeFilterCount">0</span> filters
-            <button id="clearAllFilters" class="btn-close btn-close-sm ms-1" style="font-size:.5rem;" title="Clear all filters"></button>
-          </span>
-        </div>
 
-        <!-- SEARCH -->
-        <form class="d-flex mt-2 mt-md-0" role="search" onsubmit="return false;">
-          <div class="input-group input-group-sm">
-            <!-- Search input -->
-            <input id="taxSearch" type="search" class="form-control form-control-sm" placeholder="Search taxon…" aria-label="Search taxon" style="max-width: 150px;" />
 
-            <!-- Prev -->
-            <button id="taxSearchPrev" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Previous match" disabled><i class="fa-solid fa-chevron-left fa-xs"></i></button>
-
-            <!-- Next -->
-            <button id="taxSearchNext" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Next match" disabled><i class="fa-solid fa-chevron-right fa-xs"></i></button>
-
-            <!-- Hide Existing -->
-            <button id="taxSearchHideExisting" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Hide existing species from results"><i class="fa-solid fa-eye-slash fa-xs"></i></button>
-
-            <!-- Clear -->
-            <button id="taxSearchClear" class="btn btn-sm btn-outline-secondary px-2" type="button" title="Clear search" disabled><i class="fa-solid fa-xmark fa-xs"></i></button>
-
-            <!-- Search -->
-            <button id="taxSearchGo" class="btn btn-sm btn-primary px-2" type="button" title="Search"><i class="fa-solid fa-magnifying-glass fa-xs"></i></button>
-          </div>
-          <!-- Search status -->
-          <div id="searchStatus" class="text-muted small ms-2 align-self-center"></div>
-        </form>
-      {% endif %}
 
       <!-- User menu -->
       {% if user.is_authenticated %}
-      <div class="nav-item dropdown ms-auto">
-        <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="User menu">
-          <span class="avatar avatar-sm bg-primary-lt">
-            <i class="ti ti-user"></i>
-          </span>
-          <div class="d-none d-xl-block ps-2">
-            <div class="small fw-bold">{{ user.username }}</div>
-            <div class="mt-1 small text-secondary">{% if is_admin %}Admin{% else %}Viewer{% endif %}</div>
-          </div>
-        </a>
-        <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
-          <span class="dropdown-header">{{ user.get_full_name|default:user.username }}</span>
-          {% if is_admin %}
-          <a class="dropdown-item" href="{% url 'admin:index' %}">
-            <i class="ti ti-settings me-2"></i>Admin Panel
+        <div class="nav-item dropdown {% if not show_tree_controls %}ms-lg-auto{% else %}ms-lg-2{% endif %} mt-2 mt-lg-0">
+          <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="User menu">
+            <span class="avatar avatar-sm bg-primary-lt"><i class="ti ti-user"></i></span>
+            <div class="d-none d-xl-block ps-2">
+              <div class="small fw-bold">{{ user.username }}</div>
+              <div class="mt-1 small text-secondary">
+                {% if is_admin %}Admin{% else %}Viewer{% endif %}
+              </div>
+            </div>
           </a>
-          <div class="dropdown-divider"></div>
-          {% endif %}
-          <form method="post" action="{% url 'logout' %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="dropdown-item">
-              <i class="ti ti-logout me-2"></i>Cerrar Sesión
-            </button>
-          </form>
+          <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+            <span class="dropdown-header">{{ user.get_full_name|default:user.username }}</span>
+            {% if is_admin %}
+              <a class="dropdown-item" href="{% url 'admin:index' %}"><i class="ti ti-settings me-2"></i>Admin Panel</a>
+              <div class="dropdown-divider"></div>
+            {% endif %}
+            <form method="post" action="{% url 'logout' %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item"><i class="ti ti-logout me-2"></i>Cerrar Sesión</button>
+            </form>
+          </div>
         </div>
-      </div>
       {% else %}
-      <div class="nav-item ms-auto">
-        <a href="{% url 'login' %}" class="btn btn-sm btn-outline-primary">
-          <i class="ti ti-login me-1"></i>Iniciar Sesión
-        </a>
-      </div>
+        <div class="nav-item {% if not show_tree_controls %}ms-lg-auto{% else %}ms-lg-2{% endif %} mt-2 mt-lg-0">
+          <a href="{% url 'login' %}" class="btn btn-sm btn-outline-primary"><i class="ti ti-login me-1"></i>Iniciar Sesión</a>
+        </div>
       {% endif %}
     </div>
   </div>

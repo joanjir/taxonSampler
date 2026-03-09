@@ -673,6 +673,21 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     centerOnHelper({ svgRoot, zoomBehavior, mount, d });
   }
 
+  function zoomIn() {
+    if (!svgRoot || !zoomBehavior) return;
+    svgRoot.transition().duration(200).call(zoomBehavior.scaleBy, 1.35);
+  }
+
+  function zoomOut() {
+    if (!svgRoot || !zoomBehavior) return;
+    svgRoot.transition().duration(200).call(zoomBehavior.scaleBy, 1 / 1.35);
+  }
+
+  function centerOnRoot() {
+    if (!root) return;
+    centerOnHelper({ svgRoot, zoomBehavior, mount, d: root });
+  }
+
   function smartFitIfNeeded() {
     smartFitHelper({
       autoFitEnabled,
@@ -1020,6 +1035,19 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
         rebuildHierarchyAndUpdate(d);
         // Only center the node, without smartFit which can interfere
         centerOnKeyAfterRebuild(key, 250);
+      })
+      .on("dblclick", function (d) {
+        // Double-click on species to show detail modal
+        const rank = (d.data.rank || "").toLowerCase();
+        if (rank === "species" || rank === "subspecies") {
+          d3.event.stopPropagation();
+          const key = d.data.__key || keyFromD3Node(d);
+          const name = d.data.name || "";
+          const externalId = d.data.external_id || d.data.externalId || null;
+          window.dispatchEvent(new CustomEvent("tree:taxon-dblclick", {
+            detail: { key, rank, name, externalId }
+          }));
+        }
       });
 
     nodeUpdate.each(function (d) {
@@ -1497,6 +1525,9 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     render,
     fitToView,
     centerOn,
+    zoomIn,
+    zoomOut,
+    centerOnRoot,
     clearSelection,
     resizeToMount,
     setAutoFitEnabled,

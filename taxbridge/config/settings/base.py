@@ -154,6 +154,12 @@ COL_DATASET_KEY = env.int("COL_DATASET_KEY", default=3)
 GITHUB_TOKEN = env("GITHUB_TOKEN", default="")
 GITHUB_REPO = env("GITHUB_REPO", default="joanjir/taxonSampler")
 
+# Email fallback for issue reports when GitHub is not available
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+REPORT_EMAIL = env("REPORT_EMAIL", default="")
+# Whether reports must be sent to GitHub (True) or allow email fallback when token missing (False)
+REPORT_ALWAYS_GITHUB = env.bool("REPORT_ALWAYS_GITHUB", default=True)
+
 # ======================
 # Logging
 # ======================
