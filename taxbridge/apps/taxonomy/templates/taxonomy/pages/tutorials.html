@@ -74,7 +74,7 @@
             
             <!-- Embedded tutorial video -->
             <div class="video-embed mb-3" id="video-getting-started">
-              <video controls preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-getting-started.jpg' %}">
+              <video controls loop preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-getting-started.jpg' %}">
                 <source src="{% static 'taxonomy/videos/tutorial1.mp4' %}" type="video/mp4">
                 Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial1.mp4' %}">download the video</a> instead.
               </video>
@@ -142,7 +142,7 @@
             
             <!-- Embedded tutorial video -->
             <div class="video-embed mb-3" id="video-sampling-wizard">
-              <video controls preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-sampling-wizard.jpg' %}">
+              <video controls loop preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-sampling-wizard.jpg' %}">
                 <source src="{% static 'taxonomy/videos/tutorial2.mp4' %}" type="video/mp4">
                 Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial2.mp4' %}">download the video</a> instead.
               </video>
@@ -262,12 +262,7 @@
           <div class="accordion-body">
             <p>TaxonSampler offers four sampling strategies in Step 2. Each distributes the sample differently across the clades within your taxonomic range.</p>
             
-            <!-- VIDEO PLACEHOLDER -->
-            <div class="video-placeholder" id="video-sampling-strategies">
-              <i class="ti ti-player-play"></i>
-              <div class="video-title">Video: Sampling Strategies Explained</div>
-              <div class="video-duration">~10 min</div>
-            </div>
+            
             
             <h5 class="mt-3 mb-3">Strategy Comparison</h5>
             <table class="table table-sm">
