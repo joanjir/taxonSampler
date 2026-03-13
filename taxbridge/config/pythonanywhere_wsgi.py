@@ -13,11 +13,9 @@ import sys
 PROJECT_DIR = "/home/joanji/taxonSampler/taxbridge"
 sys.path.insert(0, PROJECT_DIR)
 
-# ── Virtualenv (if used) ──
-# PythonAnywhere sets this automatically from the Web tab,
-# but we add an explicit fallback just in case.
-VENV = "/home/joanji/.virtualenvs/taxonsampler"
-venv_path = os.path.join(VENV, "lib", "python3.10", "site-packages")
+# ── Virtualenv ──
+VENV = "/home/joanji/envs/taxbridge13"
+venv_path = os.path.join(VENV, "lib", "python3.13", "site-packages")
 if os.path.isdir(venv_path):
     sys.path.insert(0, venv_path)
 
