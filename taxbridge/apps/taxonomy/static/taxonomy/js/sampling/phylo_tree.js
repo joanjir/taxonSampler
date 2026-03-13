@@ -1,10 +1,14 @@
 // taxonomy/static/taxonomy/js/sampling/phylo_tree.js
 /**
- * Phylogenetic tree visualisation tab.
+ * Taxonomic hierarchy visualisation tab.
  *
  * Receives the DB-sampling result, sends it to the backend to
- * generate a Newick string, then renders a D3 horizontal dendrogram
+ * generate a Newick string (topology only, no branch lengths),
+ * then renders a D3 rectangular cladogram / taxonomic dendrogram
  * inside the #phyloSvgContainer element.
+ *
+ * NOTE: This is a taxonomic hierarchy derived from the NCBI taxonomy
+ * database. It does NOT represent phylogenetic relationships.
  *
  * Also supports:
  *  - Download SVG
@@ -63,7 +67,12 @@ function parseNewick(nwk) {
 function prettyName(raw) {
   if (!raw) return "";
   // "phylum__Chordata" → "Chordata"
+  // "species__Phytophthora_infestans__GCF_000142945.1" → "Phytophthora infestans"
   const parts = raw.split("__");
+  if (parts.length >= 3 && parts[0] === "species") {
+    // species__Name__Accession → show just the name
+    return parts[1].replace(/_/g, " ");
+  }
   const name = parts.length > 1 ? parts.slice(1).join("__") : raw;
   return name.replace(/_/g, " ");
 }
@@ -80,27 +89,27 @@ function countLeaves(node) {
   return node.children.reduce((s, c) => s + countLeaves(c), 0);
 }
 
-// ── ETE3-style rectangular phylogram renderer ────────────────────
+// ── Rectangular cladogram renderer (equal-branch taxonomic tree) ─
 function renderDendrogram(container, newickStr, speciesCount) {
   container.innerHTML = "";
 
   const root = parseNewick(newickStr);
   const numLeaves = countLeaves(root);
 
-  // ── Assign cumulative root-distances (branch-length phylogram) ──
-  function setRootDist(node, parentDist) {
-    node.rootDist = parentDist + (node.branchLength || 0);
+  // ── Assign depth (equal branch lengths for taxonomic hierarchy) ─
+  function setDepth(node, depth) {
+    node.rootDist = depth;
     if (node.children) {
-      node.children.forEach(c => setRootDist(c, node.rootDist));
+      node.children.forEach(c => setDepth(c, depth + 1));
     }
   }
-  setRootDist(root, 0);
+  setDepth(root, 0);
 
-  function findMaxDist(node) {
+  function findMaxDepth(node) {
     if (!node.children || !node.children.length) return node.rootDist;
-    return Math.max(...node.children.map(findMaxDist));
+    return Math.max(...node.children.map(findMaxDepth));
   }
-  const maxD = findMaxDist(root) || 1;
+  const maxD = findMaxDepth(root) || 1;
 
   // ── Assign vertical (y) positions ──────────────────────────────
   let leafIdx = 0;
@@ -118,8 +127,8 @@ function renderDendrogram(container, newickStr, speciesCount) {
   // ── Sizing ─────────────────────────────────────────────────────
   const marginLeft   = 15;
   const marginRight  = 260;
-  const marginTop    = 12;
-  const marginBottom = 45;
+  const marginTop    = 40;
+  const marginBottom = 20;
   const rowHeight    = 22;
   const treeWidth    = 520;
   const contentH     = numLeaves * rowHeight;
@@ -138,6 +147,21 @@ function renderDendrogram(container, newickStr, speciesCount) {
     .attr("xmlns", "http://www.w3.org/2000/svg")
     .style("font-family", "'Segoe UI', system-ui, sans-serif")
     .style("background", "#fff");
+
+  // ── Disclaimer subtitle ─────────────────────────────────────────
+  svg.append("text")
+    .attr("x", marginLeft)
+    .attr("y", 14)
+    .attr("font-size", "12px")
+    .attr("font-weight", "600")
+    .attr("fill", "#333")
+    .text(`Taxonomic hierarchy — NCBI Taxonomy (${speciesCount} species)`);
+  svg.append("text")
+    .attr("x", marginLeft)
+    .attr("y", 28)
+    .attr("font-size", "9.5px")
+    .attr("fill", "#888")
+    .text("This representation does not imply phylogenetic relationships.");
 
   const g = svg.append("g")
     .attr("transform", `translate(${marginLeft}, ${marginTop})`);
@@ -221,35 +245,7 @@ function renderDendrogram(container, newickStr, speciesCount) {
   }
   drawLeaves(root);
 
-  // ── Scale bar (bottom-left) ────────────────────────────────────
-  const niceVals = [0.001, 0.002, 0.005,
-                    0.01, 0.02, 0.05,
-                    0.1, 0.2, 0.5,
-                    1, 2, 5, 10, 20, 50, 100];
-  const targetLen = maxD * 0.15;
-  let scaleVal = niceVals.find(v => v >= targetLen) || maxD * 0.15;
-  const barW = xOf(scaleVal);
-  const barY = contentH + 25;
-
-  // horizontal bar
-  g.append("line")
-    .attr("x1", 0).attr("y1", barY)
-    .attr("x2", barW).attr("y2", barY)
-    .attr("stroke", branchColor).attr("stroke-width", branchWidth);
-  // tick ends
-  [0, barW].forEach(x => {
-    g.append("line")
-      .attr("x1", x).attr("y1", barY - 4)
-      .attr("x2", x).attr("y2", barY + 4)
-      .attr("stroke", branchColor).attr("stroke-width", branchWidth);
-  });
-  // label
-  g.append("text")
-    .attr("x", barW / 2).attr("y", barY + 16)
-    .attr("text-anchor", "middle")
-    .attr("font-size", "11px")
-    .attr("fill", "#222")
-    .text(scaleVal >= 1 ? scaleVal.toFixed(1) : scaleVal.toString());
+  // No scale bar — this is a taxonomic hierarchy, not a phylogram
 
   return { svg: svg.node(), newick: newickStr };
 }
@@ -370,18 +366,18 @@ export function initPhyloTree() {
     if (dom.empty) {
       dom.empty.innerHTML = `
         <i class="fa-solid fa-project-diagram fa-3x mb-3 opacity-25"></i>
-        <p>Run a sampling first to generate a phylogenetic tree.</p>
+        Run a sampling first to generate a taxonomic hierarchy.</p>
       `;
     }
   }
 
   // ── Button handlers ──────────────────────────────────────────
   dom.btnSvg?.addEventListener("click", () => {
-    downloadSvg(currentSvgEl, "phylo_tree.svg");
+    downloadSvg(currentSvgEl, "taxonomic_hierarchy.svg");
   });
 
   dom.btnNewick?.addEventListener("click", () => {
-    downloadNewick(currentNewick, "sampling_taxonomic.newick");
+    downloadNewick(currentNewick, "taxonomic_hierarchy.newick");
   });
 
   return { generate, clear };

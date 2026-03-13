@@ -19,75 +19,105 @@
   </div>
 </div>
 
-<!-- Stats Cards -->
+<!-- Overview -->
 <div class="row row-deck row-cards mb-4">
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-blue-lt me-3"><i class="ti ti-dna-2 fs-2"></i></span>
-              <div>
-                <div class="subheader">Samplable Species</div>
-                <div class="h1 mb-0">{{ samplable_species|default:0 }}</div>
-              </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-purple text-white avatar avatar-lg me-3">
+            <i class="ti ti-leaf fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              Samplable Species
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Taxa linked to COL (automatic + manual) available for phylogenetic sampling. Includes species, subspecies, varieties and forms.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
             </div>
-            <div class="text-secondary small">
-              <i class="ti ti-database me-1"></i> {{ total_genomes|default:0 }} genome assemblies
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-green-lt me-3"><i class="ti ti-percentage fs-2"></i></span>
-              <div>
-                <div class="subheader">COL Coverage</div>
-                <div class="h1 mb-0">{{ match_percent }}%</div>
-              </div>
-            </div>
-            <div class="text-secondary small">
-              <i class="ti ti-check me-1"></i> {{ matched_genomes|default:0 }} / {{ total_genomes|default:0 }} linked
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-yellow-lt me-3"><i class="ti ti-unlink fs-2"></i></span>
-              <div>
-                <div class="subheader">Excluded</div>
-                <div class="h1 mb-0">{{ not_in_col_count|default:0|add:mismatch_count|default:0 }}</div>
-              </div>
-            </div>
-            <div class="text-secondary small">
-              {% if not_in_col_count %}<i class="ti ti-x me-1"></i> {{ not_in_col_count }} not in COL{% endif %}
-              {% if mismatch_count %} &middot; {{ mismatch_count }} mismatch{% endif %}
-              {% if unmatched_genomes %} &middot; {{ unmatched_genomes }} pending{% endif %}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-purple-lt me-3"><i class="ti ti-hierarchy-2 fs-2"></i></span>
-              <div>
-                <div class="subheader">COL Taxonomy</div>
-                <div class="h1 mb-0">{{ total_col_species|default:0 }}</div>
-              </div>
-            </div>
-            <div class="text-secondary small">
-              <i class="ti ti-leaf me-1"></i> accepted species in taxonomy
+            <div class="h1 mb-0">{{ samplable_species|default:0 }}</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-dna-2" style="font-size: 0.8rem;"></i>
+              {{ total_genomes|default:0 }} taxa with genome
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-success text-white avatar avatar-lg me-3">
+            <i class="ti ti-percentage fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              COL Coverage
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Percentage of NCBI taxa automatically matched to the Catalogue of Life. Manual matches are not counted — those taxa were not found in COL.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
+            </div>
+            <div class="h1 mb-0">{{ col_coverage_pct|default:0 }}%</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-check" style="font-size: 0.8rem;"></i>
+              {{ col_matched_taxa|default:0 }} / {{ total_genomes|default:0 }} taxa linked
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-orange text-white avatar avatar-lg me-3">
+            <i class="ti ti-map-pin-off fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              Not in COL
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Taxa not found in the Catalogue of Life. Those resolved manually are included in the tree; unresolved ones (mismatch) need review.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
+            </div>
+            <div class="h1 mb-0">{{ not_in_col_total|default:0 }}</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-pencil" style="font-size: 0.8rem;"></i>
+              {{ manual_taxa|default:0 }} manual &middot; {{ mismatch_pending|default:0 }} pending review
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-cyan text-white avatar avatar-lg me-3">
+            <i class="ti ti-link fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              Crosswalks
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Verified NCBI-to-COL mappings used for taxonomy tree building.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
+            </div>
+            <div class="h1 mb-0">{{ total_crosswalks|default:0 }}</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-arrows-exchange" style="font-size: 0.8rem;"></i>
+              NCBI ↔ COL links
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
     <!-- Tabs for Report and Species List -->
     <div class="card">
@@ -107,52 +137,13 @@
             <div class="row">
               <!-- Link Status & Assembly Level (stacked) -->
               <div class="col-lg-6 d-flex flex-column">
-                <!-- Link Status Chart -->
+                <!-- Taxonomic Integration Chart -->
                 <div class="card mb-3">
                   <div class="card-header">
-                    <h3 class="card-title">Link Status</h3>
+                    <h3 class="card-title">Taxonomic Integration</h3>
                   </div>
                   <div class="card-body">
-                    <div id="linkStatusChart">
-                      {% with total=matched_genomes|default:0|add:unmatched_genomes|default:0|add:not_in_col_count|default:0|add:manual_count|default:0 %}
-                        {% if total > 0 %}
-                        <div class="progress progress-separated mb-3" style="height: 1.5rem;">
-                          {% widthratio matched_genomes|default:0 total 100 as matched_pct %}
-                          {% widthratio unmatched_genomes|default:0 total 100 as unmatched_pct %}
-                          {% widthratio not_in_col_count|default:0 total 100 as not_in_col_pct %}
-                          {% widthratio manual_count|default:0 total 100 as manual_pct %}
-                          <div class="progress-bar bg-success" role="progressbar" style="width: {{ matched_pct }}%" aria-label="Linked"></div>
-                          <div class="progress-bar bg-warning" role="progressbar" style="width: {{ unmatched_pct }}%" aria-label="Unlinked"></div>
-                          <div class="progress-bar bg-danger" role="progressbar" style="width: {{ not_in_col_pct }}%" aria-label="Not in COL"></div>
-                          <div class="progress-bar bg-purple" role="progressbar" style="width: {{ manual_pct }}%" aria-label="Manual"></div>
-                        </div>
-                        <div class="d-flex flex-wrap gap-3 mt-3">
-                          <div class="d-flex align-items-center">
-                            <span class="legend bg-success me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
-                            <span class="text-secondary small">Linked</span>
-                            <span class="ms-1 fw-bold">{{ matched_genomes|default:0 }}</span>
-                          </div>
-                          <div class="d-flex align-items-center">
-                            <span class="legend bg-warning me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
-                            <span class="text-secondary small">Unlinked</span>
-                            <span class="ms-1 fw-bold">{{ unmatched_genomes|default:0 }}</span>
-                          </div>
-                          <div class="d-flex align-items-center">
-                            <span class="legend bg-danger me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
-                            <span class="text-secondary small">Not in COL</span>
-                            <span class="ms-1 fw-bold">{{ not_in_col_count|default:0 }}</span>
-                          </div>
-                          <div class="d-flex align-items-center">
-                            <span class="legend bg-purple me-2" style="width: 12px; height: 12px; display: inline-block; border-radius: 2px;"></span>
-                            <span class="text-secondary small">Manual</span>
-                            <span class="ms-1 fw-bold">{{ manual_count|default:0 }}</span>
-                          </div>
-                        </div>
-                        {% else %}
-                        <div class="text-muted text-center py-5">No data</div>
-                        {% endif %}
-                      {% endwith %}
-                    </div>
+                    <div id="chartTaxIntegration"></div>
                   </div>
                 </div>
                 
@@ -162,16 +153,7 @@
                     <h3 class="card-title">Assembly Level</h3>
                   </div>
                   <div class="card-body">
-                    <div id="assemblyLevelChart">
-                      {% if genome_levels %}
-                        {% with total=genome_levels|length %}
-                        <div class="progress progress-separated mb-3" style="height: 1.5rem;" id="assemblyProgressBar"></div>
-                        <div class="d-flex flex-wrap gap-3 mt-3" id="assemblyLegend"></div>
-                        {% endwith %}
-                      {% else %}
-                      <div class="text-muted text-center py-5">No data</div>
-                      {% endif %}
-                    </div>
+                    <div id="chartAssembly"></div>
                   </div>
                 </div>
               </div>
@@ -184,7 +166,7 @@
                     <small class="text-muted">Total: {{ total_genomes }}</small>
                   </div>
                   <div class="card-body">
-                    <div id="chartKingdoms" style="height: 300px;"></div>
+                    <div id="chartKingdoms"></div>
                   </div>
                 </div>
               </div>
@@ -202,6 +184,11 @@
 <script>
   // Server-side data passed to JavaScript
   window.HOME_DATA = {
+    taxIntegration: [
+      { label: "Auto-matched", value: {{ matched_genomes|default:0 }} },
+      { label: "Manual", value: {{ manual_genomes|default:0 }} },
+      { label: "Not in COL", value: {{ not_in_col_genomes|default:0 }} }
+    ],
     genomeLevels: [
       {% for level in genome_levels %}
       { label: "{{ level.genome_level|default:'Unspecified' }}", value: {{ level.count }} }{% if not forloop.last %},{% endif %}

@@ -8,9 +8,10 @@
       {% endblock %}
     </title>
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{% static 'taxonomy/img/favicon.ico' %}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'taxonomy/img/favicon-32x32.png' %}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'taxonomy/img/favicon-16x16.png' %}">
+    <link rel="icon" type="image/svg+xml" href="{% static 'taxonomy/img/favicon.svg' %}">
+    <link rel="alternate icon" type="image/png" sizes="32x32" href="{% static 'taxonomy/img/favicon-32x32.png' %}">
+    <link rel="alternate icon" type="image/png" sizes="16x16" href="{% static 'taxonomy/img/favicon-16x16.png' %}">
+    <link rel="alternate icon" type="image/x-icon" href="{% static 'taxonomy/img/favicon.ico' %}">
     <!-- Tabler (Bootstrap-based) -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
@@ -44,6 +45,10 @@
       if (typeof bootstrap === 'undefined' && window.tabler && window.tabler.bootstrap) {
         window.bootstrap = window.tabler.bootstrap;
       }
+      // Initialize all Bootstrap tooltips
+      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+      });
     </script>
 
     {% block extra_js %}

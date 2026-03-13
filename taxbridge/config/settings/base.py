@@ -202,3 +202,19 @@ NCBI_API_KEY = env("NCBI_API_KEY", default="")
 NCBI_SYNC_BATCH_SIZE = env.int("NCBI_SYNC_BATCH_SIZE", default=100)
 NCBI_SYNC_CHECK_PROTEOMES = env.bool("NCBI_SYNC_CHECK_PROTEOMES", default=False)
 NCBI_SYNC_MAX_RETRIES = env.int("NCBI_SYNC_MAX_RETRIES", default=3)
+
+# ======================
+# Caching Configuration
+# ======================
+# Uses Redis if available (same as Celery), falls back to local memory cache
+_redis_url = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
+
+# Django 4+ has native Redis support
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": _redis_url,
+        "KEY_PREFIX": "taxonsampler",
+        "TIMEOUT": 600,  # 10 minutes default
+    }
+}

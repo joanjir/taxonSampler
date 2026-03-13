@@ -291,6 +291,28 @@ class NCBIGenome(models.Model):
         help_text="Notes about CoL matching",
     )
 
+    def save(self, *args, **kwargs):
+        """
+        Prevent linking a genome to a COL ExternalTaxon with a different genus.
+        Last line of defense at the model level.
+        """
+        if self.external_taxon_id and self.taxon_id:
+            ext = self.external_taxon
+            if ext.system == "col":
+                from apps.taxonomy.utils import genera_match
+                ncbi_name = self.taxon.scientific_name
+                ok, reason = genera_match(ncbi_name, ext.name, ext.classification or {})
+                if not ok:
+                    import logging
+                    logging.getLogger(__name__).error(
+                        f"[MODEL_BLOCK] NCBIGenome.save() blocked: "
+                        f"{self.accession} {ncbi_name} -> {ext.name} ({reason})"
+                    )
+                    # Silently unlink instead of raising
+                    self.external_taxon = None
+                    self.col_match_status = "unmatched"
+        super().save(*args, **kwargs)
+
     # Metadata
     raw = models.JSONField(
         default=dict,

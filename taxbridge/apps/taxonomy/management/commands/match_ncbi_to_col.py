@@ -3,13 +3,14 @@ from __future__ import annotations
 
 #from curses import raw
 from os import system
-from typing import Optional
+from typing import Optional, Tuple
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.taxonomy.models import ExternalTaxon, NCBIGenome, Taxon, TaxonCrosswalk
 from apps.taxonomy.ncbi.clients import ChecklistBankClient, canonicalize_scientific_name
+from apps.taxonomy.utils import extract_genus, genera_match
 
 
 class Command(BaseCommand):
@@ -85,15 +86,49 @@ class Command(BaseCommand):
             if not m or not ext_id:
                 n_nomatch += 1
                 if verbosity >= 2:
-                    # attempt to leave minimal evidence without breaking if m.raw does not exist
                     raw = getattr(m, "raw", None) if m is not None else None
                     hint = ""
                     if isinstance(raw, dict):
                         hint = f" type={raw.get('type')} match={raw.get('match')}"
                     self.stdout.write(f"[NO_MATCH] taxid={t.taxid} name={t.scientific_name}{hint}")
+                # Fallback: use taxonomy from a sibling in the same genus
+                if not dry:
+                    from apps.taxonomy.utils import create_genus_fallback
+                    if create_genus_fallback(t, t.scientific_name):
+                        if verbosity >= 1:
+                            self.stdout.write(self.style.SUCCESS(f"  [FALLBACK] Created genus fallback for {t.scientific_name}"))
                 continue
 
             # From here on, there is a real external_id
+            
+            # ----------------------------------------------------------------
+            # GENUS VALIDATION: Prevent cross-genus mismatches
+            # E.g., "Bos indicus x Bos taurus" -> "Absidaticonus ovatus"
+            # ----------------------------------------------------------------
+            col_classification = getattr(m, "classification", {}) or {}
+            genus_ok, genus_reason = genera_match(
+                ncbi_name=t.scientific_name,
+                col_name=m.name,
+                col_classification=col_classification
+            )
+            
+            if not genus_ok:
+                n_nomatch += 1
+                if verbosity >= 1:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"[GENUS_MISMATCH] taxid={t.taxid} '{t.scientific_name}' "
+                            f"≠ COL '{m.name}' reason={genus_reason}"
+                        )
+                    )
+                # Fallback: use taxonomy from a sibling in the same genus
+                if not dry:
+                    from apps.taxonomy.utils import create_genus_fallback
+                    if create_genus_fallback(t, t.scientific_name):
+                        if verbosity >= 1:
+                            self.stdout.write(self.style.SUCCESS(f"  [FALLBACK] Created genus fallback for {t.scientific_name}"))
+                continue  # Skip this match - genera don't match!
+            
             decision, method, score = self._decide(t_rank=t.rank, m_rank=m.rank, m_status=m.status)
 
             if dry:

@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from apps.taxonomy.models import Taxon, ExternalTaxon, TaxonCrosswalk, NCBIGenome
 from apps.taxonomy.ncbi.clients import ChecklistBankClient, canonicalize_scientific_name
+from apps.taxonomy.utils import genera_match
 
 
 # Dataset COL en ChecklistBank (COL checklist actual)
@@ -69,6 +70,12 @@ class Command(BaseCommand):
 
         self._print_summary()
         self._update_genome_statuses()
+        
+        # CACHE INVALIDATION: Ensure new species appear in the tree
+        if not self.dry_run and self.stats["crosswalk_created"] > 0:
+            from apps.taxonomy.utils import invalidate_all_tree_caches
+            invalidate_all_tree_caches()
+            self.stdout.write(self.style.SUCCESS("Cache del árbol invalidado"))
 
     def _sync_taxa(self):
         """Sincroniza taxa con COL."""
@@ -135,6 +142,26 @@ class Command(BaseCommand):
             )
 
             if result.matched:
+                # GENUS VALIDATION: Prevent cross-genus mismatches
+                col_classification = getattr(result, "classification", {}) or {}
+                genus_ok, genus_reason = genera_match(
+                    ncbi_name=taxon.scientific_name,
+                    col_name=result.name or "",
+                    col_classification=col_classification
+                )
+                if not genus_ok:
+                    if self.verbose:
+                        self.stdout.write(
+                            f"  ⚠ {taxon.scientific_name} - [GENUS_MISMATCH] COL '{result.name}' ({genus_reason})"
+                        )
+                    self.stats["not_found"] += 1
+                    # Fallback: use taxonomy from a sibling in the same genus
+                    if not self.dry_run:
+                        from apps.taxonomy.utils import create_genus_fallback
+                        if create_genus_fallback(taxon, taxon.scientific_name):
+                            self.stdout.write(f"  ✔ {taxon.scientific_name} - Genus fallback created")
+                    return None
+                
                 self.stats["matched"] += 1
                 if self.verbose:
                     self.stdout.write(f"  ✓ {taxon.scientific_name} -> {result.name} [{result.status}]")
@@ -151,6 +178,11 @@ class Command(BaseCommand):
                 self.stats["not_found"] += 1
                 if self.verbose:
                     self.stdout.write(f"  ✗ {taxon.scientific_name} - No encontrado en COL")
+                # Fallback: use taxonomy from a sibling in the same genus
+                if not self.dry_run:
+                    from apps.taxonomy.utils import create_genus_fallback
+                    if create_genus_fallback(taxon, taxon.scientific_name):
+                        self.stdout.write(f"  ✔ {taxon.scientific_name} - Genus fallback created")
                 return None
 
         except Exception as e:
@@ -204,9 +236,10 @@ class Command(BaseCommand):
 
         self.stdout.write("Actualizando estados de genomas...")
 
-        # Genomas con crosswalk activo -> matched
+        # Genomas con crosswalk activo COL (NOT manual) -> matched
         matched_taxids = TaxonCrosswalk.objects.filter(
-            is_active=True
+            is_active=True,
+            external_taxon__system="col",
         ).values_list("ncbi_taxon_id", flat=True)
         
         updated_matched = NCBIGenome.objects.filter(
@@ -214,11 +247,15 @@ class Command(BaseCommand):
             col_match_status="unmatched"
         ).update(col_match_status="matched")
 
-        # Genomas sin crosswalk -> not_in_col (skip manual)
+        # Genomas sin crosswalk -> not_in_col (skip manual and genomes with fallback ExternalTaxon)
         updated_unmatched = NCBIGenome.objects.exclude(
             taxon_id__in=matched_taxids
         ).exclude(
             col_match_status="manual"
+        ).exclude(
+            external_taxon__system="manual"  # Don't overwrite genus fallback entries
+        ).filter(
+            external_taxon__isnull=True  # Only truly unlinked genomes
         ).update(col_match_status="not_in_col")
 
         self.stdout.write(f"  Marcados como matched: {updated_matched}")

@@ -15,6 +15,8 @@ from apps.taxonomy.ncbi.views import (
     api_discovered_species,
     api_import_discovered,
     api_dismiss_discovered,
+    api_bulk_import_discovered,
+    api_ncbi_download_proxy,
 )
 
 app_name = "taxonomy_api"
@@ -68,7 +70,11 @@ urlpatterns = [
     path("discovery/species/", api_discovered_species, name="discovered-species"),
     path("discovery/<int:species_id>/import/", api_import_discovered, name="discovery-import"),
     path("discovery/<int:species_id>/dismiss/", api_dismiss_discovered, name="discovery-dismiss"),
+    path("discovery/bulk-import/", api_bulk_import_discovered, name="discovery-bulk-import"),
     
+    # NCBI download proxy (streams ZIP from NCBI Datasets API)
+    path("ncbi/download/", api_ncbi_download_proxy, name="ncbi-download-proxy"),
+
     # Utilities
     path("render-markdown/", views.render_markdown, name="render-markdown"),
     

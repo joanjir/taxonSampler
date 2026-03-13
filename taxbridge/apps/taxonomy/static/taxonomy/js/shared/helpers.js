@@ -20,16 +20,18 @@ export function getCookie(name) {
  * POST a payload to a backend endpoint and trigger a file download
  * from the response blob.  Shows Save-As dialog for filename.
  */
-export async function postDownload(url, payload, filenameFallback) {
+export async function postDownload(url, payload, filenameFallback, opts = {}) {
   const csrf = getCookie("csrftoken");
-  const res = await fetch(url, {
+  const fetchOpts = {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-CSRFToken": csrf || "",
     },
     body: JSON.stringify(payload),
-  });
+  };
+  if (opts.signal) fetchOpts.signal = opts.signal;
+  const res = await fetch(url, fetchOpts);
 
   if (!res.ok) {
     const txt = await res.text();

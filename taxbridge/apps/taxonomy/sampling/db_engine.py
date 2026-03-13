@@ -215,6 +215,7 @@ def _apply_scope_filters(
             if target_q:
                 combined_q |= target_q
         if combined_q:
+            logger.info("[_apply_scope_filters] Applying target_keys filter: %s", target_keys)
             qs = qs.filter(combined_q)
 
     # Restrict to specific species if provided (from Step 1 targets)
@@ -267,7 +268,7 @@ def run_db_sampling(
 
     # ── 1. Build base queryset ──────────────────────────────
     qs = NCBIGenome.objects.filter(
-        col_match_status="matched",
+        col_match_status__in=("matched", "manual"),
         external_taxon__isnull=False,
     ).select_related("taxon", "external_taxon")
 
@@ -282,6 +283,16 @@ def run_db_sampling(
     )
 
     total_available_raw = qs.values("organism_name").distinct().count()
+
+    # Debug: log the actual species names to compare with tree
+    if target_keys:
+        _debug_species = list(qs.values_list("organism_name", flat=True).distinct()[:50])
+        logger.info(
+            "[run_db_sampling] DEBUG target_keys=%s → found %d species (first 50: %s)",
+            target_keys[:3] if target_keys else [],
+            total_available_raw,
+            _debug_species,
+        )
 
     logger.info(
         "[run_db_sampling] scope applied → total_available=%d, "
@@ -320,23 +331,27 @@ def run_db_sampling(
 
     for genome in qs.iterator():
         # ── Genus-validation safeguard ──
-        # TEMPORARILY DISABLED to debug missing species (Homo sapiens, Mus musculus)
         # Skip genomes whose organism_name genus diverges completely from
         # the linked COL taxon (bad matches that slipped past audit).
-        # This is a soft filter: we only skip if genus is completely absent.
-        # _org = (genome.organism_name or "").strip()
-        # _org_g = _org.split()[0].lower() if _org else ""
-        # if _org_g and genome.external_taxon:
-        #     _col_name = (genome.external_taxon.name or "").lower()
-        #     _col_cls = genome.external_taxon.classification or {}
-        #     _col_g = (_col_cls.get("genus", "") or "").lower()
-        #     _col_sp = (_col_cls.get("species", "") or "").lower()
-        #     # Only skip if no genus match at all AND name is completely different
-        #     if (_col_g and _org_g not in _col_g and 
-        #         _col_sp and _org_g not in _col_sp and 
-        #         _org_g not in _col_name):
-        #         _genus_skipped += 1
-        #         continue
+        _org = (genome.organism_name or "").strip()
+        _org_g = _org.split()[0].lower() if _org else ""
+        
+        # Handle bracketed genus names like [Clostridium]
+        if _org.startswith("[") and "]" in _org:
+            _org_g = _org.split("]")[0][1:].lower()
+        
+        if _org_g and genome.external_taxon:
+            _col_name = (genome.external_taxon.name or "").lower()
+            _col_cls = genome.external_taxon.classification or {}
+            _col_g = (_col_cls.get("genus", "") or "").lower()
+            _col_sp = (_col_cls.get("species", "") or "").lower()
+            
+            # Only skip if genus doesn't appear anywhere in COL data
+            if (_org_g not in _col_g and 
+                _org_g not in _col_sp and 
+                _org_g not in _col_name):
+                _genus_skipped += 1
+                continue
 
         _valid_species.add(genome.organism_name)
         
@@ -349,6 +364,14 @@ def run_db_sampling(
         
         cls = genome.external_taxon.classification or {}
         clade_name = cls.get(rank_key, "")
+
+        # Fallback: if the target rank is missing, walk up the hierarchy
+        if not clade_name:
+            rank_idx = _rank_index(rank_key)
+            for fallback_rank in reversed(RANK_HIERARCHY[:rank_idx]):
+                clade_name = cls.get(fallback_rank, "")
+                if clade_name:
+                    break
 
         if not clade_name:
             _no_clade_all.append(genome)
@@ -419,12 +442,26 @@ def run_db_sampling(
     if _no_clade_all:
         no_clade_genomes = _dedup_genomes(_no_clade_all)
 
-    # Add unclassified genomes to a special group
+    # Only include unclassified genomes if NO specific targets are set.
+    # If user selected targets explicitly, unclassified species are excluded
+    # because we cannot verify they belong to the selected targets.
     if no_clade_genomes:
-        clade_genomes["(unclassified)"] = no_clade_genomes
-        warnings.append(
-            f"{len(no_clade_genomes)} species lack '{rank_key}' classification."
-        )
+        if target_keys:
+            # User selected specific targets → exclude unclassified
+            warnings.append(
+                f"{len(no_clade_genomes)} species excluded: lack '{rank_key}' "
+                f"classification (cannot verify target membership)."
+            )
+            logger.info(
+                "[run_db_sampling] Excluded %d unclassified species (targets specified)",
+                len(no_clade_genomes),
+            )
+        else:
+            # No specific targets → include unclassified in sampling
+            clade_genomes["(unclassified)"] = no_clade_genomes
+            warnings.append(
+                f"{len(no_clade_genomes)} species lack '{rank_key}' classification."
+            )
 
     # ── 3. Calculate quotas per clade ───────────────────────
     clades_info: List[CladeAllocation] = []
@@ -783,7 +820,7 @@ def get_sampling_stats(
     from apps.taxonomy.models import NCBIGenome
 
     qs = NCBIGenome.objects.filter(
-        col_match_status="matched",
+        col_match_status__in=("matched", "manual"),
         external_taxon__isnull=False,
     ).select_related("external_taxon")
 

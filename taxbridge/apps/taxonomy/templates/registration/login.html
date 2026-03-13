@@ -1,7 +1,7 @@
 {% extends "taxonomy/layout/base.html" %}
 {% load static %}
 
-{% block title %}Iniciar Sesión · TaxonSampler{% endblock %}
+{% block title %}Log In · TaxonSampler{% endblock %}
 
 {% block body %}
 <div class="page page-center">
@@ -13,7 +13,7 @@
     </div>
     <div class="card card-md">
       <div class="card-body">
-        <h2 class="h2 text-center mb-4">Administrador</h2>
+        <h2 class="h2 text-center mb-4">Administrator</h2>
 
         {% if form.errors %}
         <div class="alert alert-danger">
@@ -23,7 +23,7 @@
               {{ error }}
             {% endfor %}
           {% else %}
-            Usuario o contraseña incorrectos.
+            Invalid username or password.
           {% endif %}
         </div>
         {% endif %}
@@ -32,22 +32,22 @@
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ next|default:'/taxonomy/' }}">
           <div class="mb-3">
-            <label class="form-label">Usuario</label>
+            <label class="form-label">Username</label>
             <div class="input-group">
               <span class="input-group-text"><i class="ti ti-user"></i></span>
-              <input type="text" name="username" class="form-control" placeholder="Tu nombre de usuario" autofocus autocomplete="username">
+              <input type="text" name="username" class="form-control" placeholder="Your username" autofocus autocomplete="username">
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label">Contraseña</label>
+            <label class="form-label">Password</label>
             <div class="input-group">
               <span class="input-group-text"><i class="ti ti-lock"></i></span>
-              <input type="password" name="password" class="form-control" placeholder="Tu contraseña" autocomplete="current-password">
+              <input type="password" name="password" class="form-control" placeholder="Your password" autocomplete="current-password">
             </div>
           </div>
           <div class="form-footer">
             <button type="submit" class="btn btn-primary w-100">
-              <i class="ti ti-login me-2"></i>Ingresar
+              <i class="ti ti-login me-2"></i>Log in
             </button>
           </div>
         </form>
@@ -55,7 +55,7 @@
     </div>
     <div class="text-center mt-3">
       <a href="{% url 'taxonomy:home' %}" class="text-muted">
-        <i class="ti ti-arrow-left me-1"></i>Volver al inicio
+        <i class="ti ti-arrow-left me-1"></i>Back to home
       </a>
     </div>
   </div>

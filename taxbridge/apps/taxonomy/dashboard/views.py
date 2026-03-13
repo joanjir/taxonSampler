@@ -12,38 +12,40 @@ from apps.taxonomy.utils import sampling_to_tree_artifacts
 def home(request):
     """Main dashboard with statistics and genome listing."""
     
-    # Genome statistics using col_match_status (consistent with the listing)
+
+    # Estadísticas de genomas
     total_genomes = NCBIGenome.objects.count()
     matched_genomes = NCBIGenome.objects.filter(col_match_status="matched").count()
+    manual_genomes = NCBIGenome.objects.filter(col_match_status="manual").count()
+    linked_genomes = matched_genomes + manual_genomes
     unmatched_genomes = NCBIGenome.objects.filter(col_match_status="unmatched").count()
-    not_in_col_count = NCBIGenome.objects.filter(col_match_status="not_in_col").count()
-    manual_count = NCBIGenome.objects.filter(col_match_status="manual").count()
-    mismatch_count = NCBIGenome.objects.filter(col_match_status="mismatch").count()
+    not_in_col_genomes = NCBIGenome.objects.filter(col_match_status="not_in_col").count()
+    mismatch_genomes = NCBIGenome.objects.filter(col_match_status="mismatch").count()
 
-    # Samplable species = species that appear in the tree (matched + manual)
-    # This must match the tree's species_count (build_tree output).
-    samplable_col = (
-        ExternalTaxon.objects
-        .filter(
-            system="col",
-            rank__in=["species", "subspecies"],
-            ncbi_genomes__col_match_status="matched",
-        )
-        .distinct()
-        .count()
-    )
-    samplable_manual = ExternalTaxon.objects.filter(system="manual", rank="species").count()
-    samplable_species = samplable_col + samplable_manual
-    
-    # Statistics by genome level
+    # Samplable Species: especies únicas (ExternalTaxon) con al menos un genoma matched o manual
+    samplable_species = ExternalTaxon.objects.filter(
+        rank__in=["species", "subspecies", "variety", "form"],
+        system__in=["col", "manual"],
+        ncbi_genomes__col_match_status__in=["matched", "manual"]
+    ).distinct().count()
+
+    # Excluded: especies únicas (Taxon) con al menos un genoma not_in_col o mismatch
+    excluded_species = Taxon.objects.filter(
+        genomes__col_match_status__in=["not_in_col", "mismatch"]
+    ).distinct().count()
+
+    # COL Taxonomy: especies aceptadas en ExternalTaxon con system="col"
+    total_col_species = ExternalTaxon.objects.filter(system="col", rank="species", status="accepted").count()
+
+    # Estadísticas por nivel de genoma (sin cambios)
     genome_levels = list(
         NCBIGenome.objects
         .values("genome_level")
         .annotate(count=Count("id"))
         .order_by("-count")
     )
-    
-    # Statistics by kingdom (via classification JSON on linked ExternalTaxon)
+
+    # Estadísticas por reino (sin cambios)
     kingdom_stats = list(
         NCBIGenome.objects
         .filter(external_taxon__isnull=False)
@@ -57,9 +59,7 @@ def home(request):
         .order_by("-count")
     )
 
-    # Some classification records don't include 'superkingdom' (domain). Try to fill
-    # missing values by looking up any ExternalTaxon that contains the kingdom and
-    # reading its classification, or use a small heuristic fallback.
+    # Rellenar superkingdom si falta (sin cambios)
     if kingdom_stats:
         for entry in kingdom_stats:
             if entry.get("superkingdom"):
@@ -72,8 +72,6 @@ def home(request):
                     sk = ext.classification.get("superkingdom") or ext.classification.get("domain")
             except Exception:
                 sk = None
-
-            # Heuristic fallback for common kingdoms
             if not sk and kname:
                 lname = kname.lower()
                 if lname in ("animalia", "plantae", "fungi", "protozoa"):
@@ -81,37 +79,68 @@ def home(request):
                 elif "archaea" in lname or "thermoprote" in lname or "methan" in lname:
                     sk = "Archaea"
                 else:
-                    # default to Bacteria for most unknown microbial kingdoms
                     sk = "Bacteria"
-
             entry["superkingdom"] = sk
-    
-    # Taxonomy statistics
+
+    # Estadísticas de taxonomía
     total_ncbi_taxa = Taxon.objects.count()
     total_col_taxa = ExternalTaxon.objects.filter(system="col").count()
-    total_col_species = ExternalTaxon.objects.filter(system="col", rank="species", status="accepted").count()
     total_crosswalks = TaxonCrosswalk.objects.filter(is_active=True).count()
-    
+
+    # COL status breakdown (especies vinculadas con genomas)
+    col_status_qs = (
+        ExternalTaxon.objects
+        .filter(system="col", ncbi_genomes__isnull=False)
+        .values("status")
+        .annotate(count=Count("id", distinct=True))
+    )
+    col_status_map = {s["status"]: s["count"] for s in col_status_qs}
+    accepted_count = col_status_map.get("accepted", 0)
+    synonym_count = col_status_map.get("synonym", 0) + col_status_map.get("ambiguous synonym", 0)
+    provisional_count = col_status_map.get("provisionally accepted", 0)
+
+    # COL coverage: solo auto-matched (manual NO son de COL)
+    col_matched_taxa = Taxon.objects.filter(genomes__col_match_status="matched").distinct().count()
+    col_coverage_pct = round(col_matched_taxa / total_genomes * 100) if total_genomes else 0
+
+    # Not in COL: manual + not_in_col status
+    manual_taxa = Taxon.objects.filter(genomes__col_match_status="manual").distinct().count()
+    not_in_col_total = not_in_col_genomes + manual_taxa
+    mismatch_pending = mismatch_genomes
+
+    # Contexto para el template
     context = {
-        # Genomes
+        # Genomas
         "total_genomes": total_genomes,
         "matched_genomes": matched_genomes,
+        "manual_genomes": manual_genomes,
+        "linked_genomes": linked_genomes,
         "unmatched_genomes": unmatched_genomes,
-        "not_in_col_count": not_in_col_count,
-        "manual_count": manual_count,
-        "mismatch_count": mismatch_count,
+        "not_in_col_genomes": not_in_col_genomes,
+        "mismatch_genomes": mismatch_genomes,
+        # Especies
         "samplable_species": samplable_species,
-        "genome_levels": genome_levels,
-        "kingdom_stats": kingdom_stats,
-        # Taxonomy
+        "excluded_species": excluded_species,
+        # COL Coverage
+        "col_matched_taxa": col_matched_taxa,
+        "col_coverage_pct": col_coverage_pct,
+        # Not in COL
+        "not_in_col_total": not_in_col_total,
+        "manual_taxa": manual_taxa,
+        "mismatch_pending": mismatch_pending,
+        # COL Status
+        "accepted_count": accepted_count,
+        "synonym_count": synonym_count,
+        "provisional_count": provisional_count,
+        # Taxonomía
         "total_ncbi_taxa": total_ncbi_taxa,
         "total_col_taxa": total_col_taxa,
         "total_col_species": total_col_species,
         "total_crosswalks": total_crosswalks,
-        # Percentages
-        "match_percent": round(matched_genomes / total_genomes * 100, 1) if total_genomes else 0,
+        # Otros
+        "genome_levels": genome_levels,
+        "kingdom_stats": kingdom_stats,
     }
-    
     return render(request, "taxonomy/pages/home.html", context)
 
 

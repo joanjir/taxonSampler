@@ -70,13 +70,30 @@ function getRefSeqBadgeClass(cat) {
 /**
  * Build classification path badges - using neutral gray tones
  */
+// Canonical rank order (root → leaf)
+const _RANK_PRIORITY = {
+  domain:0, superkingdom:0, kingdom:1, subkingdom:2,
+  phylum:3, subphylum:4, class:5, subclass:6,
+  order:7, suborder:8, family:9, subfamily:10,
+  genus:11, subgenus:12, species:13, subspecies:14,
+  variety:15, form:16,
+};
+function sortPath(path) {
+  if (!path || !path.length) return [];
+  return [...path].sort((a, b) => {
+    const pa = _RANK_PRIORITY[(a.rank||'').toLowerCase()] ?? 50;
+    const pb = _RANK_PRIORITY[(b.rank||'').toLowerCase()] ?? 50;
+    return pa - pb;
+  });
+}
+
 function buildClassificationPath(path) {
   if (!path || !path.length) return "<span class='text-muted'>—</span>";
-  
-  return path.map((item, idx) => {
+  const sorted = sortPath(path);
+  return sorted.map((item, idx) => {
     const rank = item.rank || "unknown";
     const name = item.name || "—";
-    const isLast = idx === path.length - 1;
+    const isLast = idx === sorted.length - 1;
     
     // Color per taxonomic rank
     const rankColors = {

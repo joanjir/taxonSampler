@@ -97,6 +97,31 @@ def classification_list_to_dict(classification: List[Dict[str, Any]]) -> Dict[st
     return out
 
 
+def _ensure_taxon_in_classification(
+    cls_path: List[Dict[str, str]],
+    cls_dict: Dict[str, str],
+    name: Optional[str],
+    rank: Optional[str],
+) -> None:
+    """Append the matched taxon itself to classification if not already present.
+
+    COL's ``classification`` field only returns *ancestors*, so the matched
+    species (or subspecies, variety, etc.) is never included.  This helper
+    adds it at the end of the path / dict so the full lineage is stored.
+    """
+    if not name or not rank:
+        return
+    rank_lower = rank.strip().lower()
+    name_clean = name.strip()
+    if not rank_lower or not name_clean:
+        return
+    # Already present?
+    if rank_lower in {r.lower() for r in cls_dict}:
+        return
+    cls_path.append({"rank": rank_lower, "name": name_clean})
+    cls_dict[rank_lower] = name_clean
+
+
 # ============================================================
 # ChecklistBank (Catalogue of Life)
 # ============================================================
@@ -196,11 +221,15 @@ class ChecklistBankClient:
         cls_path = classification_list_normalized(cls_raw)
         cls_dict = classification_list_to_dict(cls_raw)
 
+        matched_name = usage.get("name") or usage.get("label") or scientific_name
+        matched_rank = usage.get("rank")
+        _ensure_taxon_in_classification(cls_path, cls_dict, matched_name, matched_rank)
+
         return COLMatchResult(
             matched=True,
             external_id=str(ext_id),
-            name=usage.get("name") or usage.get("label") or scientific_name,
-            rank=usage.get("rank"),
+            name=matched_name,
+            rank=matched_rank,
             status=(usage.get("status") or "unknown"),
             authorship=usage.get("authorship"),
             classification_path=cls_path,
@@ -249,7 +278,9 @@ class ChecklistBankClient:
             result_rank = (name_obj.get("rank") if isinstance(name_obj, dict) else None) or usage.get("rank")
             result_status = usage.get("status") or hit.get("status") or "unknown"
             result_authorship = (name_obj.get("authorship") if isinstance(name_obj, dict) else None) or usage.get("authorship")
-            
+
+            _ensure_taxon_in_classification(cls_path, cls_dict, name, result_rank)
+
             return COLMatchResult(
                 matched=True,
                 external_id=str(ext_id),

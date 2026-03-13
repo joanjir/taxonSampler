@@ -19,87 +19,108 @@
   </div>
 </div>
 
-<!-- Stats Cards -->
+<!-- Overview -->
 <div class="row row-deck row-cards mb-4">
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-blue-lt me-3">
-                <i class="ti ti-dna-2 fs-2"></i>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-purple text-white avatar avatar-lg me-3">
+            <i class="ti ti-leaf fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              Samplable Species
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Taxa linked to COL (automatic + manual) available for phylogenetic sampling. Includes species, subspecies, varieties and forms.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
               </span>
-              <div>
-                <div class="text-secondary fs-5">Samplable Species</div>
-                <div class="h1 mb-0">{{ stats.samplable_species|default:"0" }}</div>
-              </div>
             </div>
-            <div class="text-secondary">
-              <i class="ti ti-database me-1"></i> {{ stats.total_genomes|default:"0" }} genomes ({{ stats.total_taxa|default:"0" }} taxa)
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-green-lt me-3">
-                <i class="ti ti-percentage fs-2"></i>
-              </span>
-              <div>
-                <div class="text-secondary fs-5">COL Coverage</div>
-                {% if stats.total_taxa > 0 %}
-                <div class="h1 mb-0">{% widthratio stats.matched_taxa stats.total_taxa 100 %}%</div>
-                {% else %}
-                <div class="h1 mb-0">0%</div>
-                {% endif %}
-              </div>
-            </div>
-            <div class="text-secondary">
-              <i class="ti ti-check me-1"></i> {{ stats.matched_taxa|default:"0" }} / {{ stats.total_taxa|default:"0" }} genomes linked
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-yellow-lt me-3">
-                <i class="ti ti-unlink fs-2"></i>
-              </span>
-              <div>
-                <div class="text-secondary fs-5">Excluded</div>
-                <div class="h1 mb-0">{{ stats.excluded_taxa|default:"0" }}</div>
-              </div>
-            </div>
-            <div class="text-secondary">
-              {% if stats.not_in_col_taxa %}<i class="ti ti-x me-1"></i> {{ stats.not_in_col_taxa }} not in COL{% endif %}
-              {% if stats.mismatch_taxa %} &middot; {{ stats.mismatch_taxa }} mismatch{% endif %}
-              {% if stats.pending_taxa %} &middot; {{ stats.pending_taxa }} pending{% endif %}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-              <span class="avatar bg-purple-lt me-3">
-                <i class="ti ti-history fs-2"></i>
-              </span>
-              <div>
-                <div class="text-secondary fs-5">Syncs</div>
-                <div class="h1 mb-0">{{ stats.successful_syncs|default:"0" }} / {{ stats.total_syncs|default:"0" }}</div>
-              </div>
-            </div>
-            <div class="text-secondary">
-              <i class="ti ti-circle-check me-1"></i> Successful / Total
+            <div class="h1 mb-0">{{ stats.samplable_species|default:0 }}</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-dna-2" style="font-size: 0.8rem;"></i>
+              {{ stats.total_taxa|default:0 }} taxa with genome
             </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-success text-white avatar avatar-lg me-3">
+            <i class="ti ti-percentage fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              COL Coverage
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Percentage of NCBI taxa automatically matched to the Catalogue of Life. Manual matches are not counted — those taxa were not found in COL.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
+            </div>
+            <div class="h1 mb-0">{{ stats.col_coverage_pct|default:0 }}%</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-check" style="font-size: 0.8rem;"></i>
+              {{ stats.col_matched_taxa|default:0 }} / {{ stats.total_taxa|default:0 }} taxa linked
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-orange text-white avatar avatar-lg me-3">
+            <i class="ti ti-map-pin-off fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              Not in COL
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="Taxa not found in the Catalogue of Life. Those resolved manually are included in the tree; unresolved ones (mismatch) need review.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
+            </div>
+            <div class="h1 mb-0">{{ stats.not_in_col_taxa|default:0 }}</div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-pencil" style="font-size: 0.8rem;"></i>
+              {{ stats.manual_taxa|default:0 }} manual &middot; {{ stats.unresolved_taxa|default:0 }} pending review
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center">
+          <span class="bg-primary text-white avatar avatar-lg me-3">
+            <i class="ti ti-refresh fs-2"></i>
+          </span>
+          <div>
+            <div class="subheader d-flex align-items-center">
+              Syncs
+              <span class="ms-1" tabindex="0" data-bs-toggle="tooltip" title="NCBI download + COL matching cycles. Shows successful runs out of total attempts.">
+                <i class="ti ti-help-circle text-muted" style="font-size: 0.85rem;"></i>
+              </span>
+            </div>
+            <div class="d-flex align-items-baseline">
+              <div class="h1 mb-0 me-2">{{ stats.successful_syncs|default:0 }}</div>
+              <span class="text-muted">/ {{ stats.total_syncs|default:0 }}</span>
+            </div>
+            <div class="small text-muted mt-1">
+              <i class="ti ti-clock" style="font-size: 0.8rem;"></i>
+              Successful / Total
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
     <div class="row row-deck row-cards">
       <!-- Start Sync Panel (admin only) -->
@@ -470,11 +491,33 @@
                   <h3 class="mb-0">
                     <i class="ti ti-sparkles me-2"></i>New Species Discovered
                   </h3>
-                  <div class="d-flex gap-2">
+                  <div class="d-flex flex-column align-items-end gap-1">
                     {% if is_admin %}
-                    <button class="btn btn-primary btn-sm" id="btn-start-discovery">
-                      <i class="ti ti-radar me-1"></i> Scan Now
-                    </button>
+                    <div class="mb-1" id="discovery-kingdoms-group">
+                      <label class="form-label mb-1" style="font-size: 0.95em;">Domains to scan:</label>
+                      <div class="d-flex flex-wrap gap-2">
+                        <div class="form-check form-check-inline mb-0">
+                          <input class="form-check-input" type="checkbox" id="kingdom-eukaryota" value="eukaryota" checked>
+                          <label class="form-check-label" for="kingdom-eukaryota">Eukaryota</label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                          <input class="form-check-input" type="checkbox" id="kingdom-bacteria" value="bacteria">
+                          <label class="form-check-label" for="kingdom-bacteria">Bacteria</label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                          <input class="form-check-input" type="checkbox" id="kingdom-archaea" value="archaea">
+                          <label class="form-check-label" for="kingdom-archaea">Archaea</label>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <button class="btn btn-primary btn-sm" id="btn-start-discovery">
+                        <i class="ti ti-radar me-1"></i> Scan Now
+                      </button>
+                      <button class="btn btn-success btn-sm" id="btn-bulk-import" title="Import all pending species, fetch GCF genomes and match with COL">
+                        <i class="ti ti-database-import me-1"></i> Import All
+                      </button>
+                    </div>
                     {% endif %}
                     <select id="discoveryStatusFilter" class="form-select form-select-sm" style="width: auto;">
                       <option value="pending" selected>Pending</option>
@@ -536,7 +579,6 @@
                       <option value="">All Match Status</option>
                       <option value="matched">Linked</option>
                       <option value="unlinked">Unlinked</option>
-                      <option value="mismatch">Mismatch</option>
                       <option value="manual">Manual</option>
                     </select>
                     <select id="colStatusFilter" class="form-select form-select-sm" style="width: auto;">
@@ -583,13 +625,9 @@
 
 <!-- View Genome Modal -->
 <div class="modal modal-blur fade" id="viewGenomeModal" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="ti ti-dna me-2"></i>Species Details</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="viewGenomeBody">
+      <div class="modal-body p-0" id="viewGenomeBody">
         <div class="text-center py-5">
           <div class="spinner-border text-primary" role="status"></div>
         </div>
@@ -891,6 +929,6 @@
   };
 </script>
 <script src="{% static 'taxonomy/js/dashboard/species-table.js' %}"></script>
-<script src="{% static 'taxonomy/js/dashboard/discoveries.js' %}"></script>
+<script src="{% static 'taxonomy/js/dashboard/discoveries.js' %}?v=2"></script>
 <script src="{% static 'taxonomy/js/dashboard/taxon-sync.js' %}"></script>
 {% endblock %}

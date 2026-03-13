@@ -24,6 +24,7 @@ from apps.taxonomy.models import (
     NCBIGenome,
 )
 from apps.taxonomy.ncbi.clients import ChecklistBankClient, canonicalize_scientific_name
+from apps.taxonomy.utils import genera_match
 
 
 # Default COL dataset
@@ -129,6 +130,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Total: {total_imported} genomes imported, {total_matched} matched with COL"
         ))
+        
+        # CACHE INVALIDATION: Ensure new species appear in the tree
+        if not dry_run and total_matched > 0:
+            from apps.taxonomy.utils import invalidate_all_tree_caches
+            invalidate_all_tree_caches()
+            self.stdout.write(self.style.SUCCESS("Tree cache invalidated"))
 
     def _detect_group(self, filename: str) -> str:
         """Detect taxonomic group from filename."""
@@ -333,6 +340,29 @@ class Command(BaseCommand):
             )
 
             if not result.matched:
+                # Fallback: use taxonomy from a sibling in the same genus
+                from apps.taxonomy.utils import create_genus_fallback
+                if create_genus_fallback(taxon, organism_name):
+                    self.stdout.write(f"  [FALLBACK] Genus fallback for {organism_name}")
+                    return True
+                return False
+
+            # GENUS VALIDATION: Prevent cross-genus mismatches
+            col_classification = getattr(result, "classification", {}) or {}
+            genus_ok, genus_reason = genera_match(
+                ncbi_name=organism_name,
+                col_name=result.name or "",
+                col_classification=col_classification
+            )
+            if not genus_ok:
+                self.stderr.write(
+                    f"  [GENUS_MISMATCH] '{organism_name}' ≠ COL '{result.name}' ({genus_reason})"
+                )
+                # Fallback: use taxonomy from a sibling in the same genus
+                from apps.taxonomy.utils import create_genus_fallback
+                if create_genus_fallback(taxon, organism_name):
+                    self.stdout.write(f"  [FALLBACK] Genus fallback for {organism_name}")
+                    return True
                 return False
 
             # Create ExternalTaxon

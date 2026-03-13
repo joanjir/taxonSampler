@@ -21,6 +21,72 @@ export function createSelectionManager({ renderer }) {
   let lastSamplingResult = null;
 
   // ------------------------------------------------------------------
+  // DataTable instance
+  // ------------------------------------------------------------------
+  let _dt = null;
+
+  function _ensureDT() {
+    if (_dt) return _dt;
+    const $ = window.jQuery;
+    const tbl = document.getElementById("selTable");
+    if (!tbl || !$ || !$.fn.DataTable) return null;
+
+    // Remove any placeholder rows with colspan (breaks DT init)
+    tbl.querySelector("tbody").innerHTML = "";
+
+    _dt = $(tbl).DataTable({
+      paging: false,
+      ordering: true,
+      info: false,
+      lengthChange: false,
+      autoWidth: false,
+      dom: "t",                       // table only — filters live in thead
+      language: {
+        emptyTable: "No taxa selected.",
+        zeroRecords: "No matching records.",
+      },
+      columnDefs: [
+        { targets: 0, className: "ps-2 text-muted small" },
+        { targets: [3, 4, 5], className: "text-center" },
+        { targets: 6, orderable: false, className: "text-end pe-2" },
+      ],
+      initComplete: function () {
+        const filterRow = document.createElement("tr");
+        filterRow.className = "sel-col-filters";
+        // cols: 0=#  1=Clade  2=Species  3=Quality  4=Assembly  5=Level  6=Actions
+        const searchable = { 1: "Clade…", 2: "Species…", 3: "Quality…", 4: "Assembly…", 5: "Level…" };
+        this.api().columns().every(function () {
+          const idx = this.index();
+          const th = document.createElement("th");
+          if (searchable[idx]) {
+            const input = document.createElement("input");
+            input.type = "search";
+            input.className = "form-control form-control-sm sel-col-input";
+            input.placeholder = searchable[idx];
+            const col = this;
+            input.addEventListener("keyup", () => { col.search(input.value).draw(); });
+            input.addEventListener("click", (e) => e.stopPropagation()); // avoid sorting
+            th.appendChild(input);
+          }
+          filterRow.appendChild(th);
+        });
+        tbl.querySelector("thead").appendChild(filterRow);
+      },
+    });
+
+    return _dt;
+  }
+
+  /** Clear DT and load new rows (each row = 7-element array). */
+  function _dtLoad(rows) {
+    const dt = _ensureDT();
+    if (!dt) return;
+    dt.clear();
+    if (rows.length) dt.rows.add(rows);
+    dt.draw();
+  }
+
+  // ------------------------------------------------------------------
   // Badge mode (Manual / Sampling)
   // ------------------------------------------------------------------
   function setBadgeMode(modeText, isSampling) {
@@ -56,14 +122,6 @@ export function createSelectionManager({ renderer }) {
   // ------------------------------------------------------------------
   // Manual selection rendering
   // ------------------------------------------------------------------
-  function renderSelListTbody(rowsHtml, emptyMsg = "No selection.") {
-    const tbody = document.getElementById("selList");
-    if (!tbody) return;
-    tbody.innerHTML =
-      rowsHtml ||
-      `<tr><td class="text-muted small ps-2" colspan="7">${escapeHtml(emptyMsg)}</td></tr>`;
-  }
-
   function renderSelectionManualTbody(selectedMap) {
     const items = asArraySelected(selectedMap);
 
@@ -78,41 +136,32 @@ export function createSelectionManager({ renderer }) {
     const hint = document.getElementById("selHint");
     if (hint) hint.textContent = "";
 
-    if (!items.length) {
-      renderSelListTbody("", "No taxa selected.");
-      return;
-    }
+    if (!items.length) { _dtLoad([]); return; }
 
     const sorted = items.slice().sort((a, b) =>
       String(a.rank || "").localeCompare(String(b.rank || "")) ||
       String(a.name || "").localeCompare(String(b.name || "")),
     );
 
-    const rows = sorted.map((x) => {
+    const rows = sorted.map((x, i) => {
       const selId = String(x.id || x.key || "");
       const rank = String(x.rank || "");
       const name = String(x.name || "");
       const nameHtml = ["species", "subspecies"].includes(rank.toLowerCase())
         ? `<em>${escapeHtml(name)}</em>`
-        : `<span>${escapeHtml(name)}</span>`;
-      return `
-        <tr>
-          <td class="ps-2 text-muted small" colspan="2">${escapeHtml(rank)}</td>
-          <td>${nameHtml}</td>
-          <td colspan="3"></td>
-          <td class="text-end pe-2">
-            <button type="button"
-                    class="btn btn-sm btn-outline-danger py-0 px-1"
-                    data-sel-remove="${escapeHtml(selId)}"
-                    title="Remove">
-              <i class="fa-solid fa-trash-can"></i>
-            </button>
-          </td>
-        </tr>
-      `;
-    }).join("");
+        : escapeHtml(name);
+      return [
+        i + 1,
+        escapeHtml(rank),
+        nameHtml,
+        "",
+        "",
+        "",
+        `<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" data-sel-remove="${escapeHtml(selId)}" title="Remove"><i class="fa-solid fa-trash-can"></i></button>`,
+      ];
+    });
 
-    renderSelListTbody(rows);
+    _dtLoad(rows);
   }
 
   // ------------------------------------------------------------------
@@ -164,11 +213,11 @@ export function createSelectionManager({ renderer }) {
 
     if (!species.length) {
       setText("selCount", "0");
-      renderSelListTbody("", "No species selected.");
+      _dtLoad([]);
       return;
     }
 
-    const html = species.map((s, i) => {
+    const rows = species.map((s, i) => {
       const name = s.organism_name || s.name || "";
       const clade = s.clade_group || s.clade || "";
 
@@ -194,33 +243,19 @@ export function createSelectionManager({ renderer }) {
         ? `<span class="badge bg-azure-lt text-dark">${escapeHtml(s.genome_level)}</span>`
         : `<span class="text-muted">—</span>`;
 
-      return `
-        <tr>
-          <td class="ps-2 text-muted small">${i + 1}</td>
-          <td class="small" title="${escapeHtml(clade)}">${escapeHtml(clade)}</td>
-          <td><em>${escapeHtml(name)}</em></td>
-          <td class="text-center">${spScoreHtml}</td>
-          <td class="text-center">${asmScoreHtml}</td>
-          <td class="text-center">${levelHtml}</td>
-          <td class="text-end pe-2">
-            <button class="btn btn-sm btn-outline-secondary py-0 px-1"
-                    type="button"
-                    data-copy-key="${escapeHtml(name)}"
-                    title="Copy name">
-              <i class="fa-solid fa-copy"></i>
-            </button>
-            <button class="btn btn-sm btn-outline-danger py-0 px-1 ms-1 sel-remove-org"
-                    type="button"
-                    data-org="${escapeHtml(name)}"
-                    title="Remove from selection">
-              <i class="fa-solid fa-trash"></i>
-            </button>
-          </td>
-        </tr>
-      `;
-    }).join("");
+      return [
+        i + 1,
+        `<span class="small" title="${escapeHtml(clade)}">${escapeHtml(clade)}</span>`,
+        `<em>${escapeHtml(name)}</em>`,
+        spScoreHtml,
+        asmScoreHtml,
+        levelHtml,
+        `<button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button" data-copy-key="${escapeHtml(name)}" title="Copy name"><i class="fa-solid fa-copy"></i></button>`
+        + `<button class="btn btn-sm btn-outline-danger py-0 px-1 ms-1 sel-remove-org" type="button" data-org="${escapeHtml(name)}" title="Remove from selection"><i class="fa-solid fa-trash"></i></button>`,
+      ];
+    });
 
-    renderSelListTbody(html);
+    _dtLoad(rows);
 
     setText("selCount", String(species.length));
 
@@ -287,40 +322,31 @@ export function createSelectionManager({ renderer }) {
 
     if (!rows.length) {
       setText("selCount", "0");
-      renderSelListTbody("", "No selection.");
+      _dtLoad([]);
       return;
     }
 
     const icon = (g) =>
       g === "outgroup"
-        ? `<i class="fa-solid fa-circle-dot text-warning me-2" title="Outgroup"></i>`
-        : `<i class="fa-solid fa-leaf text-success me-2" title="Ingroup"></i>`;
+        ? `<i class="fa-solid fa-circle-dot text-warning" title="Outgroup"></i>`
+        : `<i class="fa-solid fa-leaf text-success" title="Ingroup"></i>`;
 
-    const html = rows.map((r) => {
+    const data = rows.map((r, i) => {
       const nameTag = ["species", "subspecies"].includes((r.rank || "").toLowerCase())
         ? `<em>${escapeHtml(r.name || "")}</em>`
-        : `<span>${escapeHtml(r.name || "")}</span>`;
-      return `
-      <tr>
-        <td class="ps-2">
-          ${icon(r.group)}
-        </td>
-        <td class="small text-muted">${escapeHtml(r.rank || "")}</td>
-        <td>${nameTag}</td>
-        <td colspan="3"></td>
-        <td class="text-end pe-2">
-          <button class="btn btn-sm btn-outline-secondary py-0 px-1"
-                  type="button"
-                  data-copy-key="${escapeHtml(r.key)}"
-                  title="Copy key">
-            <i class="fa-solid fa-copy"></i>
-          </button>
-        </td>
-      </tr>
-    `;
-    }).join("");
+        : escapeHtml(r.name || "");
+      return [
+        icon(r.group),
+        `<span class="small text-muted">${escapeHtml(r.rank || "")}</span>`,
+        nameTag,
+        "",
+        "",
+        "",
+        `<button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button" data-copy-key="${escapeHtml(r.key)}" title="Copy key"><i class="fa-solid fa-copy"></i></button>`,
+      ];
+    });
 
-    renderSelListTbody(html);
+    _dtLoad(data);
 
     setText("selCount", String(rows.length));
     setText("selRanks", "–");
@@ -338,8 +364,8 @@ export function createSelectionManager({ renderer }) {
   // Event delegation (remove / copy)
   // ------------------------------------------------------------------
   function bindSelListDelegation() {
-    const tbody = document.getElementById("selList");
-    if (!tbody) return () => {};
+    const table = document.getElementById("selTable");
+    if (!table) return () => {};
 
     const handler = async (e) => {
       const rmBtn = e.target.closest?.("[data-sel-remove]");
@@ -388,8 +414,8 @@ export function createSelectionManager({ renderer }) {
       }
     };
 
-    tbody.addEventListener("click", handler);
-    return () => tbody.removeEventListener("click", handler);
+    table.addEventListener("click", handler);
+    return () => table.removeEventListener("click", handler);
   }
 
   // ------------------------------------------------------------------

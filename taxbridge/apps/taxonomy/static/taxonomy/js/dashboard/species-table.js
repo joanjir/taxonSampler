@@ -59,7 +59,7 @@
       "matched": "Linked",
       "unmatched": "Unlinked",
       "not_in_col": "Unlinked",
-      "mismatch": "Mismatch",
+      "mismatch": "Unlinked",
       "manual": "Manual"
     };
     return labels[status] || status;
@@ -392,251 +392,200 @@
     }
   };
 
+  // ── helpers for external links ──
+  function ncbiGenomeUrl(acc) { return `https://www.ncbi.nlm.nih.gov/datasets/genome/${acc}/`; }
+  function ncbiTaxUrl(taxid) { return `https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=${taxid}`; }
+  function colSpeciesUrl(id)  { return `https://www.catalogueoflife.org/data/taxon/${id}`; }
+
+  // Canonical rank order (root → leaf)
+  const _RANK_PRIORITY = {
+    domain:0, superkingdom:0, kingdom:1, subkingdom:2,
+    phylum:3, subphylum:4, class:5, subclass:6,
+    order:7, suborder:8, family:9, subfamily:10,
+    genus:11, subgenus:12, species:13, subspecies:14,
+    variety:15, form:16,
+  };
+  function sortPath(path) {
+    if (!path || !path.length) return [];
+    return [...path].sort((a, b) => {
+      const pa = _RANK_PRIORITY[(a.rank||'').toLowerCase()] ?? 50;
+      const pb = _RANK_PRIORITY[(b.rank||'').toLowerCase()] ?? 50;
+      return pa - pb;
+    });
+  }
+
   function renderGenomeView(g) {
     const body = document.getElementById('viewGenomeBody');
+    const ext = g.external_taxon;
+    const path = sortPath(ext?.classification_path || []);
 
-    const buscoHtml = g.busco_complete ? `
+    // ── Taxonomy rows (table grid, no pills/circles) ──
+    const taxRows = path.map(p => {
+      const r = (p.rank || '').toLowerCase();
+      return `<tr>
+        <td style="color:#888;width:35%;font-size:.8rem;text-transform:capitalize">${r}</td>
+        <td class="fw-medium" style="font-size:.85rem">${p.name}</td>
+      </tr>`;
+    }).join('');
+
+    // ── COL link ──
+    const colLink = ext && ext.system === 'col' && ext.external_id
+      ? `<a href="${colSpeciesUrl(ext.external_id)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-success"><i class="ti ti-external-link me-1"></i>COL</a>`
+      : '';
+
+    // ── Match indicator ──
+    const matchIcon = g.col_match_status === 'matched' ? 'ti-link'
+      : g.col_match_status === 'manual' ? 'ti-hand-stop'
+      : 'ti-unlink';
+
+    // ── Source note ──
+    const sourceNote = ext
+      ? (ext.system === 'manual'
+          ? 'Taxonomy derived from genus sibling in COL'
+          : `COL &middot; ${ext.status || ''}`)
+      : '';
+
+    // ── BUSCO ──
+    const buscoHtml = g.busco_complete != null ? `
       <div class="col-12">
-        <div class="card">
-          <div class="card-header"><h4 class="card-title">BUSCO Quality</h4></div>
-          <div class="card-body">
-            <div class="row">
-              <div class="col-6 col-md-2 text-center">
-                <div class="h3 text-success">${g.busco_complete?.toFixed(1) || '-'}%</div>
-                <div class="text-muted small">Complete</div>
+        <div class="border rounded">
+          <div class="px-3 py-2 d-flex align-items-center justify-content-between" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+            <span style="font-size:.8rem;font-weight:600"><i class="ti ti-chart-dots-3 me-1" style="font-size:.75rem;opacity:.5"></i>BUSCO Quality</span>
+            ${g.busco_lineage ? `<span style="font-size:.75rem;color:#666">${g.busco_lineage}</span>` : ''}
+          </div>
+          <div class="px-3 py-2">
+            <div class="d-flex align-items-center gap-2">
+              <div class="progress flex-grow-1" style="height:8px;background:#e9ecef;border-radius:4px">
+                <div class="progress-bar" role="progressbar" style="width:${g.busco_complete || 0}%;background:#5eba7d;border-radius:4px"></div>
               </div>
-              <div class="col-6 col-md-2 text-center">
-                <div class="h3 text-primary">${g.busco_single_copy?.toFixed(1) || '-'}%</div>
-                <div class="text-muted small">Single Copy</div>
-              </div>
-              <div class="col-6 col-md-2 text-center">
-                <div class="h3 text-info">${g.busco_duplicated?.toFixed(1) || '-'}%</div>
-                <div class="text-muted small">Duplicated</div>
-              </div>
-              <div class="col-6 col-md-2 text-center">
-                <div class="h3 text-warning">${g.busco_fragmented?.toFixed(1) || '-'}%</div>
-                <div class="text-muted small">Fragmented</div>
-              </div>
-              <div class="col-6 col-md-2 text-center">
-                <div class="h3 text-danger">${g.busco_missing?.toFixed(1) || '-'}%</div>
-                <div class="text-muted small">Missing</div>
-              </div>
-              <div class="col-6 col-md-2 text-center">
-                <div class="h6">${g.busco_lineage || '-'}</div>
-                <div class="text-muted small">Lineage</div>
-              </div>
+              <span style="font-size:.8rem;font-weight:500;min-width:70px;text-align:right">${g.busco_complete?.toFixed(1)}% complete</span>
             </div>
           </div>
         </div>
-      </div>
-    ` : '';
-
-    const colHtml = g.external_taxon ? (() => {
-      const ext = g.external_taxon;
-      // Build taxonomy table from classification dict if available
-      const cls = ext.classification || {};
-      const primaryRanks = ['kingdom','phylum','class','order','family','genus','species'];
-      const taxRows = primaryRanks
-        .filter(r => cls[r])
-        .map(r => `<tr><td class="text-muted text-capitalize small">${r}</td><td>${cls[r]}</td></tr>`)
-        .join('');
-      // Also collect extra ranks not in primaryRanks
-      const extraRows = Object.entries(cls)
-        .filter(([r]) => !primaryRanks.includes(r) && cls[r])
-        .map(([r, v]) => `<tr><td class="text-muted text-capitalize small">${r}</td><td>${v}</td></tr>`)
-        .join('');
-      const allRows = taxRows + extraRows;
-      const classificationHtml = allRows
-        ? `<table class="table table-sm table-borderless mb-0 mt-2">${allRows}</table>`
-        : (ext.classification_path?.length
-            ? `<div class="small text-muted">${ext.classification_path.map(p => p.name).join(' > ')}</div>`
-            : '');
-
-      return `
-        <div class="alert alert-success">
-          <div class="d-flex align-items-center">
-            <i class="ti ti-check me-2"></i>
-            <div class="flex-grow-1">
-              <div class="fw-bold">${ext.name}</div>
-              ${classificationHtml}
-              <div class="small mt-1">
-                <span class="badge bg-${ext.status === 'accepted' ? 'green' : 'blue'}-lt">
-                  ${ext.status}
-                </span>
-                <span class="text-muted ms-2">ID: ${ext.external_id}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    })() : `
-      <div class="alert alert-warning">
-        <i class="ti ti-alert-triangle me-2"></i>
-        Not linked to Catalogue of Life
-      </div>
-    `;
+      </div>` : '';
 
     body.innerHTML = `
-      <div class="row g-3">
-        <div class="col-12">
-          <div class="d-flex align-items-center mb-3">
-            <div class="flex-grow-1">
-              <h3 class="mb-0">${g.organism_name}</h3>
-              ${g.common_name ? `<div class="text-muted">${g.common_name}</div>` : ''}
-            </div>
-            <div class="text-end">
-              <div><code class="fs-5">${g.accession}</code></div>
-              <span class="badge ${matchStatusBadge(g.col_match_status)}">${matchStatusLabel(g.col_match_status)}</span>
-            </div>
-          </div>
+      <!-- Header -->
+      <div style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;padding:1.5rem 1.5rem 1rem;border-radius:.25rem .25rem 0 0;position:relative">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="position:absolute;top:1rem;right:1rem;opacity:.5"></button>
+        <div style="font-size:.7rem;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:.25rem">Species Details</div>
+        <h3 style="margin:0;font-weight:700;color:#1e293b">
+          <em>${g.organism_name}</em>
+        </h3>
+        ${g.common_name ? `<div style="color:#666;font-size:.9rem;margin-top:.15rem">${g.common_name}</div>` : ''}
+        <div style="margin-top:.75rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <a href="${ncbiGenomeUrl(g.accession)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary"><i class="ti ti-external-link me-1"></i>${g.accession}</a>
+          ${g.taxon ? `<a href="${ncbiTaxUrl(g.taxon.taxid)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary"><i class="ti ti-external-link me-1"></i>TaxID ${g.taxon.taxid}</a>` : ''}
+          ${colLink}
+          <span class="badge ${matchStatusBadge(g.col_match_status)}" style="font-size:.75rem">
+            <i class="ti ${matchIcon}" style="font-size:.7rem"></i> ${matchStatusLabel(g.col_match_status)}
+          </span>
         </div>
+      </div>
 
-        <div class="col-12">
-          <div class="card">
-            <div class="card-header">
-              <h4 class="card-title"><i class="ti ti-tree me-2"></i>Catalogue of Life</h4>
-            </div>
-            <div class="card-body">
-              ${colHtml}
-              ${g.col_match_notes ? `<div class="mt-2 text-muted small"><strong>Notes:</strong> ${g.col_match_notes}</div>` : ''}
-            </div>
-          </div>
-        </div>
+      ${g.col_match_notes ? `<div style="background:#fffbe6;border-bottom:1px solid #f0e6b8;padding:.5rem 1.5rem;font-size:.8rem;color:#8a6d3b"><i class="ti ti-info-circle me-1"></i>${g.col_match_notes}</div>` : ''}
 
-        <div class="col-md-6">
-          <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">NCBI Taxonomy</h4></div>
-            <div class="card-body">
-              ${g.taxon ? `
-                <div><strong>Tax ID:</strong> ${g.taxon.taxid}</div>
-                <div><strong>Name:</strong> ${g.taxon.scientific_name}</div>
-                <div><strong>Rank:</strong> ${g.taxon.rank}</div>
-              ` : '<span class="text-muted">No NCBI taxon linked</span>'}
-            </div>
-          </div>
-        </div>
+      <!-- Body sections -->
+      <div class="p-3">
+        <div class="row g-3">
 
-        <div class="col-md-6">
-          <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">Assembly Info</h4></div>
-            <div class="card-body">
-              <div class="row">
-                <div class="col-6">
-                  <div class="text-muted small">Level</div>
-                  <div><span class="badge ${genomeLevelBadge(g.genome_level)}">${g.genome_level || '-'}</span></div>
-                </div>
-                <div class="col-6">
-                  <div class="text-muted small">RefSeq Category</div>
-                  <div>${g.refseq_category || '-'}</div>
-                </div>
-                <div class="col-6 mt-2">
-                  <div class="text-muted small">Source</div>
-                  <div>${g.source_database || '-'}</div>
-                </div>
-                <div class="col-6 mt-2">
-                  <div class="text-muted small">Release Date</div>
-                  <div>${g.release_date || '-'}</div>
-                </div>
+          <!-- Taxonomy -->
+          ${taxRows ? `
+          <div class="col-12">
+            <div class="border rounded">
+              <div class="px-3 py-2 d-flex align-items-center justify-content-between" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+                <span style="font-size:.8rem;font-weight:600"><i class="ti ti-hierarchy-2 me-1" style="font-size:.75rem;opacity:.5"></i>Taxonomy</span>
+                ${sourceNote ? `<span style="font-size:.75rem;color:#888">${sourceNote}</span>` : ''}
+              </div>
+              <div class="px-3 py-2">
+                <table class="table table-sm table-borderless mb-0">${taxRows}</table>
+              </div>
+            </div>
+          </div>` : ''}
+          <div class="col-md-6">
+            <div class="border rounded h-100">
+              <div class="px-3 py-2" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+                <span style="font-size:.8rem;font-weight:600"><i class="ti ti-building-factory me-1" style="font-size:.75rem;opacity:.5"></i>Assembly</span>
+              </div>
+              <div class="px-3 py-2">
+                <table class="table table-sm table-borderless mb-0" style="font-size:.85rem">
+                  <tr><td style="color:#888;width:40%">Level</td><td class="fw-medium">${g.genome_level || '-'}</td></tr>
+                  <tr><td style="color:#888">RefSeq</td><td>${g.refseq_category || '-'}</td></tr>
+                  <tr><td style="color:#888">Source</td><td>${g.source_database || '-'}</td></tr>
+                  <tr><td style="color:#888">Release</td><td>${g.release_date || '-'}</td></tr>
+                  ${g.sequencing_tech ? `<tr><td style="color:#888">Sequencing</td><td>${g.sequencing_tech}</td></tr>` : ''}
+                  ${g.assembly_method ? `<tr><td style="color:#888">Method</td><td>${g.assembly_method}</td></tr>` : ''}
+                </table>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="col-md-6">
-          <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">Quality Metrics</h4></div>
-            <div class="card-body">
-              <div class="row">
-                <div class="col-6">
-                  <div class="text-muted small">Quality Score</div>
-                  <div class="fw-bold">${g.quality_score?.toFixed(2) || '-'}</div>
-                </div>
-                <div class="col-6">
-                  <div class="text-muted small">Coverage</div>
-                  <div>${g.genome_coverage ? g.genome_coverage.toFixed(1) + 'x' : '-'}</div>
-                </div>
-                <div class="col-6 mt-2">
-                  <div class="text-muted small">Contig N50</div>
-                  <div>${g.contig_n50_kb ? g.contig_n50_kb.toFixed(1) + ' kb' : '-'}</div>
-                </div>
-                <div class="col-6 mt-2">
-                  <div class="text-muted small">Scaffold N50</div>
-                  <div>${g.scaffold_n50_kb ? g.scaffold_n50_kb.toFixed(1) + ' kb' : '-'}</div>
-                </div>
+          <!-- Quality -->
+          <div class="col-md-6">
+            <div class="border rounded h-100">
+              <div class="px-3 py-2" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+                <span style="font-size:.8rem;font-weight:600"><i class="ti ti-certificate me-1" style="font-size:.75rem;opacity:.5"></i>Quality</span>
+              </div>
+              <div class="px-3 py-2">
+                <table class="table table-sm table-borderless mb-0" style="font-size:.85rem">
+                  <tr><td style="color:#888;width:40%">Coverage</td><td>${g.genome_coverage ? g.genome_coverage.toFixed(1) + 'x' : '-'}</td></tr>
+                  <tr><td style="color:#888">Score</td><td class="fw-medium">${g.quality_score?.toFixed(2) || '-'}</td></tr>
+                  <tr><td style="color:#888">Contig N50</td><td>${g.contig_n50_kb ? g.contig_n50_kb.toFixed(1) + ' kb' : '-'}</td></tr>
+                  <tr><td style="color:#888">Scaffold N50</td><td>${g.scaffold_n50_kb ? g.scaffold_n50_kb.toFixed(1) + ' kb' : '-'}</td></tr>
+                </table>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="col-md-6">
-          <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">Genome Statistics</h4></div>
-            <div class="card-body">
-              <div class="row">
-                <div class="col-6">
-                  <div class="text-muted small">Size</div>
-                  <div>${g.total_sequence_length ? (g.total_sequence_length / 1e6).toFixed(1) + ' Mb' : '-'}</div>
-                </div>
-                <div class="col-6">
-                  <div class="text-muted small">GC Content</div>
-                  <div>${g.gc_percent ? g.gc_percent.toFixed(1) + '%' : '-'}</div>
-                </div>
-                <div class="col-4 mt-2">
-                  <div class="text-muted small">Chromosomes</div>
-                  <div>${g.chromosome_count || '-'}</div>
-                </div>
-                <div class="col-4 mt-2">
-                  <div class="text-muted small">Scaffolds</div>
-                  <div>${g.scaffold_count || '-'}</div>
-                </div>
-                <div class="col-4 mt-2">
-                  <div class="text-muted small">Contigs</div>
-                  <div>${g.contig_count || '-'}</div>
-                </div>
+          <!-- Genome -->
+          <div class="col-md-6">
+            <div class="border rounded h-100">
+              <div class="px-3 py-2" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+                <span style="font-size:.8rem;font-weight:600"><i class="ti ti-circle-dashed me-1" style="font-size:.75rem;opacity:.5"></i>Genome</span>
+              </div>
+              <div class="px-3 py-2">
+                <table class="table table-sm table-borderless mb-0" style="font-size:.85rem">
+                  <tr><td style="color:#888;width:40%">Size</td><td class="fw-medium">${g.total_sequence_length ? (g.total_sequence_length / 1e6).toFixed(1) + ' Mb' : '-'}</td></tr>
+                  <tr><td style="color:#888">GC</td><td>${g.gc_percent ? g.gc_percent.toFixed(1) + '%' : '-'}</td></tr>
+                  <tr><td style="color:#888">Chromosomes</td><td>${g.chromosome_count || '-'}</td></tr>
+                  <tr><td style="color:#888">Scaffolds</td><td>${g.scaffold_count || '-'}</td></tr>
+                  <tr><td style="color:#888">Contigs</td><td>${g.contig_count || '-'}</td></tr>
+                </table>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="col-md-6">
-          <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">Gene Annotation</h4></div>
-            <div class="card-body">
-              <div class="row">
-                <div class="col-6">
-                  <div class="text-muted small">Total Genes</div>
-                  <div class="fw-bold">${g.genes?.toLocaleString() || '-'}</div>
-                </div>
-                <div class="col-6">
-                  <div class="text-muted small">Protein Coding</div>
-                  <div>${g.protein_coding?.toLocaleString() || '-'}</div>
-                </div>
-                <div class="col-6 mt-2">
-                  <div class="text-muted small">Non-coding</div>
-                  <div>${g.non_coding_genes?.toLocaleString() || '-'}</div>
-                </div>
-                <div class="col-6 mt-2">
-                  <div class="text-muted small">Pseudogenes</div>
-                  <div>${g.pseudogenes?.toLocaleString() || '-'}</div>
-                </div>
+          <!-- Genes -->
+          <div class="col-md-6">
+            <div class="border rounded h-100">
+              <div class="px-3 py-2" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+                <span style="font-size:.8rem;font-weight:600"><i class="ti ti-dna-2 me-1" style="font-size:.75rem;opacity:.5"></i>Genes</span>
+              </div>
+              <div class="px-3 py-2">
+                <table class="table table-sm table-borderless mb-0" style="font-size:.85rem">
+                  <tr><td style="color:#888;width:40%">Total</td><td class="fw-medium">${g.genes?.toLocaleString() || '-'}</td></tr>
+                  <tr><td style="color:#888">Protein Coding</td><td>${g.protein_coding?.toLocaleString() || '-'}</td></tr>
+                  <tr><td style="color:#888">Non-coding</td><td>${g.non_coding_genes?.toLocaleString() || '-'}</td></tr>
+                  <tr><td style="color:#888">Pseudogenes</td><td>${g.pseudogenes?.toLocaleString() || '-'}</td></tr>
+                  ${g.annotation_provider ? `<tr><td style="color:#888">Annotation</td><td>${g.annotation_provider}${g.annotation_status ? ' &middot; ' + g.annotation_status : ''}</td></tr>` : ''}
+                </table>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="col-md-6">
-          <div class="card h-100">
-            <div class="card-header"><h4 class="card-title">Protein Coding</h4></div>
-            <div class="card-body">
-              ${g.protein_coding 
-                ? `<span class="badge bg-blue-lt text-blue">${g.protein_coding.toLocaleString()}</span>`
-                : '<span class="badge bg-secondary-lt">Not available</span>'
-              }
+          ${buscoHtml}
+
+          ${g.has_proteome ? `
+          <div class="col-12">
+            <div class="border rounded">
+              <div class="px-3 py-2 d-flex align-items-center justify-content-between" style="background:#f8f9fa;border-bottom:1px solid #e6e7e9;border-radius:.25rem .25rem 0 0">
+                <span style="font-size:.8rem;font-weight:600"><i class="ti ti-atom me-1" style="font-size:.75rem;opacity:.5"></i>Proteome</span>
+              </div>
+              <div class="px-3 py-2" style="font-size:.85rem">${g.proteome_quality || 'Available'}</div>
             </div>
-          </div>
-        </div>
+          </div>` : ''}
 
-        ${buscoHtml}
+        </div>
       </div>
     `;
   }
@@ -698,7 +647,7 @@
     
     if (data.external_taxon) {
       const ext = data.external_taxon;
-      const pathStr = ext.classification_path?.map(p => p.name).join(' > ') || 'No classification';
+      const pathStr = sortPath(ext.classification_path || []).map(p => p.name).join(' > ') || 'No classification';
       currentMatchInfo.innerHTML = `
         <div class="d-flex align-items-center">
           <div class="flex-grow-1">

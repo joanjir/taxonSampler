@@ -137,22 +137,27 @@ def ancestor_key_at_rank(key: str, rank: str) -> Optional[str]:
 # classification_path normalization functions
 # ============================================================
 
-def _is_path_leaf_to_root(path: List[Dict[str, Any]]) -> bool:
-    """Detects if the path is in leaf->root order."""
-    if not path:
-        return False
-    last_rank = (path[-1].get("rank") or "").strip().lower()
-    return last_rank in ROOT_RANKS
+# Rank priority for sorting (root → leaf)
+_RANK_SORT_PRIORITY = {
+    "dataset": -1, "domain": 0, "superkingdom": 0, "kingdom": 1,
+    "subkingdom": 2, "phylum": 3, "subphylum": 4, "infraphylum": 5,
+    "parvphylum": 6, "gigaclass": 7, "megaclass": 8, "superclass": 9,
+    "class": 10, "subclass": 11, "subterclass": 12, "infraclass": 13,
+    "superorder": 14, "order": 15, "suborder": 16, "infraorder": 17,
+    "superfamily": 18, "family": 19, "subfamily": 20, "tribe": 21,
+    "subtribe": 22, "genus": 23, "subgenus": 24, "species": 25,
+    "subspecies": 26, "variety": 27, "form": 28,
+}
 
 
 def normalize_classification_path(path: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
     """
-    Normalizes a classification_path to a list of (rank, name).
-    Handles paths in both directions and removes duplicates.
+    Normalizes a classification_path to a list of (rank, name)
+    sorted root → leaf regardless of input order.
     """
     if not isinstance(path, list):
         return []
-    
+
     clean: List[Tuple[str, str]] = []
     for x in path:
         if not isinstance(x, dict):
@@ -162,11 +167,10 @@ def normalize_classification_path(path: List[Dict[str, Any]]) -> List[Tuple[str,
         if not rank or not name:
             continue
         clean.append((rank.lower(), name))
-    
-    # Reverse if in leaf->root order
-    if _is_path_leaf_to_root(path):
-        clean.reverse()
-    
+
+    # Sort by rank priority (root → leaf)
+    clean.sort(key=lambda t: _RANK_SORT_PRIORITY.get(t[0], 50))
+
     # Remove consecutive duplicates
     out: List[Tuple[str, str]] = []
     prev = None
@@ -174,7 +178,7 @@ def normalize_classification_path(path: List[Dict[str, Any]]) -> List[Tuple[str,
         if item != prev:
             out.append(item)
         prev = item
-    
+
     return out
 
 
@@ -216,6 +220,199 @@ def _safe_token(label: str) -> str:
     s = re.sub(r"[^A-Za-z0-9_.-]", "_", s)
     s = re.sub(r"_+", "_", s).strip("_")
     return s or "Unknown"
+
+
+# ============================================================
+# Genus Validation Utilities
+# ============================================================
+
+def extract_genus(name: str) -> str:
+    """
+    Extract the genus (first word) from a scientific name.
+    Handles bracketed genera like [Clostridium] and hybrid names like "Bos x Bubalus".
+    
+    Examples:
+        >>> extract_genus("Homo sapiens")
+        "homo"
+        >>> extract_genus("[Clostridium] scindens")
+        "clostridium"
+        >>> extract_genus("Bos indicus x Bos taurus")
+        "bos"
+    """
+    if not name:
+        return ""
+    name = name.strip()
+    
+    # Handle bracketed genus: [Clostridium] scindens → Clostridium
+    if name.startswith("[") and "]" in name:
+        genus = name.split("]")[0][1:].strip()
+        return genus.lower()
+    
+    # Standard: first word is genus
+    parts = name.split()
+    if parts:
+        return parts[0].lower()
+    return ""
+
+
+def genera_match(ncbi_name: str, col_name: str, col_classification: dict = None) -> Tuple[bool, str]:
+    """
+    Check if the genus from NCBI name matches the COL entry.
+    
+    Args:
+        ncbi_name: Scientific name from NCBI (e.g., "Bos taurus")
+        col_name: Name from COL ExternalTaxon (e.g., "Bos taurus")
+        col_classification: Optional classification dict from COL with "genus", "species" keys
+    
+    Returns:
+        Tuple of (matches: bool, reason: str)
+        
+    Examples:
+        >>> genera_match("Homo sapiens", "Homo sapiens")
+        (True, "genus_exact")
+        >>> genera_match("Bos taurus", "Absidaticonus ovatus")
+        (False, "genus_mismatch:bos≠absidaticonus")
+    """
+    ncbi_genus = extract_genus(ncbi_name)
+    col_genus = extract_genus(col_name)
+    
+    if not ncbi_genus:
+        return (True, "ncbi_genus_empty")  # Can't validate, allow
+    
+    # Direct genus match
+    if ncbi_genus == col_genus:
+        return (True, "genus_exact")
+    
+    # Check if NCBI genus appears in COL classification
+    if col_classification:
+        col_cls_genus = (col_classification.get("genus", "") or "").lower()
+        col_cls_species = (col_classification.get("species", "") or "").lower()
+        
+        if ncbi_genus in col_cls_genus or ncbi_genus in col_cls_species:
+            return (True, "genus_in_classification")
+    
+    # Genus mismatch - this is likely a bad match!
+    return (False, f"genus_mismatch:{ncbi_genus}≠{col_genus}")
+
+
+def invalidate_all_tree_caches():
+    """
+    Invalidate ALL tree caches (Redis and in-memory).
+    Call this after any DB mutation that affects the tree (new COL matches, sync, manual edits).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # 1. Invalidate Redis cache (from tree/views.py)
+    try:
+        from django.core.cache import cache
+        from apps.taxonomy.tree.views import _get_tree_cache_key
+        
+        for limit in [None, 1000, 5000, 10000, 15000]:
+            for rank_cut in [None, "phylum", "class", "order", "family", "species"]:
+                key = _get_tree_cache_key(limit, rank_cut)
+                cache.delete(key)
+        logger.info("[cache] Redis tree cache invalidated")
+    except Exception as e:
+        logger.warning(f"[cache] Failed to invalidate Redis cache: {e}")
+    
+    # 2. Invalidate in-memory cache (from api/views.py)
+    try:
+        from apps.taxonomy import api
+        api.views._tree_cache = {}
+        api.views._tree_cache_ts = 0.0
+        api.views._tree_index_cache = None
+        logger.info("[cache] In-memory tree cache invalidated")
+    except Exception as e:
+        logger.warning(f"[cache] Failed to invalidate in-memory cache: {e}")
+
+
+def create_genus_fallback(taxon, ncbi_name: str) -> bool:
+    """
+    When a species has no COL match (or genus mismatch), find another species
+    in the same genus that HAS a valid COL match, copy its taxonomy, and create
+    a manual ExternalTaxon so this species still appears in the tree.
+
+    Args:
+        taxon: Taxon model instance (NCBI taxon)
+        ncbi_name: The scientific name from NCBI
+
+    Returns:
+        True if a manual ExternalTaxon was created and linked, False otherwise.
+    """
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    from apps.taxonomy.models import ExternalTaxon, NCBIGenome, TaxonCrosswalk
+
+    genus = extract_genus(ncbi_name)
+    if not genus:
+        return False
+
+    # Find a sibling ExternalTaxon in the same genus that has a valid COL match
+    # Prefer accepted species over synonyms for best taxonomy
+    base_qs = (
+        ExternalTaxon.objects.filter(
+            system="col",
+            rank__in=["species", "subspecies"],
+            name__istartswith=f"{genus} ",
+        )
+        .exclude(classification={})
+    )
+    donor = (
+        base_qs.filter(status="accepted").first()
+        or base_qs.first()
+    )
+
+    if not donor:
+        _logger.info(
+            f"[FALLBACK] No COL sibling found for genus '{genus}' "
+            f"(taxid={taxon.taxid} '{ncbi_name}')"
+        )
+        return False
+
+    # Build classification from donor, replacing species-level entries
+    donor_cls = dict(donor.classification or {})
+    # Keep everything above species level; set genus to our genus
+    donor_cls.pop("species", None)
+    donor_cls.pop("subspecies", None)
+    # Ensure genus is set correctly (capitalize first letter)
+    donor_cls["genus"] = genus.capitalize()
+
+    # Create manual ExternalTaxon with donor's taxonomy
+    manual_ext, created = ExternalTaxon.objects.update_or_create(
+        system="manual",
+        dataset_code="genus_fallback",
+        external_id=f"fallback-{taxon.taxid}",
+        defaults={
+            "name": ncbi_name,
+            "rank": "species",
+            "status": "not_in_col",
+            "classification": donor_cls,
+            "classification_path": [],  # manual species use classification dict
+            "raw": {
+                "fallback": True,
+                "donor_id": donor.id,
+                "donor_name": donor.name,
+                "donor_system": donor.system,
+                "reason": "genus_fallback_no_col_match",
+            },
+        },
+    )
+
+    # Link all genomes for this taxon to the manual ExternalTaxon
+    NCBIGenome.objects.filter(taxon=taxon).update(
+        external_taxon=manual_ext,
+        col_match_status="manual",
+        col_match_notes=f"Genus fallback from '{donor.name}' (not in COL, taxonomy from sibling)",
+    )
+
+    action = "Created" if created else "Updated"
+    _logger.info(
+        f"[FALLBACK] {action} manual ExternalTaxon for taxid={taxon.taxid} "
+        f"'{ncbi_name}' using taxonomy from '{donor.name}'"
+    )
+    return True
 
 
 def _safe_internal(rank: str, tax: str) -> str:

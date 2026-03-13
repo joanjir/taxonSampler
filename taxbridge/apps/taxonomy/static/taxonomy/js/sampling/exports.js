@@ -9,7 +9,7 @@
  * DB-based sampling (species array).
  */
 
-import { postDownload } from "../shared/helpers.js";
+import { postDownload, getCookie } from "../shared/helpers.js";
 import { copyToClipboard } from "../tree/ui.js";
 import { saveAs } from "../shared/save_as.js";
 
@@ -75,6 +75,28 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
     await postDownload("/taxonomy/sampling/export/json/", payload, "sampling.json");
   });
 
+  document.getElementById("exportSelNames")?.addEventListener("click", async () => {
+    const last = getLastSampling();
+    if (!requireSpecies(last)) return;
+
+    if (last && isDbSamplingResult(last)) {
+      const species = last.species || [];
+      const names = species.map(s => s.organism_name || "").filter(Boolean);
+      const txt = names.join("\n") + "\n";
+      await saveAs(txt, "species_names.txt", "text/plain");
+      return;
+    }
+
+    // Tree-based: export picked keys as names
+    const payload = getExportPayload({ allowManualFallback: true });
+    if (!payload) return;
+    const ing = payload?.ingroup?.picked || [];
+    const out = payload?.outgroupPicked || [];
+    const keys = [].concat(out.map(x => x?.key)).concat(ing.map(x => x?.key)).filter(Boolean);
+    const txt = keys.join("\n") + (keys.length ? "\n" : "");
+    await saveAs(txt, "species_names.txt", "text/plain");
+  });
+
   document.getElementById("exportSelTxt")?.addEventListener("click", async () => {
     const last = getLastSampling();
     if (!requireSpecies(last)) return;
@@ -104,7 +126,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
       // DB sampling: request server-generated Newick from the new endpoint
       try {
         const url = window.NEWICK_ENDPOINT || "/api/v1/taxonomy/sampling/newick/";
-        await postDownload(url, last, "sampling_taxonomic.newick");
+        await postDownload(url, last, "taxonomic_hierarchy.newick");
       } catch (err) {
         console.error("[exports] Newick export error:", err);
         Swal.fire({ icon: 'error', title: 'Export failed', text: 'Newick export failed: ' + (err.message || err), confirmButtonColor: '#198754' });
@@ -114,7 +136,7 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
     const payload = getExportPayload({ allowManualFallback: false });
     if (!payload) return;
-    await postDownload("/taxonomy/sampling/export/newick/", payload, "sampling_taxonomic.newick");
+    await postDownload("/taxonomy/sampling/export/newick/", payload, "taxonomic_hierarchy.newick");
   });
 
   document.getElementById("exportSelExcel")?.addEventListener("click", async () => {
@@ -282,13 +304,11 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
     await copyToClipboard(keys.join("\n") + (keys.length ? "\n" : ""));
   });
 
-  // ── NCBI Download Scripts ──────────────────────────────────
-  // Generate shell scripts that use NCBI `datasets` CLI to download
-  // genomic data for the sampled species.
+  // ── NCBI Downloads ──────────────────────────────────────────
+  // Two options:
+  //   1) Direct download via Django proxy — streams ZIP with progress bar
+  //   2) Generate script (Bash / PowerShell) — user runs it later
 
-  /**
-   * Map our short include flags to NCBI Datasets API v2 annotation types.
-   */
   const NCBI_INCLUDE_MAP = {
     genome:  "GENOME_FASTA",
     protein: "PROT_FASTA",
@@ -299,321 +319,355 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
     return includeFlag.split(",").map(f => NCBI_INCLUDE_MAP[f.trim()]).filter(Boolean);
   }
 
-  /**
-   * Build a bash script that downloads NCBI data via the REST API (curl).
-   * No external CLI tools required — only curl and unzip.
-   * @param {Array} species - species list from sampling result
-   * @param {string} includeFlag - genome | protein | gbff | genome,protein,gbff
-   * @param {string} label - human-readable label (e.g. "Genomes (FASTA)")
-   * @param {string} outZip - output zip filename
-   * @returns {string} bash script content
-   */
+  // ── Script generators (Bash & PowerShell) ──────────────────
+
   function buildNcbiScript(species, includeFlag, label, outZip) {
     const now = new Date().toISOString().slice(0, 10);
-    const accessions = species
-      .map(s => s.accession)
-      .filter(Boolean);
-
+    const accessions = species.map(s => s.accession).filter(Boolean);
     if (!accessions.length) return null;
-
     const apiTypes = mapIncludeTypes(includeFlag);
-
-    // Commented manifest for reference
-    const manifest = species
-      .filter(s => s.accession)
-      .map(s => `#   ${s.accession}  ${s.organism_name || ""}`)
-      .join("\n");
-
-    // JSON array of accessions for the API payload
-    const accJson = accessions.map(a => `"${a}"`).join(",");
+    const manifest = species.filter(s => s.accession)
+      .map(s => `#   ${s.accession}  ${s.organism_name || ""}`).join("\n");
     const typesJson = apiTypes.map(t => `"${t}"`).join(",");
-
-    // Batch size: NCBI API handles up to ~500 accessions per request
-    const BATCH_SIZE = 200;
-
+    const BS = 200;
     return `#!/usr/bin/env bash
-# ============================================================
-# NCBI ${label} Download Script
-# Generated by TaxonSampler on ${now}
+# NCBI ${label} Download Script — Generated by TaxonSampler on ${now}
 # Species: ${accessions.length} | Data: ${includeFlag}
-# ============================================================
-#
-# Prerequisites: curl, unzip (standard on most systems)
-#
-# Optional: set NCBI_API_KEY for higher rate limits:
-#   export NCBI_API_KEY="your-key-here"
-#   (Get one free at https://www.ncbi.nlm.nih.gov/account/settings/)
-#
-# Usage:
-#   chmod +x ${outZip.replace(".zip", ".sh")}
-#   ./${outZip.replace(".zip", ".sh")}
-#
-# ============================================================
-
 set -euo pipefail
-
-# Work in the same folder where this script lives
 SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-
 OUTPUT_ZIP="${outZip}"
 API_URL="https://api.ncbi.nlm.nih.gov/datasets/v2/genome/download"
-BATCH_SIZE=${BATCH_SIZE}
-
-# ── Accession manifest ──
+BATCH_SIZE=${BS}
 ${manifest}
-
-# Full accession list
 ACCESSIONS=(
 ${accessions.map(a => `  "${a}"`).join("\n")}
 )
-
-echo "============================================================"
-echo " TaxonSampler — NCBI ${label} Download"
-echo " Species: \${#ACCESSIONS[@]}"
-echo " Data:    ${includeFlag}"
-echo "============================================================"
-echo ""
-
-# ── Check curl is available ──
-if ! command -v curl &> /dev/null; then
-    echo "ERROR: 'curl' not found. Please install curl."
-    exit 1
-fi
-
-# ── Build curl headers ──
+echo "TaxonSampler — NCBI ${label} Download (\${#ACCESSIONS[@]} species)"
+echo "================================================"
+if ! command -v curl &>/dev/null; then echo "ERROR: curl not found"; exit 1; fi
 HEADERS=(-H "Content-Type: application/json" -H "Accept: application/zip")
-if [ -n "\${NCBI_API_KEY:-}" ]; then
-    HEADERS+=(-H "api-key: \$NCBI_API_KEY")
-    echo "Using NCBI API key for higher rate limits."
-fi
-
-# ── Download in batches of $BATCH_SIZE ──
-TOTAL=\${#ACCESSIONS[@]}
-PART=0
-
+[ -n "\${NCBI_API_KEY:-}" ] && HEADERS+=(-H "api-key: \$NCBI_API_KEY") && echo "Using API key"
+TOTAL=\${#ACCESSIONS[@]}; PART=0
 for (( i=0; i<TOTAL; i+=BATCH_SIZE )); do
-    BATCH=("\${ACCESSIONS[@]:i:BATCH_SIZE}")
-    PART=$((PART + 1))
-
-    # Build JSON array of this batch
-    JSON_ACC=""
-    for acc in "\${BATCH[@]}"; do
-        [ -n "$JSON_ACC" ] && JSON_ACC="$JSON_ACC,"
-        JSON_ACC="$JSON_ACC\\"$acc\\""
-    done
-
-    PAYLOAD='{"accessions":['$JSON_ACC'],"include_annotation_type":[${typesJson}]}'
-
-    if [ "$TOTAL" -le "$BATCH_SIZE" ]; then
-        DEST="$OUTPUT_ZIP"
-        echo "Downloading \${#BATCH[@]} assemblies..."
+  BATCH=("\${ACCESSIONS[@]:i:BATCH_SIZE}"); PART=$((PART+1))
+  JSON_ACC=""
+  for acc in "\${BATCH[@]}"; do [ -n "$JSON_ACC" ] && JSON_ACC="$JSON_ACC,"; JSON_ACC="$JSON_ACC\\"$acc\\""; done
+  PAYLOAD='{"accessions":['$JSON_ACC'],"include_annotation_type":[${typesJson}]}'
+  [ "$TOTAL" -le "$BATCH_SIZE" ] && DEST="$OUTPUT_ZIP" || DEST="\${OUTPUT_ZIP%.zip}_part\${PART}.zip"
+  echo ""
+  echo ">> Batch $PART (\${#BATCH[@]} of $TOTAL accessions)"
+  echo "   Downloading from NCBI (this may take several minutes)..."
+  # Run curl in background — monitor real file size instead of curl's broken progress bar
+  curl -s -X POST "$API_URL" "\${HEADERS[@]}" -d "$PAYLOAD" -o "$DEST" --fail &
+  CURL_PID=$!
+  SECONDS_ELAPSED=0
+  while kill -0 "$CURL_PID" 2>/dev/null; do
+    sleep 2
+    SECONDS_ELAPSED=$((SECONDS_ELAPSED + 2))
+    if [ -f "$DEST" ]; then
+      BYTES=$(wc -c < "$DEST" 2>/dev/null || echo 0)
+      MB=$(awk 'BEGIN{printf "%.1f", '"$BYTES"'/1048576}')
+      printf "\\r   Downloaded: %s MB (%ds elapsed)" "$MB" "$SECONDS_ELAPSED"
     else
-        DEST="\${OUTPUT_ZIP%.zip}_part\${PART}.zip"
-        echo "Downloading batch $PART (\${#BATCH[@]} of $TOTAL assemblies)..."
+      printf "\\r   Waiting for NCBI response... (%ds)" "$SECONDS_ELAPSED"
     fi
-
-    curl -X POST "$API_URL" \\
-        "\${HEADERS[@]}" \\
-        -d "$PAYLOAD" \\
-        -o "$DEST" \\
-        --progress-bar --fail
-
-    echo ""
-    echo "Extracting $DEST ..."
-    unzip -o "$DEST"
-
-    # Clean up zip after extraction
-    rm -f "$DEST"
+  done
+  wait "$CURL_PID" || { echo ""; echo "ERROR: download of batch $PART failed!"; exit 1; }
+  BYTES=$(wc -c < "$DEST" 2>/dev/null || echo 0)
+  MB=$(awk 'BEGIN{printf "%.1f", '"$BYTES"'/1048576}')
+  echo ""
+  echo "   Download complete: $MB MB"
+  echo "   Extracting $DEST ..."
+  unzip -o "$DEST"; rm -f "$DEST"
+  echo "   Extraction complete."
 done
-
 echo ""
-echo "============================================================"
-echo " Done! Files saved to: $SCRIPT_DIR/"
-echo "============================================================"
+echo "================================================"
+echo "Done! \${#ACCESSIONS[@]} assemblies saved to: $SCRIPT_DIR/"
 `;
   }
 
-  /**
-   * Build a PowerShell script that downloads NCBI data via the REST API.
-   * No external CLI tools required — only Invoke-WebRequest and Expand-Archive.
-   */
   function buildNcbiPsScript(species, includeFlag, label, outZip) {
     const now = new Date().toISOString().slice(0, 10);
-    const accessions = species
-      .map(s => s.accession)
-      .filter(Boolean);
-
+    const accessions = species.map(s => s.accession).filter(Boolean);
     if (!accessions.length) return null;
-
     const apiTypes = mapIncludeTypes(includeFlag);
-
-    const manifest = species
-      .filter(s => s.accession)
-      .map(s => `#   ${s.accession}  ${s.organism_name || ""}`)
-      .join("\n");
-
-    const BATCH_SIZE = 200;
-
-    return `# ============================================================
-# NCBI ${label} Download Script (PowerShell)
-# Generated by TaxonSampler on ${now}
+    const manifest = species.filter(s => s.accession)
+      .map(s => `#   ${s.accession}  ${s.organism_name || ""}`).join("\n");
+    const BS = 200;
+    return `# NCBI ${label} Download Script (PowerShell) — Generated by TaxonSampler on ${now}
 # Species: ${accessions.length} | Data: ${includeFlag}
-# ============================================================
-#
-# Prerequisites: PowerShell 5.1+ (built-in on Windows 10/11)
-#
-# Optional: set NCBI_API_KEY for higher rate limits:
-#   $env:NCBI_API_KEY = "your-key-here"
-#   (Get one free at https://www.ncbi.nlm.nih.gov/account/settings/)
-#
-# Usage:
-#   .\\${outZip.replace(".zip", ".ps1")}
-#
-# ============================================================
-
 $ErrorActionPreference = "Stop"
-
-# Work in the same folder where this script lives
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $ScriptDir
-
-$OutputZip = "${outZip}"
-$ApiUrl    = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/download"
-$BatchSize = ${BATCH_SIZE}
-
-# ── Accession manifest ──
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path; Set-Location $ScriptDir
+$OutputZip = "${outZip}"; $ApiUrl = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/download"; $BatchSize = ${BS}
 ${manifest}
-
-# Accession list
 $Accessions = @(
-${accessions.map(a => `    "${a}"`).join("\n")}
+${accessions.map(a => `  "${a}"`).join("\n")}
 )
-
-Write-Host "============================================================"
-Write-Host " TaxonSampler - NCBI ${label} Download"
-Write-Host " Species: $($Accessions.Count)"
-Write-Host " Data:    ${includeFlag}"
-Write-Host "============================================================"
-Write-Host ""
-
-# ── Build headers ──
+Write-Host "TaxonSampler - NCBI ${label} Download ($($Accessions.Count) species)"
+Write-Host "================================================"
 $Headers = @{ "Accept" = "application/zip" }
-if ($env:NCBI_API_KEY) {
-    $Headers["api-key"] = $env:NCBI_API_KEY
-    Write-Host "Using NCBI API key for higher rate limits."
-}
-
-# Allow large downloads (PS 5.1 default buffer is small)
+if ($env:NCBI_API_KEY) { $Headers["api-key"] = $env:NCBI_API_KEY; Write-Host "Using API key" }
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-
-# ── Download in batches of $BatchSize ──
-$Total = $Accessions.Count
-$Part  = 0
-
+$Total = $Accessions.Count; $Part = 0
 for ($i = 0; $i -lt $Total; $i += $BatchSize) {
-    $Batch = $Accessions[$i .. [Math]::Min($i + $BatchSize - 1, $Total - 1)]
-    $Part++
-
-    $Body = @{
-        accessions              = $Batch
-        include_annotation_type = @(${apiTypes.map(t => `"${t}"`).join(", ")})
-    } | ConvertTo-Json -Depth 3 -Compress
-
-    if ($Total -le $BatchSize) {
-        $Dest = $OutputZip
-        Write-Host "Downloading $($Batch.Count) assemblies..."
-    } else {
-        $Dest = $OutputZip -replace '\\.zip$', "_part$Part.zip"
-        Write-Host "Downloading batch $Part ($($Batch.Count) of $Total assemblies)..."
+  $Batch = $Accessions[$i .. [Math]::Min($i + $BatchSize - 1, $Total - 1)]; $Part++
+  $Body = @{ accessions = $Batch; include_annotation_type = @(${apiTypes.map(t => `"${t}"`).join(", ")}) } | ConvertTo-Json -Depth 3 -Compress
+  if ($Total -le $BatchSize) { $Dest = $OutputZip } else { $Dest = $OutputZip -replace '\\.zip$', "_part$Part.zip" }
+  Write-Host ""
+  Write-Host ">> Batch $Part ($($Batch.Count) of $Total accessions)"
+  Write-Host "   Downloading from NCBI (this may take several minutes)..."
+  # Stream download with real-time MB progress (no misleading progress bar)
+  $ProgressPreference = 'SilentlyContinue'
+  $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+  $req = [System.Net.HttpWebRequest]::Create($ApiUrl)
+  $req.Method = 'POST'; $req.ContentType = 'application/json'; $req.Accept = 'application/zip'
+  $req.Timeout = 600000; $req.ReadWriteTimeout = 600000
+  foreach ($k in $Headers.Keys) { if ($k -ne 'Accept') { $req.Headers.Add($k, $Headers[$k]) } }
+  $reqStream = $req.GetRequestStream()
+  $reqStream.Write($bodyBytes, 0, $bodyBytes.Length); $reqStream.Close()
+  $resp = $req.GetResponse()
+  $respStream = $resp.GetResponseStream()
+  $fs = [System.IO.File]::Create($Dest)
+  $buf = New-Object byte[] 65536; $totalRead = 0; $sw = [System.Diagnostics.Stopwatch]::StartNew()
+  do {
+    $read = $respStream.Read($buf, 0, $buf.Length)
+    if ($read -gt 0) { $fs.Write($buf, 0, $read); $totalRead += $read }
+    if ($sw.ElapsedMilliseconds -ge 2000) {
+      $mb = [math]::Round($totalRead / 1MB, 1)
+      Write-Host "${'`'}r   Downloaded: $mb MB" -NoNewline
+      $sw.Restart()
     }
-
-    Invoke-WebRequest -Uri $ApiUrl \`
-        -Method POST \`
-        -ContentType "application/json" \`
-        -Headers $Headers \`
-        -Body $Body \`
-        -OutFile $Dest \`
-        -UseBasicParsing
-
-    Write-Host ""
-    Write-Host "Extracting $Dest ..."
-    Expand-Archive -Path $Dest -DestinationPath . -Force
-
-    # Clean up zip after extraction
-    Remove-Item -Path $Dest -Force -ErrorAction SilentlyContinue
+  } while ($read -gt 0)
+  $fs.Close(); $respStream.Close(); $resp.Close()
+  $mb = [math]::Round($totalRead / 1MB, 1)
+  Write-Host "${'`'}r   Download complete: $mb MB      "
+  Write-Host "   Extracting $Dest ..."
+  Expand-Archive -Path $Dest -DestinationPath . -Force; Remove-Item $Dest -Force -ErrorAction SilentlyContinue
+  Write-Host "   Extraction complete."
 }
-
 Write-Host ""
-Write-Host "============================================================"
-Write-Host " Done! Files saved to: $ScriptDir/"
-Write-Host "============================================================"
+Write-Host "================================================"
+Write-Host "Done! $($Accessions.Count) assemblies saved to: $ScriptDir/"
 `;
   }
 
-  /**
-   * Handler factory for NCBI download script buttons.
-   * Offers user choice between Bash and PowerShell via SweetAlert.
-   */
-  function ncbiScriptHandler(includeFlag, label, outZipBase) {
+  // ── Direct download (streaming through Django proxy) ───────
+
+  const DL_BATCH_SIZE = 20;
+
+  async function fetchBatch(accessions, includeTypes, filename, onProgress) {
+    const csrf = getCookie("csrftoken");
+    const resp = await fetch("/api/v1/taxonomy/ncbi/download/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf || "" },
+      body: JSON.stringify({ accessions, include_types: includeTypes, filename }),
+    });
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try { const j = await resp.json(); msg = j.error || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    const total = parseInt(resp.headers.get("Content-Length") || "0", 10);
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (onProgress) onProgress(received, total);
+    }
+    return new Blob(chunks, { type: "application/zip" });
+  }
+
+  async function doDirectDownload(accessions, includeTypes, label, outZipBase, totalAcc) {
+    const batches = [];
+    for (let i = 0; i < totalAcc; i += DL_BATCH_SIZE) batches.push(accessions.slice(i, i + DL_BATCH_SIZE));
+
+    Swal.fire({
+      title: `Downloading ${label}`,
+      html: `
+        <div class="text-start small mb-2" id="dlStatus">Connecting to NCBI…</div>
+        <div class="progress" style="height: 22px;">
+          <div id="dlBar" class="progress-bar bg-success progress-bar-striped progress-bar-animated"
+               role="progressbar" style="width: 0%;">0 %</div>
+        </div>
+        <div class="text-muted small mt-2" id="dlDetail">Preparing download…</div>`,
+      allowOutsideClick: false, showConfirmButton: false, showCancelButton: false,
+    });
+
+    let completedAcc = 0;
+    const savedFiles = [];
+
+    for (let b = 0; b < batches.length; b++) {
+      const batch = batches[b];
+      const from = completedAcc + 1, to = completedAcc + batch.length;
+      const statusEl = document.getElementById("dlStatus");
+      const barEl = document.getElementById("dlBar");
+      const detailEl = document.getElementById("dlDetail");
+
+      if (statusEl) statusEl.innerHTML = batches.length > 1
+        ? `Batch <strong>${b + 1}</strong> of <strong>${batches.length}</strong> — downloading from NCBI…`
+        : `Downloading <strong>${totalAcc}</strong> assemblies from NCBI…`;
+      if (detailEl) detailEl.textContent = `Accessions ${from}–${to} of ${totalAcc}`;
+
+      const batchFile = batches.length > 1 ? `${outZipBase}_part${b + 1}.zip` : `${outZipBase}.zip`;
+
+      // basePct: percentage already covered by completed batches
+      // batchShare: percentage this batch represents
+      const basePct = completedAcc / totalAcc * 100;
+      const batchShare = batch.length / totalAcc * 100;
+
+      const blob = await fetchBatch(batch, includeTypes, batchFile, (received, total) => {
+        if (!barEl) return;
+        const mb = (received / 1_048_576).toFixed(1);
+
+        if (total > 0) {
+          // NCBI sent Content-Length — use real byte progress
+          const pct = Math.min(99, (basePct + batchShare * (received / total)).toFixed(0));
+          barEl.style.width = `${pct}%`; barEl.textContent = `${pct} %`;
+          if (detailEl) detailEl.textContent = `Accessions ${from}–${to} · ${mb} / ${(total / 1_048_576).toFixed(1)} MB`;
+        } else {
+          // No Content-Length — use logarithmic curve (approaches ~90% of batch share, never 100%)
+          const fakeRatio = 1 - Math.exp(-received / (10 * 1_048_576));
+          const pct = Math.min(99, Math.round(basePct + batchShare * fakeRatio * 0.9));
+          barEl.style.width = `${pct}%`; barEl.textContent = `${pct} %`;
+          if (detailEl) detailEl.textContent = `Accessions ${from}–${to} · ${mb} MB received — downloading…`;
+        }
+      });
+
+      savedFiles.push({ blob, name: batchFile });
+      completedAcc += batch.length;
+      // Only set to 100% if ALL batches are done
+      const pctDone = Math.min(completedAcc === totalAcc ? 100 : 99, Math.round(completedAcc / totalAcc * 100));
+      if (barEl) { barEl.style.width = `${pctDone}%`; barEl.textContent = `${pctDone} %`; }
+    }
+
+    // Show saving status before triggering file save
+    const barEl = document.getElementById("dlBar");
+    const statusEl = document.getElementById("dlStatus");
+    if (barEl) { barEl.style.width = "100%"; barEl.textContent = "100 %"; }
+    if (statusEl) statusEl.innerHTML = "Saving files…";
+
+    Swal.close();
+    for (const { blob, name } of savedFiles) await saveAs(blob, name, "application/zip");
+
+    Swal.fire({
+      icon: "success", title: "Download complete",
+      html: `<p>${completedAcc} assemblies downloaded (${savedFiles.length} ZIP file${savedFiles.length > 1 ? "s" : ""}).</p>`,
+      confirmButtonColor: "#198754",
+    });
+  }
+
+  // ── Unified handler: choose direct download or script ──────
+
+  function ncbiHandler(includeFlag, label, outZipBase) {
     return async () => {
       const last = getLastSampling();
       if (!requireSpecies(last)) return;
       if (!isDbSamplingResult(last)) {
-        Swal.fire({ icon: 'info', title: 'Not available', text: 'NCBI download scripts require DB sampling results.', confirmButtonColor: '#198754' });
+        Swal.fire({ icon: "info", title: "Not available", text: "NCBI downloads require DB sampling results.", confirmButtonColor: "#198754" });
         return;
       }
-
       const species = last.species || [];
-      const accessions = species.filter(s => s.accession);
+      const accessions = species.map(s => s.accession).filter(Boolean);
       if (!accessions.length) {
-        Swal.fire({ icon: 'warning', title: 'No accessions', text: 'None of the sampled species have assembly accessions.', confirmButtonColor: '#198754' });
+        Swal.fire({ icon: "warning", title: "No accessions", text: "None of the sampled species have assembly accessions.", confirmButtonColor: "#198754" });
         return;
       }
 
-      // Ask user: Bash or PowerShell?
-      const { value: format } = await Swal.fire({
-        title: `Download ${label}`,
+      const { value: mode } = await Swal.fire({
+        title: `${label}`,
         html: `<div class="text-start small">
-          <p>Generate a script to download <strong>${accessions.length}</strong> assemblies directly from the NCBI Datasets API.</p>
-          <p>Only requires <code>curl</code> (Bash) or <code>PowerShell 5.1+</code> (Windows) — no extra tools needed.</p>
-          <p class="mb-1">Choose script format:</p>
+          <p><strong>${accessions.length}</strong> assemblies available.</p>
+          <p class="mb-1">Choose an option:</p>
         </div>`,
-        input: 'radio',
+        input: "radio",
         inputOptions: {
-          'bash': 'Bash (.sh) — Linux / macOS / Git Bash / WSL',
-          'ps1':  'PowerShell (.ps1) — Windows',
+          direct: "\u{1F4E5} Download now — ZIP streamed directly to your browser",
+          bash:   "\u{1F4C4} Generate Bash script (.sh) — to run later on Linux/macOS/WSL",
+          ps1:    "\u{1F4C4} Generate PowerShell script (.ps1) — to run later on Windows",
         },
-        inputValue: 'bash',
+        inputValue: "direct",
         showCancelButton: true,
-        confirmButtonText: 'Generate',
-        confirmButtonColor: '#198754',
-        inputValidator: (v) => !v ? 'Select a format' : undefined,
+        confirmButtonText: "Continue",
+        confirmButtonColor: "#198754",
+        inputValidator: (v) => !v ? "Select an option" : undefined,
       });
+      if (!mode) return;
 
-      if (!format) return;
-
-      if (format === 'bash') {
+      if (mode === "direct") {
+        try {
+          await doDirectDownload(accessions, mapIncludeTypes(includeFlag), label, outZipBase, accessions.length);
+        } catch (err) {
+          console.error("[ncbi-download]", err);
+          Swal.fire({ icon: "error", title: "Download failed", text: err.message, confirmButtonColor: "#198754" });
+        }
+      } else if (mode === "bash") {
         const script = buildNcbiScript(species, includeFlag, label, `${outZipBase}.zip`);
-        if (script) await saveAs(script, `${outZipBase}.sh`, "application/octet-stream");
+        if (!script) return;
+        const { isConfirmed } = await Swal.fire({
+          icon: "info",
+          title: "Script ready",
+          html: `<div class="text-start">
+            <div class="alert alert-warning py-2 mb-3">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>
+              <strong>This does NOT download your data yet.</strong>
+            </div>
+            <p class="small">A <code>.sh</code> script file will be saved to your computer.
+            To start the actual download you need to:</p>
+            <ol class="small">
+              <li>Open a <strong>Bash</strong> terminal (Linux, macOS, or WSL)</li>
+              <li>Navigate to the folder where the file was saved</li>
+              <li>Run: <code>bash ${outZipBase}.sh</code></li>
+            </ol>
+          </div>`,
+          confirmButtonText: "Save script file",
+          confirmButtonColor: "#198754",
+          showCancelButton: true,
+          cancelButtonText: "Cancel",
+        });
+        if (isConfirmed) await saveAs(script, `${outZipBase}.sh`, "application/octet-stream");
       } else {
         const script = buildNcbiPsScript(species, includeFlag, label, `${outZipBase}.zip`);
-        if (script) await saveAs(script, `${outZipBase}.ps1`, "application/octet-stream");
+        if (!script) return;
+        const { isConfirmed } = await Swal.fire({
+          icon: "info",
+          title: "Script ready",
+          html: `<div class="text-start">
+            <div class="alert alert-warning py-2 mb-3">
+              <i class="fa-solid fa-triangle-exclamation me-1"></i>
+              <strong>This does NOT download your data yet.</strong>
+            </div>
+            <p class="small">A <code>.ps1</code> script file will be saved to your computer.
+            To start the actual download you need to:</p>
+            <ol class="small">
+              <li>Open <strong>PowerShell</strong> on Windows</li>
+              <li>Navigate to the folder where the file was saved</li>
+              <li>Run: <code>.\\${outZipBase}.ps1</code></li>
+            </ol>
+          </div>`,
+          confirmButtonText: "Save script file",
+          confirmButtonColor: "#198754",
+          showCancelButton: true,
+          cancelButtonText: "Cancel",
+        });
+        if (isConfirmed) await saveAs(script, `${outZipBase}.ps1`, "application/octet-stream");
       }
     };
   }
 
-  document.getElementById("dlScriptGenome")?.addEventListener("click",
-    ncbiScriptHandler("genome", "Genomes (FASTA)", "download_genomes"));
-
-  document.getElementById("dlScriptProtein")?.addEventListener("click",
-    ncbiScriptHandler("protein", "Proteomes (FAA)", "download_proteomes"));
-
-  document.getElementById("dlScriptGbff")?.addEventListener("click",
-    ncbiScriptHandler("gbff", "GenBank (GBFF)", "download_gbff"));
-
-  document.getElementById("dlScriptAll")?.addEventListener("click",
-    ncbiScriptHandler("genome,protein,gbff", "All Data (genome+protein+gbff)", "download_all_ncbi"));
+  document.getElementById("dlNcbiGenome")?.addEventListener("click",
+    ncbiHandler("genome", "Genomes (FASTA)", "download_genomes"));
+  document.getElementById("dlNcbiProtein")?.addEventListener("click",
+    ncbiHandler("protein", "Proteomes (FAA)", "download_proteomes"));
+  document.getElementById("dlNcbiGbff")?.addEventListener("click",
+    ncbiHandler("gbff", "GenBank (GBFF)", "download_gbff"));
+  document.getElementById("dlNcbiAll")?.addEventListener("click",
+    ncbiHandler("genome,protein,gbff", "All Data", "download_all_ncbi"));
 
   // ══════════════════════════════════════════════════════════════════
   // Import JSON configuration

@@ -94,6 +94,7 @@ export function initDbSampling() {
   let lastResult = null;
   let statsCache = null;
   let _minRankIdx = 0; // floor from scope rank
+  let _skipLoadStats = false; // flag to skip observer-triggered loadStats during import
 
   // ── Range slider helpers ──────────────────────────────────────────
 
@@ -436,6 +437,12 @@ export function initDbSampling() {
   if (step2El) {
     const observer = new MutationObserver(() => {
       if (!step2El.classList.contains("d-none")) {
+        // Skip if restoreConfig set the flag (import scenario)
+        if (_skipLoadStats) {
+          _skipLoadStats = false;
+          console.log("[db_sampling] Skipping loadStats (import mode)");
+          return;
+        }
         // Always reload stats when Step 2 becomes visible
         // so they reflect the current Step 1 scope
         statsCache = null;
@@ -453,6 +460,10 @@ export function initDbSampling() {
   // ── Restore config from imported JSON ─────────────────────────────
   function restoreConfig(data) {
     if (!data) return;
+
+    // Prevent the MutationObserver from calling loadStats()
+    // when setStep(2) makes Step 2 visible right after this.
+    _skipLoadStats = true;
     
     console.log("[db_sampling] restoreConfig →", {
       strategy: data.strategy,

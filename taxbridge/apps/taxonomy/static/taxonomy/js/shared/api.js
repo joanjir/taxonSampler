@@ -2,6 +2,69 @@
 
 import { getCookie } from "./helpers.js";
 
+// ============================================================
+// Local Storage Cache for Tree Data
+// ============================================================
+const TREE_CACHE_KEY = "taxonsampler_tree_cache_v2";
+const TREE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Get cached tree data from localStorage.
+ * @returns {{data: object, timestamp: number, tree_version: string|null}|null}
+ */
+function getTreeCache() {
+  try {
+    const raw = localStorage.getItem(TREE_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached || !cached.data || !cached.timestamp) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save tree data to localStorage cache.
+ * @param {object} data 
+ */
+function setTreeCache(data) {
+  try {
+    const payload = {
+      data,
+      timestamp: Date.now(),
+      tree_version: data.tree_version || null,
+    };
+    localStorage.setItem(TREE_CACHE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // localStorage might be full or disabled
+    console.warn("[api] Could not cache tree data:", e.message);
+  }
+}
+
+/**
+ * Check if cached tree is still valid (within TTL).
+ * @param {{timestamp: number}} cached 
+ * @returns {boolean}
+ */
+function isCacheValid(cached) {
+  if (!cached || !cached.timestamp) return false;
+  return (Date.now() - cached.timestamp) < TREE_CACHE_TTL;
+}
+
+/**
+ * Clear tree cache (call after data imports).
+ */
+export function clearTreeCache() {
+  try {
+    localStorage.removeItem(TREE_CACHE_KEY);
+  } catch {}
+}
+
+
+// ============================================================
+// API Utilities
+// ============================================================
 function assertEndpoint(endpoint, name) {
   const url = String(endpoint || "").trim();
   if (!url) {
@@ -53,14 +116,95 @@ async function fetchJson(url) {
 }
 
 
-export async function apiGetTree({ endpoint, limit = null, rankCut = null } = {}) {
+export async function apiGetTree({ endpoint, limit = null, rankCut = null, useCache = true } = {}) {
   const base = assertEndpoint(endpoint ?? window.TREE_ENDPOINT, "window.TREE_ENDPOINT");
   const u = new URL(base, window.location.origin);
 
   if (limit != null) u.searchParams.set("limit", String(limit));
   if (rankCut !== null) u.searchParams.set("rankCut", String(rankCut));
 
-  return fetchJson(u.toString());
+  // Try localStorage cache first (only for default requests without special params)
+  const isDefaultRequest = limit == null && rankCut == null;
+  
+  if (useCache && isDefaultRequest) {
+    const cached = getTreeCache();
+    if (cached && isCacheValid(cached)) {
+      console.log("[api] Tree loaded from cache (age: " + 
+        Math.round((Date.now() - cached.timestamp) / 1000) + "s)");
+      return cached.data;
+    }
+  }
+
+  // Fetch from server
+  console.log("[api] Fetching tree from server...");
+  const data = await fetchJson(u.toString());
+  
+  // Cache the result (only for default requests)
+  if (useCache && isDefaultRequest) {
+    setTreeCache(data);
+    console.log("[api] Tree cached to localStorage");
+  }
+  
+  return data;
+}
+
+/**
+ * Load tree with cache-first strategy.
+ * Shows cached data immediately, then checks for newer version in background.
+ * If the server has newer data (tree_version changed), re-renders automatically.
+ * 
+ * @param {object} options
+ * @param {Function} options.onCacheHit - Called with cached data immediately
+ * @param {Function} options.onFreshData - Called when fresh data arrives that is NEWER than cache
+ * @returns {Promise<object>} - The tree data
+ */
+export async function loadTreeWithCache({ endpoint, onCacheHit, onFreshData } = {}) {
+  const cached = getTreeCache();
+  
+  // If we have valid cache, show it immediately then check for updates
+  if (cached && isCacheValid(cached)) {
+    if (onCacheHit) onCacheHit(cached.data);
+    
+    // Always fetch fresh data in background to check for version changes
+    apiGetTree({ endpoint, useCache: false })
+      .then(freshData => {
+        const freshVersion = freshData.tree_version || null;
+        const cachedVersion = cached.tree_version || null;
+        if (freshVersion && cachedVersion && freshVersion !== cachedVersion) {
+          console.log(`[api] Tree version changed: ${cachedVersion} -> ${freshVersion}, re-rendering`);
+          setTreeCache(freshData);
+          if (onFreshData) onFreshData(freshData);
+        } else {
+          // Same version, just update cache timestamp
+          setTreeCache(freshData);
+          console.log("[api] Background refresh complete - same version");
+        }
+      })
+      .catch(err => {
+        console.warn("[api] Background refresh failed:", err.message);
+      });
+    
+    return cached.data;
+  }
+  
+  // If cache exists but expired, show it immediately and refresh in background
+  if (cached && cached.data) {
+    if (onCacheHit) onCacheHit(cached.data);
+    
+    // Fetch fresh data - always re-render since cache is expired
+    apiGetTree({ endpoint, useCache: true })
+      .then(freshData => {
+        if (onFreshData) onFreshData(freshData);
+      })
+      .catch(err => {
+        console.warn("[api] Background refresh failed:", err.message);
+      });
+    
+    return cached.data;
+  }
+  
+  // No cache at all - must wait for server
+  return apiGetTree({ endpoint, useCache: true });
 }
 
 

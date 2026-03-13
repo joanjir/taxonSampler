@@ -1,9 +1,12 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import json
+import logging
 from collections import OrderedDict
 from typing import Any, Dict, List, Tuple, Set
 
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
@@ -27,6 +30,34 @@ from apps.taxonomy.utils import (
     parts_to_label,
 )
 
+logger = logging.getLogger(__name__)
+
+# Tree cache configuration
+TREE_CACHE_KEY = "taxonomy_tree_v1"
+TREE_CACHE_TIMEOUT = 600  # 10 minutes
+TREE_VERSION_KEY = "taxonomy_tree_version"
+
+
+def _get_tree_version():
+    """Compute a version string based on data state (count + max id of matched species + manual)."""
+    from django.db.models import Max, Q
+    # COL matched species
+    qs_col = ExternalTaxon.objects.filter(
+        system="col",
+        rank__in=["species", "subspecies"],
+        ncbi_genomes__col_match_status="matched",
+    ).distinct()
+    # Manual species (genus fallback, manual edits)
+    qs_manual = ExternalTaxon.objects.filter(
+        system="manual",
+        rank="species",
+    )
+    count = qs_col.count() + qs_manual.count()
+    max_id_col = qs_col.aggregate(m=Max("id"))["m"] or 0
+    max_id_manual = qs_manual.aggregate(m=Max("id"))["m"] or 0
+    max_id = max(max_id_col, max_id_manual)
+    return f"{count}:{max_id}"
+
 
 def _parse_include(v: str) -> Set[str]:
     """Parses the include=species,nodes parameter."""
@@ -40,15 +71,22 @@ def _parse_include(v: str) -> Set[str]:
 # Tree endpoints
 # ============================================================
 
+def _get_tree_cache_key(limit, rank_cut):
+    """Generate a cache key based on parameters."""
+    key_parts = [TREE_CACHE_KEY, str(limit or "all"), str(rank_cut or "none")]
+    return ":".join(key_parts)
+
+
 @require_GET
 def tree_data(request):
     """
     Main endpoint: returns the taxonomic tree.
     
     Params:
-        - limit: maximum species count (default: 15000)
+        - limit: maximum species count (default: all)
         - rankCut: rank to expand down to (default: None = fully expanded)
         - expand: keys to expand, comma-separated
+        - nocache: if present, bypass cache
     """
     # If limit param is not provided, request entire DB (no slicing) up to safety max.
     raw_limit = request.GET.get("limit")
@@ -65,22 +103,67 @@ def tree_data(request):
 
     rank_cut = request.GET.get("rankCut") or request.GET.get("rank_cut")
     expand_keys = request.GET.get("expand", "")
+    nocache = "nocache" in request.GET
     
-    # Build tree using the manager
-    tree = ExternalTaxon.objects.build_tree(
-        limit=limit,
-        system="col",
-        rank_cut=rank_cut,
-        with_keys=True,
-    )
+    # Try to get from cache (only for requests without expand_keys)
+    cache_key = _get_tree_cache_key(limit, rank_cut)
+    tree = None
     
-    # Expand specific paths if requested
+    if not nocache and not expand_keys:
+        tree = cache.get(cache_key)
+        if tree:
+            logger.debug("[tree_data] Cache HIT for %s", cache_key)
+    
+    if tree is None:
+        logger.debug("[tree_data] Cache MISS, building tree...")
+        # Build tree using the manager
+        tree = ExternalTaxon.objects.build_tree(
+            limit=limit,
+            system="col",
+            rank_cut=rank_cut,
+            with_keys=True,
+        )
+        
+        # Stamp tree_version so frontend can detect changes
+        tree["tree_version"] = _get_tree_version()
+        
+        # Cache the result (only if no expand_keys)
+        if not expand_keys:
+            cache.set(cache_key, tree, TREE_CACHE_TIMEOUT)
+            logger.info("[tree_data] Cached tree (%s) for %d seconds", cache_key, TREE_CACHE_TIMEOUT)
+    
+    # Expand specific paths if requested (applied after cache lookup)
     if expand_keys:
         keys = [k.strip() for k in expand_keys.split(",") if k.strip()]
         if keys:
             tree = expand_to_keys(tree, keys)
     
     return JsonResponse(tree, safe=True)
+
+
+@require_GET
+def tree_version(request):
+    """
+    Lightweight endpoint returning only the current tree version.
+    The frontend polls this to detect when species data has changed.
+    """
+    return JsonResponse({"tree_version": _get_tree_version()})
+
+
+@require_GET
+def invalidate_tree_cache(request):
+    """
+    Utility endpoint to invalidate the tree cache.
+    Called after data imports or COL matching.
+    """
+    # Delete all tree cache keys
+    for limit in [None, 1000, 5000, 10000, 15000]:
+        for rank_cut in [None, "phylum", "class", "order", "family"]:
+            key = _get_tree_cache_key(limit, rank_cut)
+            cache.delete(key)
+    
+    logger.info("[tree_data] Tree cache invalidated")
+    return JsonResponse({"success": True, "message": "Tree cache invalidated"})
 
 
 @require_GET

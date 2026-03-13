@@ -170,6 +170,25 @@ celery -A config worker -l info -Q default,ncbi_sync
 celery -A config beat -l info
 ```
 
+On Windows use the Python module invocation and the solo pool (prefork pool is not supported on Windows):
+
+```powershell
+# from project root, with your virtualenv activated
+python -m celery -A config worker -l info --pool=solo -Q default,ncbi_sync
+# start beat (scheduler)
+python -m celery -A config beat -l info
+```
+
+On Linux (or Unix-like systems) you can run the standard celery executable which uses the prefork pool by default:
+
+```bash
+# from project root (activate your venv first)
+celery -A config worker -l info -Q default,ncbi_sync
+celery -A config beat -l info
+```
+
+For production deployments prefer running Celery under a process manager (systemd, supervisord, or a container orchestration platform).
+
 ---
 
 ## Citation

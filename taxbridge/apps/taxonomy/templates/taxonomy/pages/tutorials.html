@@ -1,777 +1,829 @@
-{% extends "taxonomy/layout/app_shell.html" %}
+{% extends 'taxonomy/layout/app_shell.html' %}
 {% load static %}
 
-{% block title %}Tutorials · TaxonSampler{% endblock %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{% static 'taxonomy/css/about.css' %}">
+{% block title %}
+  Tutorials · TaxonSampler
 {% endblock %}
 
-{% block extra_js %}
-<script>
-  // Ensure tutorial videos replay even if loop attribute fails in some browsers
-  (function(){
-    function attachReplay(id){
-      try{
-        var container = document.getElementById(id);
-        if(!container) return;
-        var v = container.querySelector('video');
-        if(!v) return;
-        v.addEventListener('ended', function(){
-          // restart playback; some browsers require currentTime reset
-          try{ v.currentTime = 0; v.play(); }catch(e){ /* noop */ }
-        });
-      }catch(e){console.error('attachReplay error', e);}    
-    }
-    // Attach to known tutorial videos
-    if(document.readyState==='loading'){
-      document.addEventListener('DOMContentLoaded', function(){ attachReplay('video-getting-started'); attachReplay('video-sampling-wizard'); });
-    } else {
-      attachReplay('video-getting-started'); attachReplay('video-sampling-wizard');
-    }
-  })();
-</script>
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'taxonomy/css/about.css' %}" />
 {% endblock %}
 
 {% block content %}
-<!-- Page Header (same style as Report Issue) -->
-<div class="page-header d-print-none mb-2">
-  <div class="row align-items-center">
-    <div class="col">
-      <div class="page-pretitle">TaxonSampler</div>
-      <h2 class="page-title"><i class="ti ti-school me-2"></i>Tutorials</h2>
-    </div>
-    <div class="col-auto">
-      <a href="{% url 'taxonomy:about' %}" class="btn btn-outline-secondary btn-sm">
-        <i class="ti ti-info-circle me-1"></i>About the project
-      </a>
+  <!-- Page Header (same style as Report Issue) -->
+  <div class="page-header d-print-none mb-2">
+    <div class="row align-items-center">
+      <div class="col">
+        <div class="page-pretitle">TaxonSampler</div>
+        <h2 class="page-title"><i class="ti ti-school me-2"></i>Tutorials</h2>
+      </div>
+      <div class="col-auto">
+        <a href="{% url 'taxonomy:about' %}" class="btn btn-outline-secondary btn-sm"><i class="ti ti-info-circle me-1"></i>About the project</a>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="row">
-  <!-- Table of Contents (Sidebar) -->
-  <div class="col-lg-3 order-lg-2 mb-3">
-    <div class="card sticky-top" style="top: 1rem;">
-      <div class="card-header">
-        <h3 class="card-title"><i class="ti ti-list me-2"></i>Contents</h3>
-      </div>
-      <div class="card-body p-0">
-        <a href="#getting-started" class="toc-item d-block text-reset text-decoration-none">
-          <i class="ti ti-rocket me-1 text-secondary"></i> Getting Started
-        </a>
-        <a href="#sampling-wizard" class="toc-item d-block text-reset text-decoration-none">
-          <i class="ti ti-wand me-1 text-secondary"></i> The 3-Step Sampling Wizard
-        </a>
-        <a href="#sampling-strategies" class="toc-item d-block text-reset text-decoration-none">
-          <i class="ti ti-arrows-split me-1 text-secondary"></i> Sampling Strategies
-        </a>
-        <a href="#quality-scores" class="toc-item d-block text-reset text-decoration-none">
-          <i class="ti ti-chart-bar me-1 text-secondary"></i> Understanding Quality Scores
-        </a>
-        <a href="#export-download" class="toc-item d-block text-reset text-decoration-none">
-          <i class="ti ti-download me-1 text-secondary"></i> Export &amp; Download
-        </a>
-        <a href="#research-workflow" class="toc-item d-block text-reset text-decoration-none">
-          <i class="ti ti-flask me-1 text-secondary"></i> Research Use Case
-        </a>
+  <div class="row">
+    <!-- Table of Contents (Sidebar) -->
+    <div class="col-lg-3 order-lg-2 mb-3">
+      <div class="card sticky-top" style="top: 1rem;">
+        <div class="card-header">
+          <h3 class="card-title"><i class="ti ti-list me-2"></i>Contents</h3>
+        </div>
+        <div class="card-body p-0">
+          <a href="#getting-started" class="toc-item d-block text-reset text-decoration-none"><i class="ti ti-rocket me-1 text-secondary"></i> Getting Started</a>
+          <a href="#sampling-wizard" class="toc-item d-block text-reset text-decoration-none"><i class="ti ti-wand me-1 text-secondary"></i> The 3-Step Sampling Wizard</a>
+          <a href="#sampling-strategies" class="toc-item d-block text-reset text-decoration-none"><i class="ti ti-arrows-split me-1 text-secondary"></i> Sampling Strategies</a>
+          <a href="#quality-scores" class="toc-item d-block text-reset text-decoration-none"><i class="ti ti-chart-bar me-1 text-secondary"></i> Understanding Quality Scores</a>
+          <a href="#export-download" class="toc-item d-block text-reset text-decoration-none"><i class="ti ti-download me-1 text-secondary"></i> Export &amp; Download</a>
+          <a href="#research-workflow" class="toc-item d-block text-reset text-decoration-none"><i class="ti ti-flask me-1 text-secondary"></i> Research Use Case</a>
+        </div>
       </div>
     </div>
-  </div>
-  
-  <!-- Main Accordion Content -->
-  <div class="col-lg-9 order-lg-1">
-    <div class="accordion tutorial-accordion" id="tutorialAccordion">
-      
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!-- Tutorial 1: Getting Started                                 -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="accordion-item" id="getting-started">
-        <h2 class="accordion-header">
-          <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1" aria-expanded="true" aria-controls="collapse1">
-            <i class="ti ti-rocket me-2 text-primary"></i>
-            Getting Started with TaxonSampler
-            <span class="badge tutorial-badge bg-success-lt text-success ms-2">Beginner</span>
-          </button>
-        </h2>
-        <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#tutorialAccordion">
-          <div class="accordion-body">
-            <p>Learn the fundamentals of navigating TaxonSampler and understanding its core workflow for taxonomic sampling.</p>
-            
-            <!-- Embedded tutorial video -->
-            <div class="video-embed mb-3" id="video-getting-started">
-              <video controls loop preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-getting-started.jpg' %}">
-                <source src="{% static 'taxonomy/videos/tutorial1.mp4' %}" type="video/mp4">
-                Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial1.mp4' %}">download the video</a> instead.
+
+    <!-- Main Accordion Content -->
+    <div class="col-lg-9 order-lg-1">
+      <div class="accordion tutorial-accordion" id="tutorialAccordion">
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- Tutorial 1: Getting Started -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="accordion-item" id="getting-started">
+          <h2 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse1" aria-expanded="true" aria-controls="collapse1">
+              <i class="ti ti-rocket me-2 text-primary"></i>
+              Getting Started with TaxonSampler
+              <span class="badge tutorial-badge bg-success-lt text-success ms-2">Beginner</span>
+            </button>
+          </h2>
+          <div id="collapse1" class="accordion-collapse collapse show" data-bs-parent="#tutorialAccordion">
+            <div class="accordion-body">
+              <p>Learn the fundamentals of navigating TaxonSampler and understanding its core workflow for taxonomic sampling.</p>
+
+              <video controls preload="metadata" class="w-100">
+                <source src="{% static 'taxonomy/videos/tutorial1.mp4' %}" type="video/mp4" />
               </video>
-              <div class="mt-2 small text-muted">Video: Getting Started with TaxonSampler — ~5 min</div>
-            </div>
-            
-            <h5 class="mt-3 mb-3">Steps</h5>
-            
-            <div class="step-item">
-              <span class="step-number">1</span>
-              <div>
-                <strong>Access the Taxonomy Tree</strong>
-                <p class="text-secondary small mb-0">In the header menu, click <strong>Taxonomy</strong> to open the interactive hierarchical tree view. This displays the complete taxonomic classification imported from the Catalogue of Life (COL), showing only species that have genome assemblies in NCBI.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">2</span>
-              <div>
-                <strong>Navigate the Taxonomic Hierarchy</strong>
-                <p class="text-secondary small mb-0">Click on any node to expand its children. The tree follows the standard Linnaean hierarchy (Domain → Kingdom → Phylum → Class → Order → Family → Genus → Species). Use the <strong>search bar</strong> to locate specific taxa by scientific name, or the <strong>Advanced Search</strong> modal to build complex filter queries.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">3</span>
-              <div>
-                <strong>Use Tree Controls</strong>
-                <p class="text-secondary small mb-0">Use the <strong>Fit</strong> button to recentre the view, <strong>Collapse all</strong> to reset the tree, and the fullscreen button (bottom-right) for an expanded workspace. Pan with click-drag and zoom with the scroll wheel.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">4</span>
-              <div>
-                <strong>View Taxon Details</strong>
-                <p class="text-secondary small mb-0"><strong>Double-click</strong> on a species node to open a detail modal showing: COL ID, NCBI Taxonomy ID (TaxID), full classification path (Domain → Species), and linked genome assemblies with accession numbers, assembly level, scaffold N50, and RefSeq category.</p>
-              </div>
-            </div>
-            
-            
-            
-            <div class="info-box">
-              <i class="ti ti-info-circle me-1"></i>
-              <strong>Note:</strong> TaxonSampler only displays species with at least one genome assembly deposited in <strong>NCBI</strong>. Species without sequenced genomes are not shown in the tree. Node labels show coloured badges indicating COL status: <span class="badge" style="background:#d4edda;color:#155724;font-size:10px;">A</span> Accepted, <span class="badge" style="background:#d1ecf1;color:#0c5460;font-size:10px;">S</span> Synonym, <span class="badge" style="background:#f8d7e8;color:#d63384;font-size:10px;">M</span> Manual match.
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!-- Tutorial 2: The 3-Step Sampling Wizard                      -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="accordion-item" id="sampling-wizard">
-        <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2" aria-expanded="false" aria-controls="collapse2">
-            <i class="ti ti-wand me-2 text-warning"></i>
-            The 3-Step Sampling Wizard
-            <span class="badge tutorial-badge bg-success-lt text-success ms-2">Beginner</span>
-          </button>
-        </h2>
-        <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
-          <div class="accordion-body">
-            <p>The Filters panel on the right side of the Taxonomy page guides you through a three-step wizard to configure and execute your sampling. Here's how each step works.</p>
-            
-            <!-- Embedded tutorial video -->
-            <div class="video-embed mb-3" id="video-sampling-wizard">
-              <video controls loop preload="metadata" class="w-100" poster="{% static 'taxonomy/img/video-poster-sampling-wizard.jpg' %}">
-                <source src="{% static 'taxonomy/videos/tutorial2.mp4' %}" type="video/mp4">
-                Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial2.mp4' %}">download the video</a> instead.
-              </video>
-              <div class="mt-2 small text-muted">Video: The 3-Step Sampling Wizard — ~8 min</div>
-            </div>
-            
-            <h5 class="mt-3 mb-3">Step 1 — Scope &amp; Targets</h5>
-            
-            <div class="step-item">
-              <span class="step-number">1</span>
-              <div>
-                <strong>Set Your Scope</strong>
-                <p class="text-secondary small mb-0">Click a node in the tree, then press <strong>"Use selected node"</strong> in the Filters panel. This defines the root taxon — all descendant species will be candidates. The scope label and species count update instantly.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">2</span>
-              <div>
-                <strong>Add Targets (Optional)</strong>
-                <p class="text-secondary small mb-0">Within your scope, you can add specific clades as <strong>targets</strong> with the <strong>"Add selected node"</strong> button. This restricts sampling to only species belonging to those subgroups. Target chips appear below and can be removed individually or cleared with the broom button.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">3</span>
-              <div>
-                <strong>Proceed</strong>
-                <p class="text-secondary small mb-0">Click <strong>Next</strong> to advance to Step 2.</p>
-              </div>
-            </div>
 
-            <hr class="my-3">
-            
-            <h5 class="mb-3">Step 2 — Sampling Configuration</h5>
-            
-            <div class="step-item">
-              <span class="step-number">4</span>
-              <div>
-                <strong>Set Max Sample Size</strong>
-                <p class="text-secondary small mb-0">Enter the maximum number of species in your final sample. Leave empty to include all species. The "Available" count shows how many species exist within your scope.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">5</span>
-              <div>
-                <strong>Adjust Taxonomic Range</strong>
-                <p class="text-secondary small mb-0">Use the <strong>dual slider</strong> (D–K–P–C–O–F–G–S) to choose the taxonomic range for grouping. The left handle sets the highest rank and the right handle the lowest. For example, Family → Species means quota allocation groups species by family.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">6</span>
-              <div>
-                <strong>Choose a Strategy</strong>
-                <p class="text-secondary small mb-0">Select one of four strategies: <strong>Natural order</strong>, <strong>Quality Random</strong>, <strong>Stratified Proportional</strong> (default), or <strong>Balanced Hierarchical</strong>. See Tutorial 3 for details on each.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">7</span>
-              <div>
-                <strong>Run Sampling</strong>
-                <p class="text-secondary small mb-0">Click <strong>"Run sampling"</strong>. Results appear immediately in the <strong>Selection</strong> tab with a species table showing clade, quality score, assembly level, and more. The <strong>Clades allocation</strong> panel shows the distribution (Available / Quota / Sampled per clade).</p>
-              </div>
-            </div>
+              <h5 class="mt-3 mb-3">Steps</h5>
 
-            <hr class="my-3">
-            
-            <h5 class="mb-3">Step 3 — Assembly Filtering (Optional)</h5>
-            
-            <div class="step-item">
-              <span class="step-number">8</span>
-              <div>
-                <strong>Choose Filtering Mode</strong>
-                <p class="text-secondary small mb-0">Select <strong>Scoring</strong> (weighted composite score, picks best assembly per species) or <strong>Hard filtering</strong> (strict thresholds, removes species whose best assembly doesn't qualify).</p>
+              <div class="step-item">
+                <span class="step-number">1</span>
+                <div>
+                  <strong>Access the Taxonomy Tree</strong>
+                  <p class="text-secondary small mb-0">
+                    In the header menu, click <strong>Taxonomy</strong> to open the interactive hierarchical tree view. This displays the complete taxonomic classification imported from the Catalogue of Life (COL), showing only species that have genome assemblies in NCBI.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">2</span>
+                <div>
+                  <strong>Navigate the Taxonomic Hierarchy</strong>
+                  <p class="text-secondary small mb-0">
+                    Click on any node to expand its children. The tree follows the standard Linnaean hierarchy (Domain → Kingdom → Phylum → Class → Order → Family → Genus → Species). Use the <strong>search bar</strong> to locate specific taxa by scientific name, or the <strong>Advanced Search</strong> modal to build complex filter queries.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">3</span>
+                <div>
+                  <strong>Use Tree Controls</strong>
+                  <p class="text-secondary small mb-0">
+                    Use the <strong>Fit</strong> button to recentre the view, <strong>Collapse all</strong> to reset the tree, and the fullscreen button (bottom-right) for an expanded workspace. Pan with click-drag and zoom with the scroll wheel.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">4</span>
+                <div>
+                  <strong>View Taxon Details</strong>
+                  <p class="text-secondary small mb-0">
+                    <strong>Double-click</strong> on a species node to open a detail modal showing: COL ID, NCBI Taxonomy ID (TaxID), full classification path (Domain → Species), and linked genome assemblies with accession numbers, assembly level, scaffold N50, and RefSeq category.
+                  </p>
+                </div>
+              </div>
+
+              <div class="info-box">
+                <i class="ti ti-info-circle me-1"></i>
+                <strong>Note:</strong> TaxonSampler only displays species with at least one genome assembly deposited in <strong>NCBI</strong>. Species without sequenced genomes are not shown in the tree. Node labels show coloured badges indicating COL status: <span class="badge" style="background:#d4edda;color:#155724;font-size:10px;">A</span> Accepted, <span class="badge" style="background:#d1ecf1;color:#0c5460;font-size:10px;">S</span> Synonym, <span class="badge" style="background:#f8d7e8;color:#d63384;font-size:10px;">M</span> Manual match.
               </div>
             </div>
-            
-            <div class="step-item">
-              <span class="step-number">9</span>
-              <div>
-                <strong>Configure Filters</strong>
-                <p class="text-secondary small mb-0">Check/uncheck <strong>assembly levels</strong> (Complete Genome, Chromosome, Scaffold) and optionally set a <strong>minimum coverage</strong> depth. The "Assembly overview" panel updates with species count, average score, and average coverage.</p>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- Tutorial 2: The 3-Step Sampling Wizard -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="accordion-item" id="sampling-wizard">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse2" aria-expanded="false" aria-controls="collapse2">
+              <i class="ti ti-wand me-2 text-warning"></i>
+              The 3-Step Sampling Wizard
+              <span class="badge tutorial-badge bg-success-lt text-success ms-2">Beginner</span>
+            </button>
+          </h2>
+          <div id="collapse2" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
+            <div class="accordion-body">
+              <p>The Filters panel on the right side of the Taxonomy page guides you through a three-step wizard to configure and execute your sampling. Here's how each step works.</p>
+
+              <div class="video-embed mb-3" id="video-sampling-wizard">
+                <video controls loop preload="metadata" class="w-100">
+                  <source src="{% static 'taxonomy/videos/tutorial2.mp4' %}" type="video/mp4" />Your browser does not support the video tag. You can <a href="{% static 'taxonomy/videos/tutorial2.mp4' %}">download the video</a> instead.
+                </video>
+              </div>
+
+              <h5 class="mt-3 mb-3">Step 1 — Scope &amp; Targets</h5>
+
+              <div class="step-item">
+                <span class="step-number">1</span>
+                <div>
+                  <strong>Set Your Scope</strong>
+                  <p class="text-secondary small mb-0">
+                    Click a node in the tree, then press <strong>"Use selected node"</strong> in the Filters panel. This defines the root taxon — all descendant species will be candidates. The scope label and species count update instantly.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">2</span>
+                <div>
+                  <strong>Add Targets (Optional)</strong>
+                  <p class="text-secondary small mb-0">
+                    Within your scope, you can add specific clades as <strong>targets</strong> with the <strong>"Add selected node"</strong> button. This restricts sampling to only species belonging to those subgroups. Target chips appear below and can be removed individually or cleared with the broom button.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">3</span>
+                <div>
+                  <strong>Proceed</strong>
+                  <p class="text-secondary small mb-0">
+                    Click <strong>Next</strong> to advance to Step 2.
+                  </p>
+                </div>
+              </div>
+
+              <hr class="my-3" />
+
+              <h5 class="mb-3">Step 2 — Sampling Configuration</h5>
+
+              <div class="step-item">
+                <span class="step-number">4</span>
+                <div>
+                  <strong>Set Max Sample Size</strong>
+                  <p class="text-secondary small mb-0">Enter the maximum number of species in your final sample. Leave empty to include all species. The "Available" count shows how many species exist within your scope.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">5</span>
+                <div>
+                  <strong>Adjust Taxonomic Range</strong>
+                  <p class="text-secondary small mb-0">
+                    Use the <strong>dual slider</strong> (D–K–P–C–O–F–G–S) to choose the taxonomic range for grouping. The left handle sets the highest rank and the right handle the lowest. For example, Family → Species means quota allocation groups species by family.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">6</span>
+                <div>
+                  <strong>Choose a Strategy</strong>
+                  <p class="text-secondary small mb-0">
+                    Select one of four strategies: <strong>Natural order</strong>, <strong>Quality Random</strong>, <strong>Stratified Proportional</strong> (default), or <strong>Balanced Hierarchical</strong>. See Tutorial 3 for details on each.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">7</span>
+                <div>
+                  <strong>Run Sampling</strong>
+                  <p class="text-secondary small mb-0">
+                    Click <strong>"Run sampling"</strong>. Results appear immediately in the <strong>Selection</strong> tab with a species table showing clade, quality score, assembly level, and more. The <strong>Clades allocation</strong> panel shows the distribution (Available / Quota / Sampled per clade).
+                  </p>
+                </div>
+              </div>
+
+              <hr class="my-3" />
+
+              <h5 class="mb-3">Step 3 — Assembly Filtering (Optional)</h5>
+
+              <div class="step-item">
+                <span class="step-number">8</span>
+                <div>
+                  <strong>Choose Filtering Mode</strong>
+                  <p class="text-secondary small mb-0">
+                    Select <strong>Scoring</strong> (weighted composite score, picks best assembly per species) or <strong>Hard filtering</strong> (strict thresholds, removes species whose best assembly doesn't qualify).
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">9</span>
+                <div>
+                  <strong>Configure Filters</strong>
+                  <p class="text-secondary small mb-0">
+                    Check/uncheck <strong>assembly levels</strong> (Complete Genome, Chromosome, Scaffold) and optionally set a <strong>minimum coverage</strong> depth. The "Assembly overview" panel updates with species count, average score, and average coverage.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">10</span>
+                <div>
+                  <strong>Apply or Skip</strong>
+                  <p class="text-secondary small mb-0">
+                    Click <strong>"Apply filter &amp; continue"</strong> to refine results, or <strong>"Skip filtering"</strong> to keep all assemblies. The Selection tab updates accordingly.
+                  </p>
+                </div>
+              </div>
+
+              <div class="info-box">
+                <i class="ti ti-info-circle me-1"></i>
+                <strong>Locked state:</strong> After running a sampling, scope and targets are locked. Use the <strong>Reset</strong> button in the green alert banner to start over with a new scope.
               </div>
             </div>
-            
-            <div class="step-item">
-              <span class="step-number">10</span>
-              <div>
-                <strong>Apply or Skip</strong>
-                <p class="text-secondary small mb-0">Click <strong>"Apply filter &amp; continue"</strong> to refine results, or <strong>"Skip filtering"</strong> to keep all assemblies. The Selection tab updates accordingly.</p>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- Tutorial 3: Sampling Strategies -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="accordion-item" id="sampling-strategies">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3" aria-expanded="false" aria-controls="collapse3">
+              <i class="ti ti-arrows-split me-2 text-success"></i>
+              Sampling Strategies
+              <span class="badge tutorial-badge bg-warning-lt text-warning ms-2">Intermediate</span>
+            </button>
+          </h2>
+          <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
+            <div class="accordion-body">
+              <p>TaxonSampler offers four sampling strategies in Step 2. Each distributes the sample differently across the clades within your taxonomic range.</p>
+
+              <h5 class="mt-3 mb-3">Strategy Comparison</h5>
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Strategy</th>
+                    <th>Description</th>
+                    <th>Best for</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <span class="code-inline">Natural order</span>
+                    </td>
+                    <td>Selects species in natural accession order (as stored in the database)</td>
+                    <td>Simple lists, reproducible baseline</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <span class="code-inline">Quality Random</span>
+                    </td>
+                    <td>
+                      Random selection within balanced quotas, <strong>prioritising species with higher-quality genomes</strong>
+                    </td>
+                    <td>Balanced coverage with quality preference</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <span class="code-inline">Stratified Proportional</span>
+                    </td>
+                    <td>
+                      Quota per clade is <strong>proportional to clade size</strong> (species-rich clades contribute more)
+                    </td>
+                    <td>Fair representation reflecting natural diversity</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <span class="code-inline">Balanced Hierarchical</span>
+                    </td>
+                    <td>
+                      <strong>Equal quota per clade</strong> regardless of size
+                    </td>
+                    <td>Preventing overrepresentation of species-rich groups</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h5 class="mt-3 mb-3">How to Choose</h5>
+
+              <div class="step-item">
+                <span class="step-number">1</span>
+                <div>
+                  <strong>Defining the Taxonomic Range</strong>
+                  <p class="text-secondary small mb-0">
+                    All strategies distribute quotas across clades defined by the <strong>Taxonomic range slider</strong>. For example, if your scope is <span class="code-inline">Mammalia</span> and you set the range to Family → Species, each mammalian family becomes a group that receives a quota.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">2</span>
+                <div>
+                  <strong>Proportional vs Balanced</strong>
+                  <p class="text-secondary small mb-0">
+                    <strong>Stratified Proportional</strong> assigns quota proportional to each clade's species count (e.g., a family with 200 species gets 10× the quota of a family with 20). <strong>Balanced Hierarchical</strong> gives each clade the same quota regardless, ensuring rare lineages are equally represented.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">3</span>
+                <div>
+                  <strong>Quality Random</strong>
+                  <p class="text-secondary small mb-0">
+                    Like Balanced, but within each quota it <strong>prefers species with better genome quality scores</strong>. Ideal when you want both broad coverage and high data quality.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">4</span>
+                <div>
+                  <strong>Review Allocation</strong>
+                  <p class="text-secondary small mb-0">
+                    After running sampling, check the <strong>Clades allocation</strong> panel in the Selection tab. It shows Available / Quota / Sampled per clade so you can verify the distribution meets your needs.
+                  </p>
+                </div>
+              </div>
+
+              <div class="tip-box">
+                <i class="ti ti-bulb me-1"></i>
+                <strong>Tip:</strong> Start with <strong>Stratified Proportional</strong> (the default). If you find that species-rich clades dominate your sample, switch to <strong>Balanced Hierarchical</strong> for equal representation.
               </div>
             </div>
-            
-            <div class="info-box">
-              <i class="ti ti-info-circle me-1"></i>
-              <strong>Locked state:</strong> After running a sampling, scope and targets are locked. Use the <strong>Reset</strong> button in the green alert banner to start over with a new scope.
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- Tutorial 4: Understanding Quality Scores -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="accordion-item" id="quality-scores">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4" aria-expanded="false" aria-controls="collapse4">
+              <i class="ti ti-chart-bar me-2 text-danger"></i>
+              Understanding Quality Scores
+              <span class="badge tutorial-badge bg-warning-lt text-warning ms-2">Intermediate</span>
+            </button>
+          </h2>
+          <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
+            <div class="accordion-body">
+              <p>TaxonSampler computes two quality scores for each genome assembly. Understanding them helps you interpret the results in the Selection table.</p>
+
+              <!-- VIDEO PLACEHOLDER -->
+              <div class="video-placeholder" id="video-quality-scores">
+                <i class="ti ti-player-play"></i>
+                <div class="video-title">Video: Understanding Quality Scores</div>
+                <div class="video-duration">~7 min</div>
+              </div>
+
+              <h5 class="mt-3 mb-3">Quality Score (Step 2)</h5>
+              <p>Computed during sampling, this score ranks species by overall genome quality:</p>
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Weight</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Assembly Level</td>
+                    <td>
+                      <span class="badge bg-green-lt text-dark">20%</span>
+                    </td>
+                    <td>Complete Genome &gt; Chromosome &gt; Scaffold &gt; Contig</td>
+                  </tr>
+                  <tr>
+                    <td>RefSeq Category</td>
+                    <td>
+                      <span class="badge bg-azure-lt text-dark">15%</span>
+                    </td>
+                    <td>Reference genome &gt; Representative &gt; na</td>
+                  </tr>
+                  <tr>
+                    <td>NCBI Quality Score</td>
+                    <td>
+                      <span class="badge bg-purple-lt text-dark">20%</span>
+                    </td>
+                    <td>NCBI's own assembly quality assessment</td>
+                  </tr>
+                  <tr>
+                    <td>Scaffold N50</td>
+                    <td>
+                      <span class="badge bg-cyan-lt text-dark">15%</span>
+                    </td>
+                    <td>Higher N50 = better contiguity</td>
+                  </tr>
+                  <tr>
+                    <td>Coverage</td>
+                    <td>
+                      <span class="badge bg-orange-lt text-dark">10%</span>
+                    </td>
+                    <td>Sequencing depth</td>
+                  </tr>
+                  <tr>
+                    <td>BUSCO Complete</td>
+                    <td>
+                      <span class="badge bg-pink-lt text-dark">15%</span>
+                    </td>
+                    <td>Gene content completeness assessment</td>
+                  </tr>
+                  <tr>
+                    <td>Gene Annotation</td>
+                    <td>
+                      <span class="badge bg-yellow-lt text-dark">5%</span>
+                    </td>
+                    <td>Whether genes have been annotated</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h5 class="mt-4 mb-3">Assembly Score (Step 3)</h5>
+              <p>Computed during assembly filtering, this score focuses on assembly characteristics:</p>
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Weight</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Coverage</td>
+                    <td>
+                      <span class="badge bg-cyan-lt text-dark">35%</span>
+                    </td>
+                    <td>Sequencing depth</td>
+                  </tr>
+                  <tr>
+                    <td>Scaffold N50</td>
+                    <td>
+                      <span class="badge bg-purple-lt text-dark">30%</span>
+                    </td>
+                    <td>Assembly contiguity</td>
+                  </tr>
+                  <tr>
+                    <td>Quality Score</td>
+                    <td>
+                      <span class="badge bg-green-lt text-dark">35%</span>
+                    </td>
+                    <td>NCBI quality assessment</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h5 class="mt-4 mb-3">Score Colour Coding</h5>
+              <p class="text-secondary small">In the Selection table, scores are displayed with colour-coded badges:</p>
+              <div class="d-flex gap-2 flex-wrap">
+                <span class="badge bg-success-lt text-dark">≥ 0.6 — High</span>
+                <span class="badge bg-warning-lt text-dark">≥ 0.3 — Medium</span>
+                <span class="badge bg-secondary-lt text-dark">&lt; 0.3 — Low</span>
+              </div>
+
+              <div class="tip-box mt-3">
+                <i class="ti ti-bulb me-1"></i>
+                <strong>Tip:</strong> The <strong>Quality Random</strong> strategy uses the Quality Score to preferentially pick species with better genomes. If you need the highest-quality assemblies regardless of taxonomic balance, sort by Quality in the Selection table after sampling.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- Tutorial 5: Export & Download -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="accordion-item" id="export-download">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse5" aria-expanded="false" aria-controls="collapse5">
+              <i class="ti ti-download me-2 text-info"></i>
+              Export &amp; Download
+              <span class="badge tutorial-badge bg-success-lt text-success ms-2">Beginner</span>
+            </button>
+          </h2>
+          <div id="collapse5" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
+            <div class="accordion-body">
+              <p>Once you have a selection in the Selection tab, TaxonSampler offers multiple export formats and NCBI download scripts.</p>
+
+              <!-- VIDEO PLACEHOLDER -->
+              <div class="video-placeholder" id="video-export-download">
+                <i class="ti ti-player-play"></i>
+                <div class="video-title">Video: Exporting Results &amp; Downloading Genomes</div>
+                <div class="video-duration">~6 min</div>
+              </div>
+
+              <h5 class="mt-3 mb-3">Export Formats</h5>
+
+              <div class="step-item">
+                <span class="step-number">1</span>
+                <div>
+                  <strong>JSON</strong>
+                  <p class="text-secondary small mb-0">
+                    Full sampling configuration and results in machine-readable format. Ideal for <strong>reproducibility</strong> — you can re-import this JSON file later using the <strong>Import</strong> button to recreate the exact same selection.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">2</span>
+                <div>
+                  <strong>Excel (.xlsx)</strong>
+                  <p class="text-secondary small mb-0">
+                    Full metadata spreadsheet with species names, accession numbers, quality metrics, clade assignments, and taxonomy. Perfect for the <strong>methods section</strong> of a paper.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">3</span>
+                <div>
+                  <strong>List (.txt)</strong>
+                  <p class="text-secondary small mb-0">Plain text species list, one per line. Useful for quick sharing or as input for other tools.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">4</span>
+                <div>
+                  <strong>Newick (species)</strong>
+                  <p class="text-secondary small mb-0">Phylogenetic tree in Newick format based on the taxonomic hierarchy. Can be opened in FigTree, iTOL, or ETE3 for visualisation.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">5</span>
+                <div>
+                  <strong>Copy to Clipboard</strong>
+                  <p class="text-secondary small mb-0">Copies the species list directly, ready to paste into documents or scripts.</p>
+                </div>
+              </div>
+
+              <h5 class="mt-4 mb-3">NCBI Download Scripts</h5>
+              <p>TaxonSampler generates shell scripts that batch-download data from NCBI for all species in your selection:</p>
+
+              <div class="step-item">
+                <span class="step-number"><i class="ti ti-dna" style="font-size:.7rem;"></i></span>
+                <div>
+                  <strong>Genomes (FASTA)</strong>
+                  <p class="text-secondary small mb-0">Downloads genome assembly FASTA files for all selected accessions using NCBI datasets CLI.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number"><i class="ti ti-cube" style="font-size:.7rem;"></i></span>
+                <div>
+                  <strong>Proteomes (FAA)</strong>
+                  <p class="text-secondary small mb-0">Downloads predicted protein sequences (FASTA amino acid).</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number"><i class="ti ti-file-text" style="font-size:.7rem;"></i></span>
+                <div>
+                  <strong>GenBank (GBFF)</strong>
+                  <p class="text-secondary small mb-0">Downloads annotated GenBank flat files.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number"><i class="ti ti-download" style="font-size:.7rem;"></i></span>
+                <div>
+                  <strong>All Data</strong>
+                  <p class="text-secondary small mb-0">Combined script that downloads genomes, proteomes, and GenBank files in one run.</p>
+                </div>
+              </div>
+
+              <h5 class="mt-4 mb-3">Newick Tab</h5>
+              <p class="text-secondary small">
+                After sampling, the <strong>Newick</strong> tab (next to Selection) shows a visual tree of selected species generated with ETE3. You can download it as <strong>SVG</strong> (for figures) or <strong>Newick</strong> (for phylogenetic software).
+              </p>
+
+              <div class="info-box">
+                <i class="ti ti-info-circle me-1"></i>
+                <strong>Reproducibility:</strong> Always export the JSON configuration alongside your data files. This captures your exact scope, targets, strategy, taxonomic range, and filters — enabling anyone to reproduce your sampling.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <!-- Tutorial 6: Research Use Case -->
+        <!-- ════════════════════════════════════════════════════════════ -->
+        <div class="accordion-item" id="research-workflow">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse6" aria-expanded="false" aria-controls="collapse6">
+              <i class="ti ti-flask me-2 text-purple"></i>
+              Full Research Workflow Example
+              <span class="badge tutorial-badge bg-danger-lt text-danger ms-2">Advanced</span>
+            </button>
+          </h2>
+          <div id="collapse6" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
+            <div class="accordion-body">
+              <p>A complete end-to-end example: selecting high-quality beetle genomes for a comparative genomics study of Coleoptera metabolism.</p>
+
+              <!-- VIDEO PLACEHOLDER -->
+              <div class="video-placeholder" id="video-research-workflow">
+                <i class="ti ti-player-play"></i>
+                <div class="video-title">Video: Complete Research Workflow — Coleoptera Case Study</div>
+                <div class="video-duration">~15 min</div>
+              </div>
+
+              <h5 class="mt-3 mb-3">Scenario</h5>
+              <p>You need ~100 beetle genomes for a pan-Coleoptera gene family analysis. Requirements:</p>
+              <ul>
+                <li>Chromosome-level or complete assemblies preferred</li>
+                <li>Minimum sequencing coverage 30×</li>
+                <li>Broad representation across beetle families</li>
+                <li>Annotated genomes preferred</li>
+              </ul>
+
+              <h5 class="mt-3 mb-3">Workflow</h5>
+
+              <div class="step-item">
+                <span class="step-number">1</span>
+                <div>
+                  <strong>Navigate to Coleoptera</strong>
+                  <p class="text-secondary small mb-0">
+                    Open <strong>Taxonomy</strong> in the sidebar, use the search bar to find <span class="code-inline">Coleoptera</span>, and click the node to select it.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">2</span>
+                <div>
+                  <strong>Set as Scope (Step 1)</strong>
+                  <p class="text-secondary small mb-0">
+                    In the Filters panel, click <strong>"Use selected node"</strong>. The scope updates to Coleoptera and shows the total available species. Optionally add targets for specific families of interest.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">3</span>
+                <div>
+                  <strong>Configure Sampling (Step 2)</strong>
+                  <ul class="text-secondary small mb-0">
+                    <li>
+                      <strong>Max sample size:</strong> 100
+                    </li>
+                    <li>
+                      <strong>Taxonomic range:</strong> Family → Species (drag handles on the slider)
+                    </li>
+                    <li>
+                      <strong>Strategy:</strong> Stratified Proportional (to fairly represent each family)
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">4</span>
+                <div>
+                  <strong>Run Sampling</strong>
+                  <p class="text-secondary small mb-0">
+                    Click <strong>"Run sampling"</strong>. Switch to the <strong>Selection</strong> tab to inspect results. Check the <strong>Clades allocation</strong> panel to verify families are represented.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">5</span>
+                <div>
+                  <strong>Apply Assembly Filters (Step 3)</strong>
+                  <ul class="text-secondary small mb-0">
+                    <li>
+                      Uncheck <strong>Scaffold</strong> (keep only Complete Genome and Chromosome)
+                    </li>
+                    <li>
+                      Set <strong>Min. coverage:</strong> 30
+                    </li>
+                    <li>
+                      Click <strong>"Apply filter &amp; continue"</strong>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">6</span>
+                <div>
+                  <strong>Review and Adjust</strong>
+                  <p class="text-secondary small mb-0">
+                    Check the updated Selection table. If the count dropped too much, use <strong>Reset</strong> and try again with relaxed filters (e.g., allow Scaffold-level, lower coverage). You can also manually add individual species using the <strong>"Add species from scope"</strong> search box.
+                  </p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <span class="step-number">7</span>
+                <div>
+                  <strong>Export</strong>
+                  <ul class="text-secondary small mb-0">
+                    <li>
+                      <strong>Excel:</strong> Full metadata for the methods section
+                    </li>
+                    <li>
+                      <strong>Newick:</strong> Phylogenetic tree for supplementary figures
+                    </li>
+                    <li>
+                      <strong>JSON:</strong> Sampling configuration for reproducibility
+                    </li>
+                    <li>
+                      <strong>Download script (Genomes):</strong> Batch-download all FASTA files from NCBI
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="tip-box">
+                <i class="ti ti-bulb me-1"></i>
+                <strong>Reproducibility:</strong> Include the exported JSON file as supplementary material in your publication. Anyone can import it into TaxonSampler to reproduce your exact dataset selection.
+              </div>
+
+              <h5 class="mt-4 mb-3">Expected Output</h5>
+              <p class="text-secondary small">A dataset of ~100 high-quality beetle genomes distributed across beetle families, with full metadata for each assembly including accession numbers ready for batch download from NCBI.</p>
             </div>
           </div>
         </div>
       </div>
-      
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!-- Tutorial 3: Sampling Strategies                             -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="accordion-item" id="sampling-strategies">
-        <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse3" aria-expanded="false" aria-controls="collapse3">
-            <i class="ti ti-arrows-split me-2 text-success"></i>
-            Sampling Strategies
-            <span class="badge tutorial-badge bg-warning-lt text-warning ms-2">Intermediate</span>
-          </button>
-        </h2>
-        <div id="collapse3" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
-          <div class="accordion-body">
-            <p>TaxonSampler offers four sampling strategies in Step 2. Each distributes the sample differently across the clades within your taxonomic range.</p>
-            
-            
-            
-            <h5 class="mt-3 mb-3">Strategy Comparison</h5>
-            <table class="table table-sm">
-              <thead>
-                <tr><th>Strategy</th><th>Description</th><th>Best for</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><span class="code-inline">Natural order</span></td>
-                  <td>Selects species in natural accession order (as stored in the database)</td>
-                  <td>Simple lists, reproducible baseline</td>
-                </tr>
-                <tr>
-                  <td><span class="code-inline">Quality Random</span></td>
-                  <td>Random selection within balanced quotas, <strong>prioritising species with higher-quality genomes</strong></td>
-                  <td>Balanced coverage with quality preference</td>
-                </tr>
-                <tr>
-                  <td><span class="code-inline">Stratified Proportional</span></td>
-                  <td>Quota per clade is <strong>proportional to clade size</strong> (species-rich clades contribute more)</td>
-                  <td>Fair representation reflecting natural diversity</td>
-                </tr>
-                <tr>
-                  <td><span class="code-inline">Balanced Hierarchical</span></td>
-                  <td><strong>Equal quota per clade</strong> regardless of size</td>
-                  <td>Preventing overrepresentation of species-rich groups</td>
-                </tr>
-              </tbody>
-            </table>
-            
-            <h5 class="mt-3 mb-3">How to Choose</h5>
-            
-            <div class="step-item">
-              <span class="step-number">1</span>
-              <div>
-                <strong>Defining the Taxonomic Range</strong>
-                <p class="text-secondary small mb-0">All strategies distribute quotas across clades defined by the <strong>Taxonomic range slider</strong>. For example, if your scope is <span class="code-inline">Mammalia</span> and you set the range to Family → Species, each mammalian family becomes a group that receives a quota.</p>
-              </div>
+
+      <!-- Additional Resources -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <h3 class="card-title"><i class="ti ti-help me-2"></i>Need More Help?</h3>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <a href="{% url 'taxonomy:about' %}" class="card card-link card-link-pop h-100">
+                <div class="card-body text-center">
+                  <i class="ti ti-info-circle mb-2" style="font-size: 2rem;"></i>
+                  <p class="mb-0">
+                    <strong>About</strong>
+                  </p>
+                  <small class="text-secondary">Learn about the methodology</small>
+                </div>
+              </a>
             </div>
-            
-            <div class="step-item">
-              <span class="step-number">2</span>
-              <div>
-                <strong>Proportional vs Balanced</strong>
-                <p class="text-secondary small mb-0"><strong>Stratified Proportional</strong> assigns quota proportional to each clade's species count (e.g., a family with 200 species gets 10× the quota of a family with 20). <strong>Balanced Hierarchical</strong> gives each clade the same quota regardless, ensuring rare lineages are equally represented.</p>
-              </div>
+            <div class="col-md-4">
+              <a href="{% url 'taxonomy:report-issue' %}" class="card card-link card-link-pop h-100">
+                <div class="card-body text-center">
+                  <i class="ti ti-bug mb-2" style="font-size: 2rem;"></i>
+                  <p class="mb-0">
+                    <strong>Report Issue</strong>
+                  </p>
+                  <small class="text-secondary">Found a bug? Let us know</small>
+                </div>
+              </a>
             </div>
-            
-            <div class="step-item">
-              <span class="step-number">3</span>
-              <div>
-                <strong>Quality Random</strong>
-                <p class="text-secondary small mb-0">Like Balanced, but within each quota it <strong>prefers species with better genome quality scores</strong>. Ideal when you want both broad coverage and high data quality.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">4</span>
-              <div>
-                <strong>Review Allocation</strong>
-                <p class="text-secondary small mb-0">After running sampling, check the <strong>Clades allocation</strong> panel in the Selection tab. It shows Available / Quota / Sampled per clade so you can verify the distribution meets your needs.</p>
-              </div>
-            </div>
-            
-            <div class="tip-box">
-              <i class="ti ti-bulb me-1"></i>
-              <strong>Tip:</strong> Start with <strong>Stratified Proportional</strong> (the default). If you find that species-rich clades dominate your sample, switch to <strong>Balanced Hierarchical</strong> for equal representation.
+            <div class="col-md-4">
+              <a href="https://github.com/joanjir/taxonSampler/wiki" target="_blank" class="card card-link card-link-pop h-100">
+                <div class="card-body text-center">
+                  <i class="ti ti-brand-github mb-2" style="font-size: 2rem;"></i>
+                  <p class="mb-0">
+                    <strong>GitHub Wiki</strong>
+                  </p>
+                  <small class="text-secondary">Full documentation</small>
+                </div>
+              </a>
             </div>
           </div>
         </div>
       </div>
-      
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!-- Tutorial 4: Understanding Quality Scores                    -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="accordion-item" id="quality-scores">
-        <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse4" aria-expanded="false" aria-controls="collapse4">
-            <i class="ti ti-chart-bar me-2 text-danger"></i>
-            Understanding Quality Scores
-            <span class="badge tutorial-badge bg-warning-lt text-warning ms-2">Intermediate</span>
-          </button>
-        </h2>
-        <div id="collapse4" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
-          <div class="accordion-body">
-            <p>TaxonSampler computes two quality scores for each genome assembly. Understanding them helps you interpret the results in the Selection table.</p>
-            
-            <!-- VIDEO PLACEHOLDER -->
-            <div class="video-placeholder" id="video-quality-scores">
-              <i class="ti ti-player-play"></i>
-              <div class="video-title">Video: Understanding Quality Scores</div>
-              <div class="video-duration">~7 min</div>
-            </div>
-            
-            <h5 class="mt-3 mb-3">Quality Score (Step 2)</h5>
-            <p>Computed during sampling, this score ranks species by overall genome quality:</p>
-            <table class="table table-sm">
-              <thead>
-                <tr><th>Metric</th><th>Weight</th><th>Description</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Assembly Level</td>
-                  <td><span class="badge bg-green-lt text-dark">20%</span></td>
-                  <td>Complete Genome &gt; Chromosome &gt; Scaffold &gt; Contig</td>
-                </tr>
-                <tr>
-                  <td>RefSeq Category</td>
-                  <td><span class="badge bg-azure-lt text-dark">15%</span></td>
-                  <td>Reference genome &gt; Representative &gt; na</td>
-                </tr>
-                <tr>
-                  <td>NCBI Quality Score</td>
-                  <td><span class="badge bg-purple-lt text-dark">20%</span></td>
-                  <td>NCBI's own assembly quality assessment</td>
-                </tr>
-                <tr>
-                  <td>Scaffold N50</td>
-                  <td><span class="badge bg-cyan-lt text-dark">15%</span></td>
-                  <td>Higher N50 = better contiguity</td>
-                </tr>
-                <tr>
-                  <td>Coverage</td>
-                  <td><span class="badge bg-orange-lt text-dark">10%</span></td>
-                  <td>Sequencing depth</td>
-                </tr>
-                <tr>
-                  <td>BUSCO Complete</td>
-                  <td><span class="badge bg-pink-lt text-dark">15%</span></td>
-                  <td>Gene content completeness assessment</td>
-                </tr>
-                <tr>
-                  <td>Gene Annotation</td>
-                  <td><span class="badge bg-yellow-lt text-dark">5%</span></td>
-                  <td>Whether genes have been annotated</td>
-                </tr>
-              </tbody>
-            </table>
-            
-            <h5 class="mt-4 mb-3">Assembly Score (Step 3)</h5>
-            <p>Computed during assembly filtering, this score focuses on assembly characteristics:</p>
-            <table class="table table-sm">
-              <thead>
-                <tr><th>Metric</th><th>Weight</th><th>Description</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Coverage</td>
-                  <td><span class="badge bg-cyan-lt text-dark">35%</span></td>
-                  <td>Sequencing depth</td>
-                </tr>
-                <tr>
-                  <td>Scaffold N50</td>
-                  <td><span class="badge bg-purple-lt text-dark">30%</span></td>
-                  <td>Assembly contiguity</td>
-                </tr>
-                <tr>
-                  <td>Quality Score</td>
-                  <td><span class="badge bg-green-lt text-dark">35%</span></td>
-                  <td>NCBI quality assessment</td>
-                </tr>
-              </tbody>
-            </table>
-            
-            <h5 class="mt-4 mb-3">Score Colour Coding</h5>
-            <p class="text-secondary small">In the Selection table, scores are displayed with colour-coded badges:</p>
-            <div class="d-flex gap-2 flex-wrap">
-              <span class="badge bg-success-lt text-dark">≥ 0.6 — High</span>
-              <span class="badge bg-warning-lt text-dark">≥ 0.3 — Medium</span>
-              <span class="badge bg-secondary-lt text-dark">&lt; 0.3 — Low</span>
-            </div>
-            
-            <div class="tip-box mt-3">
-              <i class="ti ti-bulb me-1"></i>
-              <strong>Tip:</strong> The <strong>Quality Random</strong> strategy uses the Quality Score to preferentially pick species with better genomes. If you need the highest-quality assemblies regardless of taxonomic balance, sort by Quality in the Selection table after sampling.
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!-- Tutorial 5: Export & Download                               -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="accordion-item" id="export-download">
-        <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse5" aria-expanded="false" aria-controls="collapse5">
-            <i class="ti ti-download me-2 text-info"></i>
-            Export &amp; Download
-            <span class="badge tutorial-badge bg-success-lt text-success ms-2">Beginner</span>
-          </button>
-        </h2>
-        <div id="collapse5" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
-          <div class="accordion-body">
-            <p>Once you have a selection in the Selection tab, TaxonSampler offers multiple export formats and NCBI download scripts.</p>
-            
-            <!-- VIDEO PLACEHOLDER -->
-            <div class="video-placeholder" id="video-export-download">
-              <i class="ti ti-player-play"></i>
-              <div class="video-title">Video: Exporting Results &amp; Downloading Genomes</div>
-              <div class="video-duration">~6 min</div>
-            </div>
-            
-            <h5 class="mt-3 mb-3">Export Formats</h5>
-            
-            <div class="step-item">
-              <span class="step-number">1</span>
-              <div>
-                <strong>JSON</strong>
-                <p class="text-secondary small mb-0">Full sampling configuration and results in machine-readable format. Ideal for <strong>reproducibility</strong> — you can re-import this JSON file later using the <strong>Import</strong> button to recreate the exact same selection.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">2</span>
-              <div>
-                <strong>Excel (.xlsx)</strong>
-                <p class="text-secondary small mb-0">Full metadata spreadsheet with species names, accession numbers, quality metrics, clade assignments, and taxonomy. Perfect for the <strong>methods section</strong> of a paper.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">3</span>
-              <div>
-                <strong>List (.txt)</strong>
-                <p class="text-secondary small mb-0">Plain text species list, one per line. Useful for quick sharing or as input for other tools.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">4</span>
-              <div>
-                <strong>Newick (species)</strong>
-                <p class="text-secondary small mb-0">Phylogenetic tree in Newick format based on the taxonomic hierarchy. Can be opened in FigTree, iTOL, or ETE3 for visualisation.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">5</span>
-              <div>
-                <strong>Copy to Clipboard</strong>
-                <p class="text-secondary small mb-0">Copies the species list directly, ready to paste into documents or scripts.</p>
-              </div>
-            </div>
-            
-            <h5 class="mt-4 mb-3">NCBI Download Scripts</h5>
-            <p>TaxonSampler generates shell scripts that batch-download data from NCBI for all species in your selection:</p>
-            
-            <div class="step-item">
-              <span class="step-number"><i class="ti ti-dna" style="font-size:.7rem;"></i></span>
-              <div>
-                <strong>Genomes (FASTA)</strong>
-                <p class="text-secondary small mb-0">Downloads genome assembly FASTA files for all selected accessions using NCBI datasets CLI.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number"><i class="ti ti-cube" style="font-size:.7rem;"></i></span>
-              <div>
-                <strong>Proteomes (FAA)</strong>
-                <p class="text-secondary small mb-0">Downloads predicted protein sequences (FASTA amino acid).</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number"><i class="ti ti-file-text" style="font-size:.7rem;"></i></span>
-              <div>
-                <strong>GenBank (GBFF)</strong>
-                <p class="text-secondary small mb-0">Downloads annotated GenBank flat files.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number"><i class="ti ti-download" style="font-size:.7rem;"></i></span>
-              <div>
-                <strong>All Data</strong>
-                <p class="text-secondary small mb-0">Combined script that downloads genomes, proteomes, and GenBank files in one run.</p>
-              </div>
-            </div>
-            
-            <h5 class="mt-4 mb-3">Newick Tab</h5>
-            <p class="text-secondary small">After sampling, the <strong>Newick</strong> tab (next to Selection) shows a visual tree of selected species generated with ETE3. You can download it as <strong>SVG</strong> (for figures) or <strong>Newick</strong> (for phylogenetic software).</p>
-            
-            <div class="info-box">
-              <i class="ti ti-info-circle me-1"></i>
-              <strong>Reproducibility:</strong> Always export the JSON configuration alongside your data files. This captures your exact scope, targets, strategy, taxonomic range, and filters — enabling anyone to reproduce your sampling.
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <!-- Tutorial 6: Research Use Case                               -->
-      <!-- ════════════════════════════════════════════════════════════ -->
-      <div class="accordion-item" id="research-workflow">
-        <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse6" aria-expanded="false" aria-controls="collapse6">
-            <i class="ti ti-flask me-2 text-purple"></i>
-            Full Research Workflow Example
-            <span class="badge tutorial-badge bg-danger-lt text-danger ms-2">Advanced</span>
-          </button>
-        </h2>
-        <div id="collapse6" class="accordion-collapse collapse" data-bs-parent="#tutorialAccordion">
-          <div class="accordion-body">
-            <p>A complete end-to-end example: selecting high-quality beetle genomes for a comparative genomics study of Coleoptera metabolism.</p>
-            
-            <!-- VIDEO PLACEHOLDER -->
-            <div class="video-placeholder" id="video-research-workflow">
-              <i class="ti ti-player-play"></i>
-              <div class="video-title">Video: Complete Research Workflow — Coleoptera Case Study</div>
-              <div class="video-duration">~15 min</div>
-            </div>
-            
-            <h5 class="mt-3 mb-3">Scenario</h5>
-            <p>You need ~100 beetle genomes for a pan-Coleoptera gene family analysis. Requirements:</p>
-            <ul>
-              <li>Chromosome-level or complete assemblies preferred</li>
-              <li>Minimum sequencing coverage 30×</li>
-              <li>Broad representation across beetle families</li>
-              <li>Annotated genomes preferred</li>
-            </ul>
-            
-            <h5 class="mt-3 mb-3">Workflow</h5>
-            
-            <div class="step-item">
-              <span class="step-number">1</span>
-              <div>
-                <strong>Navigate to Coleoptera</strong>
-                <p class="text-secondary small mb-0">Open <strong>Taxonomy</strong> in the sidebar, use the search bar to find <span class="code-inline">Coleoptera</span>, and click the node to select it.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">2</span>
-              <div>
-                <strong>Set as Scope (Step 1)</strong>
-                <p class="text-secondary small mb-0">In the Filters panel, click <strong>"Use selected node"</strong>. The scope updates to Coleoptera and shows the total available species. Optionally add targets for specific families of interest.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">3</span>
-              <div>
-                <strong>Configure Sampling (Step 2)</strong>
-                <ul class="text-secondary small mb-0">
-                  <li><strong>Max sample size:</strong> 100</li>
-                  <li><strong>Taxonomic range:</strong> Family → Species (drag handles on the slider)</li>
-                  <li><strong>Strategy:</strong> Stratified Proportional (to fairly represent each family)</li>
-                </ul>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">4</span>
-              <div>
-                <strong>Run Sampling</strong>
-                <p class="text-secondary small mb-0">Click <strong>"Run sampling"</strong>. Switch to the <strong>Selection</strong> tab to inspect results. Check the <strong>Clades allocation</strong> panel to verify families are represented.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">5</span>
-              <div>
-                <strong>Apply Assembly Filters (Step 3)</strong>
-                <ul class="text-secondary small mb-0">
-                  <li>Uncheck <strong>Scaffold</strong> (keep only Complete Genome and Chromosome)</li>
-                  <li>Set <strong>Min. coverage:</strong> 30</li>
-                  <li>Click <strong>"Apply filter &amp; continue"</strong></li>
-                </ul>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">6</span>
-              <div>
-                <strong>Review and Adjust</strong>
-                <p class="text-secondary small mb-0">Check the updated Selection table. If the count dropped too much, use <strong>Reset</strong> and try again with relaxed filters (e.g., allow Scaffold-level, lower coverage). You can also manually add individual species using the <strong>"Add species from scope"</strong> search box.</p>
-              </div>
-            </div>
-            
-            <div class="step-item">
-              <span class="step-number">7</span>
-              <div>
-                <strong>Export</strong>
-                <ul class="text-secondary small mb-0">
-                  <li><strong>Excel:</strong> Full metadata for the methods section</li>
-                  <li><strong>Newick:</strong> Phylogenetic tree for supplementary figures</li>
-                  <li><strong>JSON:</strong> Sampling configuration for reproducibility</li>
-                  <li><strong>Download script (Genomes):</strong> Batch-download all FASTA files from NCBI</li>
-                </ul>
-              </div>
-            </div>
-            
-            <div class="tip-box">
-              <i class="ti ti-bulb me-1"></i>
-              <strong>Reproducibility:</strong> Include the exported JSON file as supplementary material in your publication. Anyone can import it into TaxonSampler to reproduce your exact dataset selection.
-            </div>
-            
-            <h5 class="mt-4 mb-3">Expected Output</h5>
-            <p class="text-secondary small">A dataset of ~100 high-quality beetle genomes distributed across beetle families, with full metadata for each assembly including accession numbers ready for batch download from NCBI.</p>
-          </div>
-        </div>
-      </div>
-      
     </div>
-    
-    <!-- Additional Resources -->
-    <div class="card mt-4">
-      <div class="card-header">
-        <h3 class="card-title"><i class="ti ti-help me-2"></i>Need More Help?</h3>
-      </div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-4">
-            <a href="{% url 'taxonomy:about' %}" class="card card-link card-link-pop h-100">
-              <div class="card-body text-center">
-                <i class="ti ti-info-circle mb-2" style="font-size: 2rem;"></i>
-                <p class="mb-0"><strong>About</strong></p>
-                <small class="text-secondary">Learn about the methodology</small>
-              </div>
-            </a>
-          </div>
-          <div class="col-md-4">
-            <a href="{% url 'taxonomy:report-issue' %}" class="card card-link card-link-pop h-100">
-              <div class="card-body text-center">
-                <i class="ti ti-bug mb-2" style="font-size: 2rem;"></i>
-                <p class="mb-0"><strong>Report Issue</strong></p>
-                <small class="text-secondary">Found a bug? Let us know</small>
-              </div>
-            </a>
-          </div>
-          <div class="col-md-4">
-            <a href="https://github.com/joanjir/taxonSampler/wiki" target="_blank" class="card card-link card-link-pop h-100">
-              <div class="card-body text-center">
-                <i class="ti ti-brand-github mb-2" style="font-size: 2rem;"></i>
-                <p class="mb-0"><strong>GitHub Wiki</strong></p>
-                <small class="text-secondary">Full documentation</small>
-              </div>
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
-    
   </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-// Highlight current section in TOC based on scroll position
-document.addEventListener('DOMContentLoaded', function() {
-  const tocLinks = document.querySelectorAll('.toc-item');
-  const sections = document.querySelectorAll('.accordion-item');
-  
-  // Handle accordion navigation
-  tocLinks.forEach(link => {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      const targetId = this.getAttribute('href').substring(1);
-      const targetSection = document.getElementById(targetId);
-      const button = targetSection.querySelector('.accordion-button');
-      const collapse = targetSection.querySelector('.accordion-collapse');
-      
-      // Collapse all others
-      document.querySelectorAll('.accordion-collapse.show').forEach(c => {
-        if (c !== collapse) {
-          bootstrap.Collapse.getOrCreateInstance(c).hide();
-        }
-      });
-      
-      // Expand target
-      bootstrap.Collapse.getOrCreateInstance(collapse).show();
-      
-      // Scroll to section
-      setTimeout(() => {
-        targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 300);
-      
-      // Update active state
-      tocLinks.forEach(l => l.classList.remove('active'));
-      this.classList.add('active');
-    });
-  });
-});
-</script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      ;['video-getting-started', 'video-sampling-wizard'].forEach(function (id) {
+        const container = document.getElementById(id)
+        if (!container) return
+    
+        const video = container.querySelector('video')
+        if (!video) return
+    
+        video.addEventListener('ended', function () {
+          video.currentTime = 0
+          video.play().catch(() => {})
+        })
+    
+        video.addEventListener('loadedmetadata', function () {
+          if (video.currentTime >= video.duration && isFinite(video.duration)) {
+            video.currentTime = 0
+          }
+        })
+      })
+    })
+  </script>
 {% endblock %}

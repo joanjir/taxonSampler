@@ -110,7 +110,7 @@ class ExternalTaxonManager(models.Manager):
         qs = (
             self.filter(
                 system=system,
-                rank__in=["species", "subspecies"],
+                rank__in=["species", "subspecies", "variety", "form"],
                 ncbi_genomes__col_match_status="matched",
             )
             .only("id", "external_id", "name", "rank", "status", "classification_path")
@@ -139,10 +139,12 @@ class ExternalTaxonManager(models.Manager):
                     sk_name = n
                     break
 
-            root.meta["species_count"] = root.meta.get("species_count", 0) + 1
             if sk_name:
                 root.meta.setdefault("superkingdom", sk_name)
 
+            # Walk the trie to the parent of the leaf, creating nodes as needed.
+            # Collect the chain so we can increment counts only if the leaf is new.
+            chain = []
             cur = root
             for rank, name in path:
                 if rank in ("species", "subspecies"):
@@ -152,12 +154,12 @@ class ExternalTaxonManager(models.Manager):
                     cur.children[key] = TrieNode(name=name, rank=rank, meta={})
                     if sk_name:
                         cur.children[key].meta.setdefault("superkingdom", sk_name)
+                chain.append(cur)
                 cur = cur.children[key]
-                cur.meta["species_count"] = cur.meta.get("species_count", 0) + 1
                 if sk_name:
                     cur.meta.setdefault("superkingdom", sk_name)
             
-            leaf_rank = sp.rank if sp.rank in ("species", "subspecies") else "species"
+            leaf_rank = sp.rank if sp.rank in ("species", "subspecies", "variety", "form") else "species"
             sp_key = (leaf_rank, sp.name)
             if sp_key not in cur.children:
                 meta = {
@@ -173,6 +175,10 @@ class ExternalTaxonManager(models.Manager):
                     rank=leaf_rank,
                     meta=meta,
                 )
+                # Increment species_count on root, all intermediate nodes, and cur
+                for node in chain:
+                    node.meta["species_count"] = node.meta.get("species_count", 0) + 1
+                cur.meta["species_count"] = cur.meta.get("species_count", 0) + 1
 
         # ── Insert COL species (accepted + synonyms) ──
         for sp in qs:
@@ -235,8 +241,13 @@ class ExternalTaxonManager(models.Manager):
 
         # ── Insert manual species (from manual edits) ──
         manual_qs = (
-            self.filter(system="manual", rank="species")
+            self.filter(
+                system="manual",
+                rank__in=["species", "subspecies", "variety", "form"],
+                ncbi_genomes__col_match_status="manual",
+            )
             .only("id", "external_id", "name", "rank", "classification")
+            .distinct()
             .order_by("id")
         )
         # Comprehensive root→leaf rank ordering to match COL trie nodes

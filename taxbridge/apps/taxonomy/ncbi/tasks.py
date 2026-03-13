@@ -471,10 +471,15 @@ def sync_taxon_with_col(
                     _create_col_crosswalk_task(taxon, result, sync_run, COL_DATASET)
                 else:
                     sync_run.col_unmatched += 1
-                    # Mark genomes as "not_in_col" — searched but not found
-                    NCBIGenome.objects.filter(taxon=taxon).exclude(
-                        col_match_status="manual"
-                    ).update(col_match_status="not_in_col")
+                    # Fallback: use taxonomy from a sibling species in the same genus
+                    from apps.taxonomy.utils import create_genus_fallback
+                    if create_genus_fallback(taxon, taxon.scientific_name):
+                        sync_run.add_log("INFO", f"Genus fallback created for {taxon.scientific_name}")
+                    else:
+                        # No sibling found either — mark as not_in_col
+                        NCBIGenome.objects.filter(taxon=taxon).exclude(
+                            col_match_status="manual"
+                        ).update(col_match_status="not_in_col")
 
             except Exception as e:
                 logger.warning(f"COL match failed for {taxon.scientific_name}: {e}")
@@ -508,7 +513,13 @@ def sync_taxon_with_col(
                 external_taxon__system="col",
             ).select_related("external_taxon").first()
             if active_cw:
-                genome.external_taxon = active_cw.external_taxon
+                # Genus validation before re-linking
+                from apps.taxonomy.utils import genera_match
+                ext = active_cw.external_taxon
+                g_ok, _ = genera_match(genome.taxon.scientific_name, ext.name, ext.classification)
+                if not g_ok:
+                    continue
+                genome.external_taxon = ext
                 genome.col_match_status = "matched"
                 genome.save(update_fields=["external_taxon", "col_match_status"])
                 fixed_count += 1
@@ -544,6 +555,27 @@ def _create_col_crosswalk_task(taxon, result, sync_run, col_dataset: str):
     """Create ExternalTaxon and TaxonCrosswalk for a COL match,
     and update all NCBIGenome records for this taxon."""
     from apps.taxonomy.models import ExternalTaxon, NCBIGenome, TaxonCrosswalk
+    from apps.taxonomy.utils import genera_match
+    
+    # GENUS VALIDATION: Prevent cross-genus mismatches
+    col_classification = getattr(result, "classification", {}) or {}
+    genus_ok, genus_reason = genera_match(
+        ncbi_name=taxon.scientific_name,
+        col_name=result.name or "",
+        col_classification=col_classification
+    )
+    
+    if not genus_ok:
+        logger.warning(
+            f"[GENUS_MISMATCH] taxid={taxon.taxid} '{taxon.scientific_name}' "
+            f"≠ COL '{result.name}' reason={genus_reason}"
+        )
+        sync_run.add_log("WARNING", f"Genus mismatch: {taxon.scientific_name} ≠ {result.name}")
+        # Fallback: use taxonomy from a sibling species in the same genus
+        from apps.taxonomy.utils import create_genus_fallback
+        if create_genus_fallback(taxon, taxon.scientific_name):
+            sync_run.add_log("INFO", f"Genus fallback created for {taxon.scientific_name}")
+        return  # Skip this COL match
     
     with transaction.atomic():
         external, created = ExternalTaxon.objects.update_or_create(

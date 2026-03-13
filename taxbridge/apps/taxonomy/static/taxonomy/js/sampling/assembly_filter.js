@@ -190,27 +190,14 @@ export function initAssemblyFilter() {
       lastResult = result;
 
       // Dispatch event so Selection tab picks up the filtered results
+      // (main.js will handle auto-switch to Selection tab to avoid timing conflicts)
       window.dispatchEvent(new CustomEvent("assembly-filter:final", {
         detail: result,
       }));
 
-      // Auto-switch to Selection tab so the user sees the result
-      const selTab = document.getElementById("selectionTab");
-      if (selTab) {
-        setTimeout(() => {
-          try {
-            const bsTab = bootstrap?.Tab ? new bootstrap.Tab(selTab) : null;
-            if (bsTab) bsTab.show(); else selTab.click();
-          } catch { selTab.click(); }
-        }, 300);
-      }
-
-      // Reset the wizard (user can run again if needed)
-      if (window.__samplingWizard?.reset) {
-        setTimeout(() => {
-          window.__samplingWizard.reset();
-        }, 800);
-      }
+      // Stay on Step 3 after filtering so user can apply more filters.
+      // The wizard only resets when the user explicitly changes scope or
+      // navigates away from the current sampling session.
 
     } catch (err) {
       console.error("[assembly_filter] Error:", err);
@@ -230,23 +217,16 @@ export function initAssemblyFilter() {
 
   function skip() {
     // Pass the Step 2 species directly to the selection tab as-is
+    // (main.js will handle auto-switch to Selection tab)
     window.dispatchEvent(new CustomEvent("assembly-filter:skipped", {
       detail: { species: inputSpecies },
     }));
 
-    // Auto-switch to Selection tab so the user sees the result
-    const selTab = document.getElementById("selectionTab");
-    if (selTab) {
-      try {
-        const bsTab = bootstrap?.Tab ? new bootstrap.Tab(selTab) : null;
-        if (bsTab) bsTab.show(); else selTab.click();
-      } catch { selTab.click(); }
-    }
-
-    // Reset the wizard (optional: user can run again if needed)
-    if (window.__samplingWizard?.reset) {
+    // Return wizard to Step 1 but keep scope/targets so the user can
+    // re-run sampling without losing context.
+    if (window.__samplingWizard?.setStep) {
       setTimeout(() => {
-        window.__samplingWizard.reset();
+        try { window.__samplingWizard.setStep(1); } catch(e){}
       }, 500);
     }
   }

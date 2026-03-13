@@ -671,15 +671,19 @@ def save_genome_to_db(genome: GenomeData, sync_run=None) -> tuple:
         # If this taxon already has a COL crosswalk, link the genome to it
         if not genome_obj.external_taxon:
             from apps.taxonomy.models import TaxonCrosswalk
+            from apps.taxonomy.utils import genera_match
             active_cw = TaxonCrosswalk.objects.filter(
                 ncbi_taxon=taxon,
                 is_active=True,
                 external_taxon__system="col",
             ).select_related("external_taxon").first()
             if active_cw:
-                genome_obj.external_taxon = active_cw.external_taxon
-                genome_obj.col_match_status = "matched"
-                genome_obj.save(update_fields=["external_taxon", "col_match_status"])
+                ext = active_cw.external_taxon
+                g_ok, _ = genera_match(taxon.scientific_name, ext.name, ext.classification)
+                if g_ok:
+                    genome_obj.external_taxon = ext
+                    genome_obj.col_match_status = "matched"
+                    genome_obj.save(update_fields=["external_taxon", "col_match_status"])
     
     return taxon_created, genome_created
 

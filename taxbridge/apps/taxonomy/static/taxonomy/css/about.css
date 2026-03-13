@@ -9,6 +9,11 @@
   border-radius: .5rem;
   margin-bottom: 1.5rem;
 }
+.about-hero .d-flex { justify-content: center; }
+.about-hero img { height: 150px !important; width: auto; }
+@media (max-width: 1199.98px) { .about-hero img { height: 120px !important; } }
+@media (max-width: 991.98px)  { .about-hero img { height: 90px !important; } }
+@media (max-width: 575.98px)  { .about-hero img { height: 60px !important; } }
 .about-hero h1 { font-size: 2rem; margin-bottom: .5rem; }
 .about-hero p { opacity: .9; margin: 0; }
 

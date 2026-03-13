@@ -78,22 +78,22 @@ def invalidate_tree_cache():
 # Helpers
 # =============================================================================
 
-_ROOT_RANKS_SET = {"domain", "superkingdom", "kingdom"}
+from apps.taxonomy.utils import _RANK_SORT_PRIORITY
 
 def _normalize_path_for_key(path: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     """
     Normalize classification_path to build key.
-    Detects and corrects leaf->root order if necessary.
+    Sorts entries root → leaf by rank priority.
     """
     if not path:
         return []
-    
-    # Check if path comes in leaf->root order (last element is root)
-    last_rank = norm_rank(path[-1].get("rank", ""))
-    if last_rank in _ROOT_RANKS_SET:
-        path = list(reversed(path))
-    
-    return path
+
+    return sorted(
+        path,
+        key=lambda x: _RANK_SORT_PRIORITY.get(
+            (x.get("rank") or "").strip().lower(), 50
+        ),
+    )
 
 
 # =============================================================================
@@ -140,12 +140,16 @@ def tree_data(request):
     # Count total species
     species_count = count_species_under(tree)
     
+    # Compute tree_version so frontend can detect data changes
+    from apps.taxonomy.tree.views import _get_tree_version
+    
     return JsonResponse({
         "tree": tree,
         "limit": limit,
         "max_rank": max_rank,
         "expanded_keys": expand_keys,
         "species_count": species_count,
+        "tree_version": _get_tree_version(),
     })
 
 
@@ -264,7 +268,6 @@ def tree_search(request):
 
 # Base filter for COL species queries
 _BASE_FILTER = Q(system="col") & Q(rank="species") & Q(status="accepted")
-_ROOT_RANKS = {"domain", "superkingdom", "kingdom"}
 
 
 def _parse_int(v: str | None, default: int, lo: int, hi: int) -> int:
@@ -276,18 +279,10 @@ def _parse_int(v: str | None, default: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, n))
 
 
-def _is_leaf_to_root(raw_path: List[Dict[str, Any]]) -> bool:
-    """Check if path is ordered leaf->root."""
-    if not raw_path:
-        return False
-    last_rank = (raw_path[-1].get("rank") or "").strip().lower()
-    return last_rank in _ROOT_RANKS
-
-
 def _normalize_path(raw_path: Any) -> List[Tuple[str, str]]:
     """
     Normalize classification_path to root->leaf list of (rank, name).
-    Removes invalid entries and corrects order if leaf->root.
+    Sorts by rank priority and deduplicates.
     """
     if not isinstance(raw_path, list):
         return []
@@ -302,8 +297,8 @@ def _normalize_path(raw_path: Any) -> List[Tuple[str, str]]:
             continue
         clean.append((rank.lower(), name))
 
-    if _is_leaf_to_root(raw_path):
-        clean.reverse()
+    # Sort by rank priority (root → leaf)
+    clean.sort(key=lambda t: _RANK_SORT_PRIORITY.get(t[0], 50))
 
     # Deduplicate consecutive
     out: List[Tuple[str, str]] = []
@@ -945,8 +940,8 @@ def genomes_list(request):
     col_match_status = request.GET.get("col_match_status", "").strip()
     if col_match_status:
         if col_match_status == "unlinked":
-            # Unlinked = unmatched (never searched) + not_in_col (searched, not found)
-            qs = qs.filter(col_match_status__in=["unmatched", "not_in_col"])
+            # Unlinked = everything that is NOT linked and NOT manual
+            qs = qs.filter(col_match_status__in=["unmatched", "not_in_col", "mismatch"])
         else:
             qs = qs.filter(col_match_status=col_match_status)
     
@@ -954,8 +949,11 @@ def genomes_list(request):
     col_status = request.GET.get("col_status", "").strip()
     if col_status:
         if col_status == "not_in_col":
-            # Searched in COL but not found
-            qs = qs.filter(col_match_status="not_in_col")
+            # Not in COL = no external_taxon or external_taxon.status is not_in_col
+            qs = qs.filter(
+                Q(external_taxon__isnull=True) |
+                Q(external_taxon__status="not_in_col")
+            )
         else:
             # Filter by external_taxon.status (accepted, synonym, etc.)
             qs = qs.filter(external_taxon__status=col_status)
@@ -1034,6 +1032,8 @@ def genome_detail(request, accession: str):
         external_taxon_data = {
             "id": ext.id,
             "external_id": ext.external_id,
+            "system": ext.system,
+            "dataset_code": ext.dataset_code,
             "name": ext.name,
             "rank": ext.rank,
             "status": ext.status,
@@ -1161,7 +1161,7 @@ def genome_update(request, accession: str):
                 defaults={
                     "dataset_code": "manual",
                     "external_id": f"manual-{genome.accession}",
-                    "status": "accepted",
+                    "status": "not_in_col",
                     "classification": taxonomy,
                 },
             )
@@ -1192,6 +1192,10 @@ def genome_update(request, accession: str):
         )
     
     genome.save()
+    
+    # CACHE INVALIDATION: Ensure new species appear in the tree
+    from apps.taxonomy.utils import invalidate_all_tree_caches
+    invalidate_all_tree_caches()
     
     return JsonResponse({
         "success": True,
@@ -1320,6 +1324,23 @@ def gbif_search(request):
             val = item.get(rank)
             if val:
                 classification[rank] = val
+
+        # Infer domain from kingdom (GBIF never provides domain)
+        kingdom_val = classification.get("kingdom", "").lower()
+        if kingdom_val:
+            _KINGDOM_TO_DOMAIN = {
+                "fungi": "Eukaryota",
+                "animalia": "Eukaryota",
+                "plantae": "Eukaryota",
+                "chromista": "Eukaryota",
+                "protozoa": "Eukaryota",
+                "bacteria": "Bacteria",
+                "archaea": "Archaea",
+                "viruses": "Viruses",
+            }
+            domain = _KINGDOM_TO_DOMAIN.get(kingdom_val)
+            if domain:
+                classification["domain"] = domain
 
         # Build classification string
         cls_str = " > ".join(
@@ -1641,7 +1662,6 @@ def sampling_configs(request):
     return JsonResponse({"configs": data})
 
 
-# ═══════════════════════════════════════════════════════════════════════
 # Newick / Phylo Tree generation from DB Sampling results
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1706,27 +1726,33 @@ def sampling_newick(request):
                     parent = node_index[acc_key]
                     continue
 
-                # Create internal node
+                # Create internal node with rank prefix for unique identification
                 safe_name = taxon_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
-                internal_name = safe_name
+                internal_name = f"{rank}__{safe_name}"
                 n = parent.add_child(name=internal_name)
                 n.add_feature("rank", rank)
-                n.dist = 1.0
                 node_index[acc_key] = n
                 parent = n
 
             # Add species leaf (skip duplicates)
             org_name = sp.get("organism_name") or sp.get("scientific_name") or "Unknown"
             safe_leaf = org_name.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
+            accession = sp.get("accession") or ""
+
+            # Build unique leaf name: species__Name[__ACCESSION]
+            leaf_label = f"species__{safe_leaf}"
+            if accession:
+                safe_acc = accession.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace(";", "").replace(":", "_")
+                leaf_label = f"species__{safe_leaf}__{safe_acc}"
 
             # Skip if this species already exists as a leaf
-            if safe_leaf in used_leaves:
+            if leaf_label in used_leaves:
                 continue
-            used_leaves[safe_leaf] = True
+            used_leaves[leaf_label] = True
 
-            leaf = parent.add_child(name=safe_leaf)
+            leaf = parent.add_child(name=leaf_label)
             leaf.add_feature("rank", "species")
-            leaf.dist = 1.0
+            leaf.add_feature("taxid", sp.get("taxid"))
 
         # ── Collapse single-child chain from root ──────────────────
         # If the root has only one child chain (e.g., Root→Animalia→…)
@@ -1737,7 +1763,8 @@ def sampling_newick(request):
             root.up = None          # detach from phantom parent
             root.dist = 0.0         # root has no branch length
 
-        newick_str = root.write(format=1)
+        # format=9: topology + leaf names + internal names, NO branch lengths
+        newick_str = root.write(format=9)
 
         if fmt == "svg":
             # Try to render SVG using ETE3
@@ -1753,7 +1780,8 @@ def sampling_newick(request):
                 ts.mode = "r"  # rectangular mode
                 ts.branch_vertical_margin = 4
                 ts.scale = 40
-                ts.title.add_face(TextFace(f"Sampling result ({len(species)} species)", fsize=14), column=0)
+                ts.title.add_face(TextFace(f"Taxonomic hierarchy — NCBI Taxonomy ({len(species)} species)", fsize=14), column=0)
+                ts.title.add_face(TextFace("This representation does not imply phylogenetic relationships.", fsize=9, fgcolor="#888"), column=0)
 
                 # Style internal nodes with rank labels
                 for node in root.traverse():
@@ -1794,8 +1822,14 @@ def sampling_newick(request):
 
         # Default: return Newick file download
         from django.http import HttpResponse
-        resp = HttpResponse(newick_str, content_type="text/plain; charset=utf-8")
-        resp["Content-Disposition"] = 'attachment; filename="sampling_taxonomic.newick"'
+        header = (
+            "[&R] [Taxonomic hierarchy derived from the NCBI taxonomy "
+            "database; this representation does not imply phylogenetic "
+            "relationships.]\n"
+        )
+        filename = "taxonomic_hierarchy.newick"
+        resp = HttpResponse(header + newick_str, content_type="text/plain; charset=utf-8")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
 
     except Exception as e:
@@ -2089,18 +2123,8 @@ def taxon_detail(request):
                     for r in rank_order:
                         if r in col_closest.classification:
                             class_path.append({"rank": r, "name": col_closest.classification[r]})
-                # Ensure root → leaf order
-                if len(class_path) >= 2:
-                    rank_priority = {
-                        "domain": 0, "superkingdom": 0, "kingdom": 1, "phylum": 2,
-                        "subphylum": 3, "class": 4, "subclass": 5, "order": 6,
-                        "suborder": 7, "family": 8, "subfamily": 9, "genus": 10,
-                        "subgenus": 11, "species": 12, "subspecies": 13,
-                    }
-                    first_pri = rank_priority.get((class_path[0].get("rank") or "").lower(), 99)
-                    last_pri = rank_priority.get((class_path[-1].get("rank") or "").lower(), 99)
-                    if first_pri > last_pri:
-                        class_path = list(reversed(class_path))
+                # Sort root → leaf
+                class_path.sort(key=lambda x: _RANK_SORT_PRIORITY.get((x.get("rank") or "").lower(), 50))
             
             # Try to find genomes
             genomes = []
@@ -2155,22 +2179,8 @@ def taxon_detail(request):
             if r in source_ext.classification:
                 class_path.append({"rank": r, "name": source_ext.classification[r]})
     
-    # Ensure path is root → leaf order
-    # Detect if it's leaf → root by checking if the first item is a lower rank than the last
-    if len(class_path) >= 2:
-        rank_priority = {
-            "domain": 0, "superkingdom": 0, "kingdom": 1, "phylum": 2,
-            "subphylum": 3, "class": 4, "subclass": 5, "order": 6,
-            "suborder": 7, "family": 8, "subfamily": 9, "genus": 10,
-            "subgenus": 11, "species": 12, "subspecies": 13,
-        }
-        first_rank = (class_path[0].get("rank") or "").lower()
-        last_rank = (class_path[-1].get("rank") or "").lower()
-        first_pri = rank_priority.get(first_rank, 99)
-        last_pri = rank_priority.get(last_rank, 99)
-        if first_pri > last_pri:
-            # It's leaf → root, reverse it
-            class_path = list(reversed(class_path))
+    # Sort root → leaf
+    class_path.sort(key=lambda x: _RANK_SORT_PRIORITY.get((x.get("rank") or "").lower(), 50))
     
     # NCBI info via crosswalk — check both the original and accepted taxon
     ncbi_info = None

@@ -7,6 +7,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'taxonomy/css/tree.css' %}" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" />
 {% endblock %}
 
 {% block content %}
@@ -92,7 +93,7 @@
               </div>
               <div id="phyloLoading" class="text-center py-5 d-none">
                 <div class="spinner-border text-primary" role="status"></div>
-                <p class="mt-2 text-muted">Generating Newick with ETE3...</p>
+                <p class="mt-2 text-muted">Generating taxonomic hierarchy with ETE3...</p>
               </div>
               <div id="phyloTreeWrap" class="d-none">
                 <div class="d-flex align-items-center justify-content-between mb-2">
@@ -324,6 +325,8 @@
 
 {% block extra_js %}
   <script src="https://cdn.jsdelivr.net/npm/d3@5/dist/d3.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
   <script>
     // Server-side variables (Django URLs)
     window.TREE_ENDPOINT = "{% url 'taxonomy_api:tree-data' %}";
@@ -338,5 +341,5 @@
     window.ASSEMBLY_FILTER_ENDPOINT = "{% url 'taxonomy_api:assembly-filter' %}";
     window.TAXON_DETAIL_ENDPOINT = "{% url 'taxonomy_api:taxon-detail' %}";
   </script>
-  <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}?v=20260303c"></script>
+  <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}?v=20260310a"></script>
 {% endblock %}

@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Dict, Iterator, Optional
 
 import requests
 
 from django.db import transaction
-from django.http import JsonResponse
+from django.conf import settings
+from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -39,8 +41,11 @@ from apps.taxonomy.ncbi.service import (
     KINGDOMS,
     QUALITY_CRITERIA,
     COL_DATASET,
+    GenomeFilters,
+    fetch_ncbi_genomes,
     get_kingdom_taxid,
     get_quality_criteria,
+    compute_quality_score,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,22 +68,11 @@ def taxon_sync_dashboard(request):
         status__in=["pending", "fetching_ncbi", "matching_col"]
     ).first()
 
-    stats = {
-        "total_taxa": Taxon.objects.count(),
-        "total_genomes": NCBIGenome.objects.count(),
-        "external_taxa": ExternalTaxon.objects.filter(system="col").count(),
-        "crosswalks": TaxonCrosswalk.objects.filter(is_active=True).count(),
-        "matched_taxa": (
-            Taxon.objects.filter(
-                crosswalks__is_active=True,
-                crosswalks__external_taxon__isnull=False,
-            )
-            .distinct()
-            .count()
-        ),
-        "total_syncs": TaxonSyncRun.objects.count(),
-        "successful_syncs": TaxonSyncRun.objects.filter(status="completed").count(),
-    }
+    total_genomes = NCBIGenome.objects.count()
+    matched_genomes = NCBIGenome.objects.filter(col_match_status="matched").count()
+    manual_genomes = NCBIGenome.objects.filter(col_match_status="manual").count()
+    linked_genomes = matched_genomes + manual_genomes
+    total_taxa = Taxon.objects.count()
 
     # Samplable species = species that appear in the tree (matched + manual)
     # Must match the tree badge and home dashboard.
@@ -86,33 +80,61 @@ def taxon_sync_dashboard(request):
         ExternalTaxon.objects
         .filter(
             system="col",
-            rank__in=["species", "subspecies"],
+            rank__in=["species", "subspecies", "variety", "form"],
             ncbi_genomes__col_match_status="matched",
         )
         .distinct()
         .count()
     )
-    samplable_manual = ExternalTaxon.objects.filter(system="manual", rank="species").count()
-    stats["samplable_species"] = samplable_col + samplable_manual
-    stats["mismatch_taxa"] = (
-        Taxon.objects.filter(genomes__col_match_status="mismatch")
-        .distinct()
-        .count()
-    )
-    
-    # Not in COL (searched, not found) + mismatch (bad match) = excluded from tree
-    stats["not_in_col_taxa"] = (
+    samplable_manual = ExternalTaxon.objects.filter(
+        system="manual",
+        rank__in=["species", "subspecies", "variety", "form"],
+        ncbi_genomes__col_match_status="manual",
+    ).distinct().count()
+    samplable_species = samplable_col + samplable_manual
+
+    # Not in COL = status "not_in_col" + "manual" (added manually because not found in COL)
+    not_in_col_status = (
         Taxon.objects.filter(genomes__col_match_status="not_in_col")
         .distinct()
         .count()
     )
-    stats["excluded_taxa"] = stats["not_in_col_taxa"] + stats["mismatch_taxa"]
-    # Truly pending = never searched (unmatched status)
-    stats["pending_taxa"] = (
-        Taxon.objects.filter(genomes__col_match_status="unmatched")
+    manual_taxa = (
+        Taxon.objects.filter(genomes__col_match_status="manual")
         .distinct()
         .count()
     )
+    not_in_col_taxa = not_in_col_status + manual_taxa
+    mismatch_taxa = (
+        Taxon.objects.filter(genomes__col_match_status="mismatch")
+        .distinct()
+        .count()
+    )
+    unresolved_taxa = not_in_col_status + mismatch_taxa
+
+    # COL coverage: only auto-matched taxa count (manual are NOT in COL)
+    col_matched_taxa = (
+        Taxon.objects.filter(genomes__col_match_status="matched")
+        .distinct()
+        .count()
+    )
+    col_coverage_pct = round(col_matched_taxa / total_taxa * 100) if total_taxa else 0
+
+    stats = {
+        "total_taxa": total_taxa,
+        "total_genomes": total_genomes,
+        "linked_genomes": linked_genomes,
+        "samplable_species": samplable_species,
+        "col_matched_taxa": col_matched_taxa,
+        "col_coverage_pct": col_coverage_pct,
+        "not_in_col_taxa": not_in_col_taxa,
+        "manual_taxa": manual_taxa,
+        "mismatch_taxa": mismatch_taxa,
+        "unresolved_taxa": unresolved_taxa,
+        "total_syncs": TaxonSyncRun.objects.count(),
+        "successful_syncs": TaxonSyncRun.objects.filter(status="completed").count(),
+        "crosswalks": TaxonCrosswalk.objects.filter(is_active=True).count(),
+    }
     
     # Sync status breakdown for chart
     sync_status_counts = {
@@ -447,10 +469,15 @@ def _phase_match_col(sync_run: TaxonSyncRun):
                 _create_col_crosswalk(taxon, result, sync_run)
             else:
                 sync_run.col_unmatched += 1
-                # Mark genomes as "not_in_col" — searched but not found
-                NCBIGenome.objects.filter(taxon=taxon).exclude(
-                    col_match_status="manual"
-                ).update(col_match_status="not_in_col")
+                # Fallback: use taxonomy from a sibling species in the same genus
+                from apps.taxonomy.utils import create_genus_fallback
+                if create_genus_fallback(taxon, taxon.scientific_name):
+                    sync_run.add_log("INFO", f"Genus fallback created for {taxon.scientific_name}")
+                else:
+                    # No sibling found either — mark as not_in_col
+                    NCBIGenome.objects.filter(taxon=taxon).exclude(
+                        col_match_status="manual"
+                    ).update(col_match_status="not_in_col")
 
         except Exception as e:
             logger.warning(f"COL match failed for {taxon.scientific_name}: {e}")
@@ -484,17 +511,50 @@ def _phase_match_col(sync_run: TaxonSyncRun):
             external_taxon__system="col",
         ).select_related("external_taxon").first()
         if active_cw:
-            genome.external_taxon = active_cw.external_taxon
+            # Genus validation before re-linking
+            from apps.taxonomy.utils import genera_match
+            ext = active_cw.external_taxon
+            g_ok, _ = genera_match(genome.taxon.scientific_name, ext.name, ext.classification)
+            if not g_ok:
+                continue
+            genome.external_taxon = ext
             genome.col_match_status = "matched"
             genome.save(update_fields=["external_taxon", "col_match_status"])
             fixed_count += 1
 
     if fixed_count:
         sync_run.add_log("INFO", f"Fixed {fixed_count} unlinked genomes with existing COL crosswalks")
+    
+    # CACHE INVALIDATION: Ensure new species appear in the tree
+    from apps.taxonomy.utils import invalidate_all_tree_caches
+    invalidate_all_tree_caches()
+    sync_run.add_log("INFO", "Tree cache invalidated")
 
 
 def _create_col_crosswalk(taxon: Taxon, result, sync_run: TaxonSyncRun):
     """Create ExternalTaxon and TaxonCrosswalk for a COL match."""
+    from apps.taxonomy.utils import genera_match
+    
+    # GENUS VALIDATION: Prevent cross-genus mismatches
+    col_classification = getattr(result, "classification", {}) or {}
+    genus_ok, genus_reason = genera_match(
+        ncbi_name=taxon.scientific_name,
+        col_name=result.name or "",
+        col_classification=col_classification
+    )
+    
+    if not genus_ok:
+        logger.warning(
+            f"[GENUS_MISMATCH] taxid={taxon.taxid} '{taxon.scientific_name}' "
+            f"≠ COL '{result.name}' reason={genus_reason}"
+        )
+        sync_run.add_log("WARNING", f"Genus mismatch: {taxon.scientific_name} ≠ {result.name}")
+        # Fallback: use taxonomy from a sibling species in the same genus
+        from apps.taxonomy.utils import create_genus_fallback
+        if create_genus_fallback(taxon, taxon.scientific_name):
+            sync_run.add_log("INFO", f"Genus fallback created for {taxon.scientific_name}")
+        return  # Skip this COL match
+    
     with transaction.atomic():
         # Get or create ExternalTaxon
         external, created = ExternalTaxon.objects.update_or_create(
@@ -738,15 +798,19 @@ def _save_genome_to_db(genome_data: dict, taxonomy: dict, sync_run: TaxonSyncRun
 
         # If this taxon already has a COL crosswalk, link the genome to it
         if not genome.external_taxon:
+            from apps.taxonomy.utils import genera_match
             active_cw = TaxonCrosswalk.objects.filter(
                 ncbi_taxon=taxon,
                 is_active=True,
                 external_taxon__system="col",
             ).select_related("external_taxon").first()
             if active_cw:
-                genome.external_taxon = active_cw.external_taxon
-                genome.col_match_status = "matched"
-                genome.save(update_fields=["external_taxon", "col_match_status"])
+                ext = active_cw.external_taxon
+                g_ok, _ = genera_match(taxon.scientific_name, ext.name, ext.classification)
+                if g_ok:
+                    genome.external_taxon = ext
+                    genome.col_match_status = "matched"
+                    genome.save(update_fields=["external_taxon", "col_match_status"])
 
 
 def _safe_int(val, default: int = 0) -> int:
@@ -780,7 +844,6 @@ def api_start_discovery(request):
     if invalid:
         return JsonResponse({"error": f"Unknown kingdoms: {invalid}"}, status=400)
 
-    from apps.taxonomy.ncbi.tasks import discover_new_species
     from apps.taxonomy.models import DiscoveryRun
 
     # Check if already running
@@ -788,10 +851,40 @@ def api_start_discovery(request):
     if running:
         return JsonResponse({"success": False, "error": "A discovery is already in progress"}, status=409)
 
-    result = discover_new_species.delay(kingdoms=kingdoms, trigger="manual")
+    # Try Celery first, fall back to threading
+    use_celery = False
+    task_id = None
+    celery_enabled = getattr(settings, 'USE_CELERY_FOR_SYNC', False)
+
+    if celery_enabled:
+        try:
+            from apps.taxonomy.ncbi.tasks import discover_new_species
+            from celery import current_app
+
+            inspector = current_app.control.inspect()
+            active_workers = inspector.active()
+            if active_workers:
+                result = discover_new_species.delay(kingdoms=kingdoms, trigger="manual")
+                task_id = result.id
+                use_celery = True
+            else:
+                logger.warning("No Celery workers available for discovery, using threading")
+        except Exception as e:
+            logger.warning(f"Celery error ({e}), using threading fallback for discovery")
+
+    if not use_celery:
+        import threading
+        thread = threading.Thread(
+            target=_run_discovery,
+            args=(kingdoms,),
+            daemon=True,
+        )
+        thread.start()
+
     return JsonResponse({
         "success": True,
-        "task_id": result.id,
+        "task_id": task_id,
+        "backend": "celery" if use_celery else "threading",
         "message": f"Discovery started for: {', '.join(kingdoms)}",
     })
 
@@ -905,8 +998,21 @@ def api_import_discovered(request, species_id: int):
     )
 
     # Trigger single taxon sync to fetch full genome data
-    from apps.taxonomy.ncbi.tasks import sync_single_taxon
-    sync_single_taxon.delay(taxid=sp.taxid, check_proteomes=True)
+    celery_enabled = getattr(settings, 'USE_CELERY_FOR_SYNC', False)
+    if celery_enabled:
+        try:
+            from apps.taxonomy.ncbi.tasks import sync_single_taxon
+            sync_single_taxon.delay(taxid=sp.taxid, check_proteomes=True)
+        except Exception:
+            logger.warning(f"Celery unavailable for import sync of taxid {sp.taxid}")
+    else:
+        import threading
+        thread = threading.Thread(
+            target=_import_single_taxon,
+            args=(sp.taxid,),
+            daemon=True,
+        )
+        thread.start()
 
     sp.is_imported = True
     sp.save(update_fields=["is_imported"])
@@ -937,3 +1043,448 @@ def api_dismiss_discovered(request, species_id: int):
     sp.save(update_fields=["is_dismissed"])
 
     return JsonResponse({"success": True, "taxid": sp.taxid})
+
+
+@csrf_exempt
+@require_POST
+def api_bulk_import_discovered(request):
+    """Bulk import all pending discovered species: fetch GCF genomes + COL match. Admin only."""
+    if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    from apps.taxonomy.models import DiscoveredSpecies
+
+    pending = DiscoveredSpecies.objects.filter(is_imported=False, is_dismissed=False)
+    count = pending.count()
+    if count == 0:
+        return JsonResponse({"success": False, "error": "No pending species to import"})
+
+    import threading
+    thread = threading.Thread(
+        target=_run_bulk_import,
+        daemon=True,
+    )
+    thread.start()
+
+    return JsonResponse({
+        "success": True,
+        "message": f"Bulk import started for {count} species",
+        "total": count,
+    })
+
+
+# ============================================================
+# Discovery Threading Fallback
+# ============================================================
+
+def _import_single_taxon(taxid: int):
+    """Thread target to sync a single taxon's genome data from NCBI."""
+    from apps.taxonomy.models import NCBIGenome, Taxon
+    try:
+        taxon = Taxon.objects.get(taxid=taxid)
+        NCBIGenome.fetch_and_save(taxon, check_proteomes=True)
+    except Exception as e:
+        logger.error(f"Error syncing taxid {taxid}: {e}")
+
+
+def _run_bulk_import():
+    """
+    Background thread: bulk-import all pending DiscoveredSpecies.
+    For each species:
+      1. Create Taxon
+      2. Fetch GCF genomes from NCBI (RefSeq only, same as main sync)
+      3. Match with COL via ChecklistBank
+      4. Mark as imported
+    """
+    import time as _time
+    from apps.taxonomy.models import (
+        DiscoveredSpecies, DiscoveryRun, Taxon,
+        NCBIGenome, ExternalTaxon, TaxonCrosswalk,
+    )
+
+    client = ChecklistBankClient()
+    taxonomy_cache: Dict[int, Dict] = {}
+    pending = list(
+        DiscoveredSpecies.objects.filter(is_imported=False, is_dismissed=False)
+        .order_by("pk")
+    )
+    total = len(pending)
+    logger.info(f"Bulk import: {total} species to process")
+
+    imported = 0
+    errors = 0
+
+    for i, sp in enumerate(pending, 1):
+        try:
+            # 1. Fetch GCF genomes from NCBI (RefSeq only via _fetch_ncbi_genomes_paged)
+            genome_saved = False
+            taxon = None
+            try:
+                for genome_data in _fetch_ncbi_genomes_paged(sp.taxid, page_size=10):
+                    accession = genome_data.get("accession", "")
+                    if not accession or not accession.startswith("GCF_"):
+                        continue
+                    if not _passes_refseq_filter(genome_data):
+                        continue
+                    if not _passes_level_filter(genome_data):
+                        continue
+
+                    # Get taxonomy info for the genome
+                    org = genome_data.get("organism", {}) or {}
+                    org_taxid = org.get("tax_id", sp.taxid)
+                    taxonomy = _get_taxonomy(org_taxid, taxonomy_cache) if org_taxid else {}
+
+                    # Create taxon if not yet created
+                    if taxon is None:
+                        taxon, _ = Taxon.objects.get_or_create(
+                            taxid=sp.taxid,
+                            defaults={
+                                "scientific_name": sp.scientific_name,
+                                "rank": "species",
+                            },
+                        )
+
+                    # Save genome using the same function as the main sync
+                    # We use a lightweight wrapper since _save_genome_to_db needs a sync_run
+                    with transaction.atomic():
+                        genome_defaults = {
+                            "taxon": taxon,
+                            "organism_name": org.get("organism_name", sp.scientific_name),
+                            "refseq_category": (genome_data.get("assembly_info", {}) or {}).get("refseq_category", ""),
+                            "genome_level": (genome_data.get("assembly_info", {}) or {}).get("assembly_level", ""),
+                            "genome_coverage": _safe_float((genome_data.get("assembly_stats", {}) or {}).get("genome_coverage")),
+                            "contig_n50_kb": _safe_float((genome_data.get("assembly_stats", {}) or {}).get("contig_n50"), 0.0) / 1000.0 if (genome_data.get("assembly_stats", {}) or {}).get("contig_n50") else None,
+                            "scaffold_n50_kb": _safe_float((genome_data.get("assembly_stats", {}) or {}).get("scaffold_n50"), 0.0) / 1000.0 if (genome_data.get("assembly_stats", {}) or {}).get("scaffold_n50") else None,
+                            "scaffold_count": _safe_int((genome_data.get("assembly_stats", {}) or {}).get("number_of_scaffolds")),
+                            "genes": _safe_int((genome_data.get("annotation_info", {}) or {}).get("stats", {}).get("gene_counts", {}).get("total")),
+                            "protein_coding": _safe_int((genome_data.get("annotation_info", {}) or {}).get("stats", {}).get("gene_counts", {}).get("protein_coding")),
+                            "phylum": taxonomy.get("phylum", ""),
+                            "class_name": taxonomy.get("class", ""),
+                            "directory_name": (genome_data.get("assembly_info", {}) or {}).get("assembly_name", ""),
+                            "raw": genome_data,
+                        }
+                        genome_defaults = {k: v for k, v in genome_defaults.items() if v is not None}
+
+                        # Truncate string fields
+                        for key, val in genome_defaults.items():
+                            if isinstance(val, str):
+                                try:
+                                    field = NCBIGenome._meta.get_field(key)
+                                    if hasattr(field, 'max_length') and field.max_length and len(val) > field.max_length:
+                                        genome_defaults[key] = val[:field.max_length]
+                                except Exception:
+                                    pass
+
+                        NCBIGenome.objects.update_or_create(
+                            accession=accession,
+                            defaults=genome_defaults,
+                        )
+                    genome_saved = True
+                    break  # Take only the first (best) GCF genome
+
+            except Exception as e:
+                logger.warning(f"Bulk import: genome fetch failed for {sp.scientific_name}: {e}")
+
+            # Ensure taxon exists even if no genome was found
+            if taxon is None:
+                taxon, _ = Taxon.objects.get_or_create(
+                    taxid=sp.taxid,
+                    defaults={
+                        "scientific_name": sp.scientific_name,
+                        "rank": "species",
+                    },
+                )
+
+            # 2. COL match
+            try:
+                canonical = canonicalize_scientific_name(sp.scientific_name)
+                result = client.match_nameusage(
+                    dataset=COL_DATASET,
+                    scientific_name=canonical,
+                    rank="species",
+                )
+                if result.matched and result.external_id:
+                    with transaction.atomic():
+                        external, _ = ExternalTaxon.objects.update_or_create(
+                            system="col",
+                            dataset_code=COL_DATASET,
+                            external_id=result.external_id,
+                            defaults={
+                                "name": result.name or sp.scientific_name,
+                                "rank": result.rank or "species",
+                                "status": result.status or "unknown",
+                                "classification": result.classification,
+                                "classification_path": result.classification_path,
+                                "raw": result.raw,
+                            },
+                        )
+                        TaxonCrosswalk.objects.update_or_create(
+                            ncbi_taxon=taxon,
+                            external_taxon=external,
+                            defaults={
+                                "score": 1.0,
+                                "decision": "high",
+                                "method": "exact",
+                                "is_active": True,
+                                "evidence": {"source": "checklistbank", "matched": True},
+                            },
+                        )
+                        NCBIGenome.objects.filter(taxon=taxon).update(
+                            col_match_status="matched",
+                            external_taxon=external,
+                        )
+                else:
+                    from apps.taxonomy.utils import create_genus_fallback
+                    if not create_genus_fallback(taxon, sp.scientific_name):
+                        NCBIGenome.objects.filter(taxon=taxon).exclude(
+                            col_match_status="manual"
+                        ).update(col_match_status="not_in_col")
+            except Exception as e:
+                logger.warning(f"Bulk import: COL match failed for {sp.scientific_name}: {e}")
+
+            # 3. Mark as imported
+            sp.is_imported = True
+            sp.save(update_fields=["is_imported"])
+            imported += 1
+
+            if i % 20 == 0:
+                logger.info(f"Bulk import progress: {i}/{total} ({imported} imported, {errors} errors)")
+
+        except Exception as e:
+            errors += 1
+            logger.error(f"Bulk import error for {sp.scientific_name} (taxid {sp.taxid}): {e}")
+
+    # Invalidate tree cache
+    from apps.taxonomy.utils import invalidate_all_tree_caches
+    try:
+        invalidate_all_tree_caches()
+    except Exception:
+        pass
+
+    logger.info(f"Bulk import complete: {imported}/{total} imported, {errors} errors")
+
+
+def _run_discovery(kingdoms: list[str]):
+    """
+    Run species discovery in a background thread (no Celery needed).
+    Mirrors the logic in the discover_new_species Celery task.
+    """
+    from apps.taxonomy.models import DiscoveredSpecies, DiscoveryRun, Taxon
+
+    run = DiscoveryRun.objects.create(
+        trigger="manual",
+        celery_task_id="",
+        kingdoms_searched=kingdoms,
+    )
+    run.mark_started()
+    run.add_log("INFO", f"Discovery started (thread) for kingdoms: {', '.join(kingdoms)}")
+
+    try:
+        existing_taxids = set(Taxon.objects.values_list("taxid", flat=True))
+        already_discovered = set(
+            DiscoveredSpecies.objects.filter(is_dismissed=False)
+            .values_list("taxid", flat=True)
+        )
+
+        total_scanned = 0
+        total_new = 0
+
+        for kingdom in kingdoms:
+            try:
+                taxid = get_kingdom_taxid(kingdom)
+                quality = get_quality_criteria(kingdom)
+            except ValueError as e:
+                run.add_log("WARN", f"Unknown kingdom {kingdom}: {e}")
+                continue
+
+            run.add_log("INFO", f"Scanning {kingdom} (taxid {taxid})...")
+            kingdom_scanned = 0
+            kingdom_new = 0
+
+            for genome_data in fetch_ncbi_genomes(taxid):
+                total_scanned += 1
+                kingdom_scanned += 1
+
+                if not GenomeFilters.passes_refseq(genome_data):
+                    continue
+                if not GenomeFilters.passes_level(genome_data):
+                    continue
+                if not GenomeFilters.passes_quality(genome_data, quality):
+                    continue
+
+                org = genome_data.get("organism", {}) or {}
+                org_taxid = org.get("tax_id")
+                if not org_taxid:
+                    continue
+
+                if org_taxid in existing_taxids or org_taxid in already_discovered:
+                    continue
+
+                info = genome_data.get("assembly_info", {}) or {}
+                stats = genome_data.get("assembly_stats", {}) or {}
+                ann = genome_data.get("annotation_info", {}) or {}
+                gene_counts = (ann.get("stats", {}) or {}).get("gene_counts", {}) or {}
+
+                coverage = _safe_float(stats.get("genome_coverage"))
+                scaffold_n50 = _safe_float(stats.get("scaffold_n50"))
+                scaffold_n50_kb = scaffold_n50 / 1000.0 if scaffold_n50 else None
+                protein_coding = _safe_int(gene_counts.get("protein_coding"))
+                total_seq_len = _safe_int(stats.get("total_sequence_length"))
+
+                refseq_cat = info.get("refseq_category", "")
+                genome_level = info.get("assembly_level", "")
+                contig_n50 = _safe_float(stats.get("contig_n50"))
+                contig_n50_kb = contig_n50 / 1000.0 if contig_n50 else None
+                scaffold_count = _safe_int(stats.get("number_of_scaffolds")) or 0
+
+                q_score = compute_quality_score(
+                    refseq_cat, genome_level, coverage or 0,
+                    scaffold_n50_kb, contig_n50_kb, scaffold_count,
+                )
+
+                if q_score < 0.4:
+                    continue
+
+                try:
+                    DiscoveredSpecies.objects.create(
+                        discovery_run=run,
+                        taxid=org_taxid,
+                        scientific_name=org.get("organism_name", "Unknown"),
+                        common_name=org.get("common_name", ""),
+                        kingdom=kingdom,
+                        accession=genome_data.get("accession", ""),
+                        quality_score=q_score,
+                        genome_level=genome_level,
+                        refseq_category=refseq_cat,
+                        protein_coding=protein_coding,
+                        scaffold_n50_kb=scaffold_n50_kb,
+                        genome_coverage=coverage,
+                        total_sequence_length=total_seq_len,
+                    )
+                    total_new += 1
+                    kingdom_new += 1
+                    already_discovered.add(org_taxid)
+                except Exception as e:
+                    logger.warning(f"Could not save discovery taxid {org_taxid}: {e}")
+
+                if kingdom_scanned % 500 == 0:
+                    run.add_log("INFO", f"{kingdom}: scanned {kingdom_scanned}, new {kingdom_new}")
+
+            run.add_log("INFO", f"{kingdom} complete: scanned {kingdom_scanned}, new species {kingdom_new}")
+
+        run.total_scanned = total_scanned
+        run.new_species_found = total_new
+        run.save(update_fields=["total_scanned", "new_species_found"])
+        run.mark_completed()
+        run.add_log("INFO", f"Discovery completed: {total_new} new species from {total_scanned} scanned")
+        logger.info(f"Discovery #{run.pk} completed: {total_new} new species found")
+
+    except Exception as e:
+        logger.exception(f"Discovery #{run.pk} failed: {e}")
+        run.mark_failed(str(e))
+        run.add_log("ERROR", f"Discovery failed: {e}")
+
+
+def _safe_float(val, default=None):
+    """Safely convert to float."""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(val, default=None):
+    """Safely convert to int."""
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
+
+
+# ============================================================
+# NCBI Genome / Proteome / GBFF Download Proxy
+# ============================================================
+
+_VALID_TYPES = {"GENOME_FASTA", "PROT_FASTA", "GENOME_GBFF"}
+
+
+@csrf_exempt
+@require_POST
+def api_ncbi_download_proxy(request):
+    """
+    Stream a ZIP from the NCBI Datasets v2 download API back to the browser.
+
+    Expected JSON body:
+        accessions     – list of assembly accession strings  (required)
+        include_types  – list of NCBI annotation types       (required)
+        filename       – suggested ZIP filename              (optional)
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    accessions = data.get("accessions")
+    include_types = data.get("include_types")
+    filename = data.get("filename", "ncbi_download.zip")
+
+    # ── Validation ──────────────────────────────────────────────
+    if not accessions or not isinstance(accessions, list):
+        return JsonResponse({"error": "accessions is required (list)."}, status=400)
+    if not include_types or not isinstance(include_types, list):
+        return JsonResponse({"error": "include_types is required (list)."}, status=400)
+
+    # sanitise accessions (GCF_/GCA_ + digits + version)
+    acc_re = re.compile(r"^GC[AF]_\d{9}\.\d+$")
+    clean_accs = [a for a in accessions if isinstance(a, str) and acc_re.match(a)]
+    if not clean_accs:
+        return JsonResponse({"error": "No valid accessions."}, status=400)
+    clean_accs = clean_accs[:500]  # safety cap
+
+    clean_types = [t for t in include_types if t in _VALID_TYPES]
+    if not clean_types:
+        return JsonResponse({"error": "No valid include_types."}, status=400)
+
+    # sanitise filename
+    filename = re.sub(r"[^\w\-.]", "_", filename)
+    if not filename.endswith(".zip"):
+        filename += ".zip"
+
+    # ── Call NCBI Datasets v2 ───────────────────────────────────
+    ncbi_url = f"{NCBI_API}/genome/download"
+    payload = {
+        "accessions": clean_accs,
+        "include_annotation_type": clean_types,
+    }
+    headers = {"Accept": "application/zip"}
+
+    try:
+        upstream = requests.post(
+            ncbi_url,
+            json=payload,
+            headers=headers,
+            stream=True,
+            timeout=(15, 600),  # 15 s connect, 10 min read
+        )
+        upstream.raise_for_status()
+    except requests.Timeout:
+        return JsonResponse({"error": "NCBI API timed out."}, status=504)
+    except requests.RequestException as exc:
+        logger.warning("NCBI download proxy error: %s", exc)
+        return JsonResponse({"error": f"NCBI API error: {exc}"}, status=502)
+
+    # ── Stream back to browser ──────────────────────────────────
+    def _chunks():
+        for chunk in upstream.iter_content(chunk_size=65_536):
+            yield chunk
+
+    response = StreamingHttpResponse(_chunks(), content_type="application/zip")
+    cl = upstream.headers.get("Content-Length")
+    if cl:
+        response["Content-Length"] = cl
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

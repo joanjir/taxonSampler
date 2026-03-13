@@ -20,16 +20,19 @@
         </button>
         <ul class="dropdown-menu dropdown-menu-end shadow" style="z-index:1060;">
           <li>
-            <button id="exportSelJson" class="dropdown-item" type="button"><i class="fa-solid fa-code me-2"></i>JSON</button>
+            <button id="exportSelJson" class="dropdown-item" type="button"><i class="fa-solid fa-floppy-disk me-2"></i>Save Taxon Sampler</button>
           </li>
           <li>
             <button id="exportSelExcel" class="dropdown-item" type="button"><i class="fa-solid fa-file-excel me-2 text-success"></i>Excel (.xlsx)</button>
           </li>
           <li>
-            <button id="exportSelTxt" class="dropdown-item" type="button"><i class="fa-solid fa-file-lines me-2"></i>List (txt)</button>
+            <button id="exportSelNames" class="dropdown-item" type="button"><i class="fa-solid fa-list me-2 text-azure"></i>Species names (.txt)</button>
           </li>
           <li>
-            <button id="exportSelNewick" class="dropdown-item" type="button"><i class="fa-solid fa-diagram-project me-2"></i>Newick (species)</button>
+            <button id="exportSelTxt" class="dropdown-item" type="button"><i class="fa-solid fa-file-lines me-2"></i>Full list (.txt)</button>
+          </li>
+          <li>
+            <button id="exportSelNewick" class="dropdown-item" type="button"><i class="fa-solid fa-diagram-project me-2"></i>Newick (taxonomic hierarchy)</button>
           </li>
           <li>
             <hr class="dropdown-divider" />
@@ -40,18 +43,18 @@
           <li>
             <hr class="dropdown-divider" />
           </li>
-          <li class="dropdown-header text-muted small">NCBI Download Scripts</li>
+          <li class="dropdown-header text-muted small">NCBI Downloads</li>
           <li>
-            <button id="dlScriptGenome" class="dropdown-item" type="button"><i class="fa-solid fa-dna me-2 text-primary"></i>Genomes (FASTA)</button>
+            <button id="dlNcbiGenome" class="dropdown-item" type="button"><i class="fa-solid fa-dna me-2 text-primary"></i>Genomes (FASTA)</button>
           </li>
           <li>
-            <button id="dlScriptProtein" class="dropdown-item" type="button"><i class="fa-solid fa-cubes me-2 text-orange"></i>Proteomes (FAA)</button>
+            <button id="dlNcbiProtein" class="dropdown-item" type="button"><i class="fa-solid fa-cubes me-2 text-orange"></i>Proteomes (FAA)</button>
           </li>
           <li>
-            <button id="dlScriptGbff" class="dropdown-item" type="button"><i class="fa-solid fa-file-medical me-2 text-teal"></i>GenBank (GBFF)</button>
+            <button id="dlNcbiGbff" class="dropdown-item" type="button"><i class="fa-solid fa-file-medical me-2 text-teal"></i>GenBank (GBFF)</button>
           </li>
           <li>
-            <button id="dlScriptAll" class="dropdown-item" type="button"><i class="fa-solid fa-download me-2 text-purple"></i>All data (genome+protein+gbff)</button>
+            <button id="dlNcbiAll" class="dropdown-item" type="button"><i class="fa-solid fa-download me-2 text-purple"></i>All data</button>
           </li>
         </ul>
       </div>
@@ -112,7 +115,7 @@
 <!-- Body: selection table -->
 <div class="card-body p-0">
   <div class="table-responsive" style="max-height: 600px;">
-    <table class="table table-sm table-bordered table-hover align-middle mb-0" style="font-size:.82rem;">
+    <table id="selTable" class="table table-sm table-bordered table-hover align-middle mb-0" style="font-size:.82rem; width:100%;">
       <thead class="table-light position-sticky" style="top: 0; z-index: 1;">
         <tr>
           <th class="ps-2" style="width:32px;">#</th>

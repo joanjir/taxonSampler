@@ -239,6 +239,31 @@ class TaxonCrosswalk(models.Model):
             models.Index(fields=["is_active"]),
         ]
 
+    def save(self, *args, **kwargs):
+        """
+        Prevent cross-genus mismatches at the model level.
+        This is the last line of defense — no matter what code path
+        creates a crosswalk, genera must match.
+        """
+        # Only validate COL crosswalks (manual/fallback entries are trusted)
+        if self.external_taxon_id and self.external_taxon.system == "col":
+            from apps.taxonomy.utils import genera_match
+            ncbi_name = self.ncbi_taxon.scientific_name
+            col_name = self.external_taxon.name
+            col_cls = self.external_taxon.classification or {}
+            ok, reason = genera_match(ncbi_name, col_name, col_cls)
+            if not ok:
+                import logging
+                logging.getLogger(__name__).error(
+                    f"[MODEL_BLOCK] TaxonCrosswalk.save() blocked: "
+                    f"{ncbi_name} -> {col_name} ({reason})"
+                )
+                raise ValueError(
+                    f"Genus mismatch: '{ncbi_name}' cannot be linked to "
+                    f"'{col_name}' ({reason}). Use a manual/fallback entry instead."
+                )
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"{self.ncbi_taxon_id} ↔ {self.external_taxon_id}"
 

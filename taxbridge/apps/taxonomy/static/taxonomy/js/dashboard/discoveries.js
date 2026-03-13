@@ -4,6 +4,7 @@
  */
 (function () {
   "use strict";
+  console.log("[Discoveries v2] JS loaded, isAdmin:", window.HOME_DATA?.isAdmin);
 
   const isAdmin = window.HOME_DATA?.isAdmin || false;
   const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
@@ -18,6 +19,7 @@
   const pagination = document.getElementById("discoveryPagination");
   const statusFilter = document.getElementById("discoveryStatusFilter");
   const btnStartDiscovery = document.getElementById("btn-start-discovery");
+  const btnBulkImport = document.getElementById("btn-bulk-import");
   const runningAlert = document.getElementById("discovery-running-alert");
 
   if (!tbody) return; // Tab not rendered
@@ -30,6 +32,7 @@
   });
 
   btnStartDiscovery?.addEventListener("click", startDiscovery);
+  btnBulkImport?.addEventListener("click", bulkImportDiscoveries);
 
   // ─── Load discoveries on tab click ────────────────────
   const tabLink = document.querySelector('a[href="#tab-discoveries"]');
@@ -159,9 +162,31 @@
 
   // ─── Actions ───────────────────────────────────────────
   async function startDiscovery() {
+
+
+    let selectedKingdoms = Array.from(document.querySelectorAll('#discovery-kingdoms-group input[type="checkbox"]:checked')).map(cb => cb.value);
+    if (selectedKingdoms.length === 0) {
+      Swal.fire({ icon: 'warning', title: 'No domains selected', text: 'Please select at least one domain/kingdom to scan.', confirmButtonColor: '#206bc4' });
+      return;
+    }
+
+    // Expand 'eukaryota' to its three kingdoms for backend
+    let backendKingdoms = [];
+    selectedKingdoms.forEach(k => {
+      if (k === 'eukaryota') {
+        backendKingdoms.push('metazoa', 'fungi', 'viridiplantae');
+      } else {
+        backendKingdoms.push(k);
+      }
+    });
+
+    // Map for pretty labels
+    const prettyLabels = { eukaryota: 'Eukaryota', bacteria: 'Bacteria', archaea: 'Archaea' };
+    const selectedLabels = selectedKingdoms.map(k => prettyLabels[k] || (k.charAt(0).toUpperCase() + k.slice(1)));
+
     const result = await Swal.fire({
       title: 'Start discovery scan?',
-      text: 'This will scan NCBI for new species with high-quality genomes. It may take several minutes.',
+      html: `This will scan NCBI for new species in: <b>${selectedLabels.join(', ')}</b>.<br>It may take several minutes.`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Start scan',
@@ -182,7 +207,7 @@
           "Content-Type": "application/json",
           "X-CSRFToken": csrfToken,
         },
-        body: JSON.stringify({ kingdoms: ["metazoa", "fungi", "viridiplantae"] }),
+        body: JSON.stringify({ kingdoms: backendKingdoms }),
       });
       const data = await resp.json();
 
@@ -279,6 +304,94 @@
       }
     } catch (err) {
       Swal.fire({ icon: 'error', text: 'Error dismissing species', confirmButtonColor: '#206bc4' });
+    }
+  }
+
+  // ─── Bulk Import ────────────────────────────────────────
+  async function bulkImportDiscoveries() {
+    console.log("[Discoveries] bulkImportDiscoveries clicked");
+    // First check how many pending
+    try {
+      const checkResp = await fetch("/api/v1/taxonomy/discovery/species/?status=pending&page_size=1");
+      const checkData = await checkResp.json();
+      if (checkData.total === 0) {
+        Swal.fire({ icon: 'info', title: 'Nothing to import', text: 'There are no pending species to import.', confirmButtonColor: '#206bc4' });
+        return;
+      }
+
+      const result = await Swal.fire({
+        title: 'Import all pending species?',
+        html: `This will import <b>${checkData.total}</b> species:<br>` +
+              `<ul class="text-start mt-2"><li>Create Taxon records</li><li>Fetch GCF genome data from NCBI</li><li>Match with Catalogue of Life</li></ul>` +
+              `<small class="text-muted">This may take a while for large batches.</small>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: `Import ${checkData.total} species`,
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#2fb344',
+        cancelButtonColor: '#6c757d',
+      });
+      if (!result.isConfirmed) return;
+
+      btnBulkImport.disabled = true;
+      btnBulkImport.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Importing...';
+      runningAlert?.classList.remove("d-none");
+      if (runningAlert) runningAlert.querySelector("span").textContent = `Importing ${checkData.total} species (fetching genomes + COL matching)...`;
+
+      const resp = await fetch("/api/v1/taxonomy/discovery/bulk-import/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken,
+        },
+      });
+      const data = await resp.json();
+
+      if (data.success) {
+        pollBulkImport(checkData.total);
+      } else {
+        Swal.fire({ icon: 'error', title: 'Import error', text: data.error || 'Error starting bulk import', confirmButtonColor: '#206bc4' });
+        resetBulkButton();
+      }
+    } catch (err) {
+      console.error("Error starting bulk import:", err);
+      Swal.fire({ icon: 'error', title: 'Connection error', text: 'Error starting bulk import', confirmButtonColor: '#206bc4' });
+      resetBulkButton();
+    }
+  }
+
+  function pollBulkImport(originalTotal) {
+    const interval = setInterval(async () => {
+      try {
+        const resp = await fetch("/api/v1/taxonomy/discovery/species/?status=pending&page_size=1");
+        const data = await resp.json();
+        const remaining = data.total;
+        const done = originalTotal - remaining;
+
+        if (btnBulkImport) {
+          btnBulkImport.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> ${done}/${originalTotal}`;
+        }
+        if (runningAlert) {
+          runningAlert.querySelector("span").textContent = `Importing species... ${done}/${originalTotal} done`;
+        }
+
+        if (remaining === 0) {
+          clearInterval(interval);
+          resetBulkButton();
+          runningAlert?.classList.add("d-none");
+          loadDiscoveries();
+          showToast(`${done} species imported with genome data + COL matching!`, "success");
+        }
+      } catch {
+        // continue polling
+      }
+    }, 3000);
+  }
+
+  function resetBulkButton() {
+    if (btnBulkImport) {
+      btnBulkImport.disabled = false;
+      btnBulkImport.innerHTML = '<i class="ti ti-database-import me-1"></i> Import All';
     }
   }
 

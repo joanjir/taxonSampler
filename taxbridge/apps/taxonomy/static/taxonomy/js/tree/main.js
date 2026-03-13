@@ -29,7 +29,7 @@ import {
 } from "./ui.js";
 
 // --- API transport ---
-import { loadTreeData } from "../shared/api.js";
+import { loadTreeData, loadTreeWithCache, clearTreeCache } from "../shared/api.js";
 
 // Flag: suppress errors when page is unloading (reload / navigation)
 let _pageUnloading = false;
@@ -201,14 +201,31 @@ window.addEventListener("sampling:import", (ev) => {
     window.__samplingWizard.enableWizard();
   }
   
-  // Restore Step 2 (DB Sampling) configuration
-  if (dbSampling?.restoreConfig) {
-    dbSampling.restoreConfig(result);
-  }
-  
   // Mark sampling as executed BEFORE setStep so Next button stays enabled
   if (window.__samplingWizard?.markSamplingExecuted) {
     window.__samplingWizard.markSamplingExecuted();
+  }
+
+  // Restore wizard scope (Step 1) from imported scope_filters so that
+  // getWizardScope() returns the correct scope if user re-runs sampling.
+  if (result.scope_filters && window.__samplingWizard?.setScope) {
+    const parts = Object.entries(result.scope_filters).map(([r, n]) => `${r}:${n}`);
+    const scopeKey = parts.join("|");
+    const scopeLabel = parts.join(" → ");
+    window.__samplingWizard.setScope(scopeKey, scopeLabel);
+  }
+  if (result.target_keys?.length && window.__samplingWizard?.addTarget) {
+    window.__samplingWizard.clearTargets?.();
+    for (const tk of result.target_keys) {
+      window.__samplingWizard.addTarget(tk);
+    }
+  }
+
+  // Restore Step 2 config BEFORE showing the step.
+  // restoreConfig sets _skipLoadStats so the MutationObserver
+  // won't call loadStats() and overwrite the restored values.
+  if (dbSampling?.restoreConfig) {
+    dbSampling.restoreConfig(result);
   }
   
   // Show Step 2 so user can see the restored config
@@ -285,8 +302,32 @@ function initAddOrganismSelect2() {
     placeholder: unselectedList.length > 0 ? 'Select species to add...' : 'No more species available',
     allowClear: true,
     minimumInputLength: 0,
-    // Use organism_name as both id and text
-    data: unselectedList.map(sp => ({ id: sp.organism_name, text: sp.organism_name })),
+    data: unselectedList.map(sp => ({
+      id: sp.organism_name,
+      text: sp.organism_name,
+      genome_level: sp.genome_level || '',
+      quality_score: sp.quality_score ?? null,
+    })),
+    templateResult: function(item) {
+      if (!item.id) return item.text;
+      const $el = $('<span></span>');
+      const name = $('<span class="fw-semibold"></span>').text(item.text);
+      $el.append(name);
+      if (item.genome_level) {
+        const lvl = item.genome_level;
+        const colorMap = { 'Complete Genome': 'bg-green-lt text-green', 'Chromosome': 'bg-azure-lt text-azure', 'Scaffold': 'bg-yellow-lt text-yellow', 'Contig': 'bg-orange-lt text-orange' };
+        const cls = colorMap[lvl] || 'bg-secondary-lt text-secondary';
+        $el.append($('<span class="badge ms-2 ' + cls + '" style="font-size:0.7rem;"></span>').text(lvl));
+      }
+      if (item.quality_score != null) {
+        const qs = (item.quality_score * 100).toFixed(0);
+        $el.append($('<span class="text-muted ms-2" style="font-size:0.75rem;"></span>').text('Q:' + qs + '%'));
+      }
+      return $el;
+    },
+    templateSelection: function(item) {
+      return item.text;
+    },
     matcher: function(params, data) {
       // Custom matcher for filtering
       if (!params.term || params.term.trim() === '') {
@@ -300,7 +341,7 @@ function initAddOrganismSelect2() {
     }
   });
   
-  // On selection, add organism
+  // On selection, add organism and clear the select
   $sel.on('select2:select', function(e) {
     const orgName = e.params.data.id;
     addOrganismToSelection(orgName);
@@ -443,9 +484,15 @@ function handleAssemblyResult(result, label) {
         if (scoreMap.has(key)) sp.species_score = scoreMap.get(key);
       }
     }
-    // Also preserve clades from Step 2 if Step 3 doesn't have them
-    if (!result.clades && prev.clades) result.clades = prev.clades;
-    if (!result.strategy && prev.strategy) result.strategy = prev.strategy;
+    // Preserve Step 2 config fields that Step 3 doesn't produce
+    const preserveKeys = [
+      "clades", "strategy", "start_rank", "end_rank",
+      "max_sample_size", "total_available", "scope_filters",
+      "target_keys", "available_species", "config_id",
+    ];
+    for (const k of preserveKeys) {
+      if (result[k] == null && prev[k] != null) result[k] = prev[k];
+    }
   }
 
   selMgr.setLastSampling(result);
@@ -631,6 +678,64 @@ document.getElementById("samplingRoot")?.addEventListener("change", onSamplingRo
 // =========================================================================
 // Initial dataset load
 // =========================================================================
+
+// Track if tree has been rendered to avoid duplicate renders
+let _treeRendered = false;
+
+/**
+ * Apply tree data to the UI (shared by cache and fresh loads).
+ */
+function applyTreeData(response, isFromCache = false) {
+  const data = response.tree || response;
+
+  // Deliver data
+  samplingCtl.setData(data);
+  renderer.render(data);
+
+  // Species counter
+  const speciesCount = response.species_count ?? 0;
+  const speciesEl = document.getElementById("speciesCount");
+  if (speciesEl) speciesEl.textContent = String(speciesCount);
+
+  // Reset UI state
+  searchCtl.clearSearch({ focus: false });
+  if (ui.tt) ui.tt.style.zIndex = 20;
+  if (ui.fsBtn) ui.fsBtn.style.zIndex = 30;
+
+  setCrumb(ui.crumb, "ROOT");
+  tooltip.hide();
+
+  selMgr.clearSampling();
+  selMgr.setBadgeMode("Manual", false);
+
+  const samplingSel = document.getElementById("samplingRoot");
+  if (samplingSel) {
+    samplingSel.value = "";
+    renderer.setSamplingMode?.("");
+  }
+
+  samplingCtl.resetDefaults?.();
+  samplingCtl.emitSamplingConfigChanged?.();
+
+  // Only reset wizard if user hasn't navigated beyond Step 1
+  if (window.__samplingWizard?.state?.step <= 1) {
+    window.__samplingWizard.reset?.();
+  }
+
+  selMgr.repaintSelection();
+
+  // Signal that the tree is fully loaded
+  window.dispatchEvent(new CustomEvent("tree:loaded"));
+  
+  _treeRendered = true;
+  
+  if (isFromCache) {
+    console.log("[tree] Rendered from cache (instant)");
+  } else {
+    console.log("[tree] Rendered from server");
+  }
+}
+
 async function load() {
   try {
     if (!endpoint || typeof endpoint !== "string" || !endpoint.trim()) {
@@ -639,49 +744,27 @@ async function load() {
       );
     }
 
-    const response = await loadTreeData(endpoint);
-    const data = response.tree || response;
+    _treeRendered = false;
 
-    // Deliver data
-    samplingCtl.setData(data);
-    renderer.render(data);
+    // Use cache-first strategy for instant loading
+    const response = await loadTreeWithCache({
+      endpoint,
+      onCacheHit: (cachedData) => {
+        // Show cached data immediately (instant render!)
+        applyTreeData(cachedData, true);
+      },
+      onFreshData: (freshData) => {
+        // Fresh data arrived with a different version - re-render!
+        console.log("[tree] Data changed on server, re-rendering tree");
+        applyTreeData(freshData, false);
+      },
+    });
 
-    // Species counter
-    const speciesCount = response.species_count ?? 0;
-    const speciesEl = document.getElementById("speciesCount");
-    if (speciesEl) speciesEl.textContent = String(speciesCount);
-
-    // Reset UI state
-    searchCtl.clearSearch({ focus: false });
-    if (ui.tt) ui.tt.style.zIndex = 20;
-    if (ui.fsBtn) ui.fsBtn.style.zIndex = 30;
-
-    setCrumb(ui.crumb, "ROOT");
-    tooltip.hide();
-
-    selMgr.clearSampling();
-    selMgr.setBadgeMode("Manual", false);
-
-    const samplingSel = document.getElementById("samplingRoot");
-    if (samplingSel) {
-      samplingSel.value = "";
-      renderer.setSamplingMode?.("");
+    // If cache callback didn't fire (no cache), apply now
+    if (!_treeRendered) {
+      applyTreeData(response, false);
     }
 
-    samplingCtl.resetDefaults?.();
-    samplingCtl.emitSamplingConfigChanged?.();
-
-    // Only reset wizard if user hasn't navigated beyond Step 1
-    // (prevents race condition where async tree load resets wizard
-    //  while user is on Step 2 or Step 3)
-    if (window.__samplingWizard?.state?.step <= 1) {
-      window.__samplingWizard.reset?.();
-    }
-
-    selMgr.repaintSelection();
-
-    // Signal that the tree is fully loaded — enables the wizard panel
-    window.dispatchEvent(new CustomEvent("tree:loaded"));
   } catch (err) {
     // Ignore abort/network errors caused by page reload or navigation
     if (_pageUnloading
