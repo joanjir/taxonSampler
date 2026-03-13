@@ -1,8 +1,8 @@
 """
-Django settings for PythonAnywhere (free tier).
+Django settings for PythonAnywhere.
 
 Key differences from local/prod:
-  - SQLite instead of PostgreSQL (free tier has no PostgreSQL)
+  - PostgreSQL on Neon (cloud) via DATABASE_URL
   - Celery disabled (no Redis on free tier)
   - Static files served via PythonAnywhere's static-file mappings
   - ALLOWED_HOSTS set for *.pythonanywhere.com
@@ -25,13 +25,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://joanji.pythonanywhere.com",
 ]
 
-# ── Database: SQLite (free tier) ──
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+# ── Database: PostgreSQL on Neon (via DATABASE_URL from .env / env vars) ──
+# Uses the same DATABASE_URL parsing from base.py (django-environ)
 
 # ── Static files ──
 # collectstatic places files here; PythonAnywhere serves them directly

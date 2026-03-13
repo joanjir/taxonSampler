@@ -21,12 +21,18 @@ venv_path = os.path.join(VENV, "lib", "python3.10", "site-packages")
 if os.path.isdir(venv_path):
     sys.path.insert(0, venv_path)
 
+# ── Load .env file ──
+env_file = os.path.join(PROJECT_DIR, ".env")
+if os.path.isfile(env_file):
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
 # ── Django settings ──
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.pythonanywhere")
-
-# You can set environment variables here for secrets:
-# os.environ["DJANGO_SECRET_KEY"] = "your-long-random-key"
-# os.environ["NCBI_API_KEY"] = "your-ncbi-key"
 
 from django.core.wsgi import get_wsgi_application  # noqa: E402
 application = get_wsgi_application()
