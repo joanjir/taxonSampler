@@ -135,7 +135,7 @@
 
     // Assembly Level — blues/teals palette
     renderDonut("chartAssembly", data.genomeLevels || [], [
-      "#1864ab", "#0b7285", "#5c940d", "#868e96"
+      "#1864ab", "#0b7285", "#d97706", "#868e96"
     ], 280);
 
     // Kingdom bar chart

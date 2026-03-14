@@ -294,7 +294,7 @@ def api_taxon_sync_status(request, sync_id: int):
 @csrf_exempt
 @require_POST
 def api_cancel_taxon_sync(request, sync_id: int):
-    """Cancel a running sync. Admin only."""
+    """Cancel a pending or running sync. Admin only."""
     if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
         return JsonResponse({"error": "Permission denied"}, status=403)
     try:
@@ -302,8 +302,11 @@ def api_cancel_taxon_sync(request, sync_id: int):
     except TaxonSyncRun.DoesNotExist:
         return JsonResponse({"error": "Sync not found"}, status=404)
 
-    if not run.is_running:
-        return JsonResponse({"error": "Sync is not running"}, status=400)
+    # Can't cancel if already completed, failed or cancelled
+    if run.status in ("completed", "failed", "cancelled"):
+        return JsonResponse({
+            "error": f"Cannot cancel sync with status '{run.status}'"
+        }, status=400)
 
     run.status = "cancelled"
     run.finished_at = timezone.now()
