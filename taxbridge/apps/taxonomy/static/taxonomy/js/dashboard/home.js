@@ -23,6 +23,7 @@
       legend: { position: "bottom", fontSize: "13px" },
       dataLabels: {
         formatter: function(val, opts) {
+          if (!opts || !opts.w || !opts.w.config) return val;
           return opts.w.config.series[opts.seriesIndex];
         }
       },
@@ -38,6 +39,7 @@
                 fontSize: "14px",
                 fontWeight: 600,
                 formatter: function(w) {
+                  if (!w || !w.globals) return "Total";
                   return w.globals.seriesTotals.reduce(function(a, b) { return a + b; }, 0);
                 }
               }
@@ -48,7 +50,9 @@
       tooltip: {
         y: {
           formatter: function(val, opts) {
+            if (!opts || !opts.w || !opts.w.globals) return val;
             var total = opts.w.globals.seriesTotals.reduce(function(a, b) { return a + b; }, 0);
+            if (total === 0) return val;
             var pct = (val / total * 100).toFixed(1);
             return val + " (" + pct + "%)";
           }
@@ -108,6 +112,7 @@
       tooltip: {
         y: {
           formatter: function(val, opts) {
+            if (!opts || opts.dataPointIndex === undefined) return val + " genomes";
             var idx = opts.dataPointIndex;
             var domain = kingdomData[idx]?.domain || "Unknown";
             return val + " genomes — " + domain;
