@@ -106,7 +106,8 @@ def home(request):
     # Not in COL: manual + not_in_col status
     manual_taxa = Taxon.objects.filter(genomes__col_match_status="manual").distinct().count()
     not_in_col_total = not_in_col_genomes + manual_taxa
-    mismatch_pending = mismatch_genomes
+    # Si hay mismatch, mostrar esos como pendientes; si no, mostrar not_in_col como pendientes
+    mismatch_pending = mismatch_genomes if mismatch_genomes > 0 else not_in_col_genomes
 
     # Contexto para el template
     context = {
