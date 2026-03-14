@@ -137,8 +137,9 @@ def tree_data(request):
     if expand_keys:
         tree = expand_to_keys(tree, expand_keys)
     
-    # Count total species
-    species_count = count_species_under(tree)
+    # Count total species - use the species_count from the tree node itself
+    # which reflects the **visible** species (not counting collapsed _children)
+    species_count = tree.get("species_count") or count_species_under(tree)
     
     # Compute tree_version so frontend can detect data changes
     from apps.taxonomy.tree.views import _get_tree_version
@@ -1684,9 +1685,14 @@ def sampling_newick(request):
       - svg: JSON with {"svg": "<svg>...", "newick": "..."}
     """
     try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except Exception:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+        body_str = request.body.decode("utf-8")
+        payload = json.loads(body_str)
+    except json.JSONDecodeError as je:
+        return JsonResponse({"error": f"Invalid JSON: {str(je)}"}, status=400)
+    except UnicodeDecodeError as ue:
+        return JsonResponse({"error": f"Invalid UTF-8 encoding: {str(ue)}"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to parse request body: {str(e)}"}, status=400)
 
     species = payload.get("species", [])
     if not species:

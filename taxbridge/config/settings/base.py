@@ -218,3 +218,10 @@ CACHES = {
         "TIMEOUT": 600,  # 10 minutes default
     }
 }
+
+# ======================
+# Upload Size Limits
+# ======================
+# Allow larger payloads for sampling results (species data can be large JSON)
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int("DATA_UPLOAD_MAX_MEMORY_SIZE", default=52428800)  # 50 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = env.int("FILE_UPLOAD_MAX_MEMORY_SIZE", default=52428800)  # 50 MB
