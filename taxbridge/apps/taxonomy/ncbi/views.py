@@ -105,12 +105,7 @@ def taxon_sync_dashboard(request):
         .count()
     )
     not_in_col_taxa = not_in_col_status + manual_taxa
-    mismatch_taxa = (
-        Taxon.objects.filter(genomes__col_match_status="mismatch")
-        .distinct()
-        .count()
-    )
-    unresolved_taxa = not_in_col_status + mismatch_taxa
+    unresolved_taxa = not_in_col_status
 
     # COL coverage: only auto-matched taxa count (manual are NOT in COL)
     col_matched_taxa = (
@@ -129,7 +124,6 @@ def taxon_sync_dashboard(request):
         "col_coverage_pct": col_coverage_pct,
         "not_in_col_taxa": not_in_col_taxa,
         "manual_taxa": manual_taxa,
-        "mismatch_taxa": mismatch_taxa,
         "unresolved_taxa": unresolved_taxa,
         "total_syncs": TaxonSyncRun.objects.count(),
         "successful_syncs": TaxonSyncRun.objects.filter(status="completed").count(),
