@@ -23,8 +23,13 @@
       legend: { position: "bottom", fontSize: "13px" },
       dataLabels: {
         formatter: function(val, opts) {
-          if (!opts || !opts.w || !opts.w.config) return val;
-          return opts.w.config.series[opts.seriesIndex];
+          try {
+            if (!opts || !opts.w || !opts.w.config || opts.seriesIndex === undefined) return val;
+            return opts.w.config.series[opts.seriesIndex];
+          } catch (e) {
+            console.warn('[donut] dataLabels formatter error:', e);
+            return val;
+          }
         }
       },
       plotOptions: {
@@ -39,8 +44,13 @@
                 fontSize: "14px",
                 fontWeight: 600,
                 formatter: function(w) {
-                  if (!w || !w.globals) return "Total";
-                  return w.globals.seriesTotals.reduce(function(a, b) { return a + b; }, 0);
+                  try {
+                    if (!w || !w.globals || !w.globals.seriesTotals) return "Total";
+                    return w.globals.seriesTotals.reduce(function(a, b) { return a + b; }, 0);
+                  } catch (e) {
+                    console.warn('[donut] total formatter error:', e);
+                    return "Total";
+                  }
                 }
               }
             }
@@ -50,11 +60,16 @@
       tooltip: {
         y: {
           formatter: function(val, opts) {
-            if (!opts || !opts.w || !opts.w.globals) return val;
-            var total = opts.w.globals.seriesTotals.reduce(function(a, b) { return a + b; }, 0);
-            if (total === 0) return val;
-            var pct = (val / total * 100).toFixed(1);
-            return val + " (" + pct + "%)";
+            try {
+              if (!opts || !opts.w || !opts.w.globals || !opts.w.globals.seriesTotals) return String(val);
+              var total = opts.w.globals.seriesTotals.reduce(function(a, b) { return a + b; }, 0);
+              if (total === 0) return String(val);
+              var pct = (val / total * 100).toFixed(1);
+              return val + " (" + pct + "%)";
+            } catch (e) {
+              console.warn('[donut] tooltip formatter error:', e);
+              return String(val);
+            }
           }
         }
       }
@@ -112,10 +127,15 @@
       tooltip: {
         y: {
           formatter: function(val, opts) {
-            if (!opts || opts.dataPointIndex === undefined) return val + " genomes";
-            var idx = opts.dataPointIndex;
-            var domain = kingdomData[idx]?.domain || "Unknown";
-            return val + " genomes — " + domain;
+            try {
+              if (!opts || opts.dataPointIndex === undefined) return String(val) + " genomes";
+              var idx = opts.dataPointIndex;
+              var domain = kingdomData[idx]?.domain || "Unknown";
+              return String(val) + " genomes — " + domain;
+            } catch (e) {
+              console.warn('[kingdom] tooltip formatter error:', e);
+              return String(val) + " genomes";
+            }
           }
         }
       }
