@@ -1431,6 +1431,22 @@ def sampling_stats(request):
         species_names=species_names,
     )
 
+    # Add tree-based species count for consistency with scope_info
+    # (the DB count may differ because it counts distinct organism_name
+    #  while the tree counts distinct ExternalTaxon leaf nodes)
+    scope_key = request.GET.get("scope_key", "").strip() or None
+    try:
+        tree, index = _get_cached_tree_and_index()
+        if tree:
+            if scope_key:
+                node = index.get_node(scope_key)
+                if node:
+                    stats["tree_species_count"] = index.count_rank_under(node, "species")
+            else:
+                stats["tree_species_count"] = index.count_rank_under(tree, "species")
+    except Exception:
+        pass  # Non-critical; frontend falls back to total_species
+
     return JsonResponse(stats)
 
 

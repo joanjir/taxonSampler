@@ -290,13 +290,13 @@ export function initDbSampling() {
       });
     }
 
-    return { scopeFilters, targetKeys, speciesNames: null };
+    return { scopeFilters, targetKeys, speciesNames: null, scopeKey: wiz.scopeKey || "" };
   }
 
   // ── Stats ─────────────────────────────────────────────────────────
 
   async function loadStats() {
-    const { scopeFilters, targetKeys, speciesNames } = getWizardScope();
+    const { scopeFilters, targetKeys, speciesNames, scopeKey } = getWizardScope();
 
     // Apply scope floor IMMEDIATELY so the slider updates before the
     // network round-trip.  Previously this lived inside the try block
@@ -305,10 +305,12 @@ export function initDbSampling() {
     applyScopeFloor(scopeFilters);
 
     try {
-      const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames });
+      const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames, scopeKey });
       statsCache = data;
 
-      const totalSpecies = data.total_species ?? 0;
+      // Prefer tree-based count (consistent with Step 1 scope_info)
+      // over DB-based count (which counts distinct organism_name)
+      const totalSpecies = data.tree_species_count ?? data.total_species ?? 0;
       
       if (dom.statMatched)  dom.statMatched.textContent  = totalSpecies;
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;

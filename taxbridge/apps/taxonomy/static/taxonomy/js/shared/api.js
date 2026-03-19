@@ -315,7 +315,7 @@ export async function apiGetScopeInfo({ endpoint, scopeKey, targetKeys, activeKe
  * @param {string[]} [opts.targetKeys]    - tree keys for target clades from Step 1
  * @param {string[]} [opts.speciesNames]  - specific organism names from Step 1 targets
  */
-export async function apiDbSamplingStats({ endpoint, scopeFilters, targetKeys, speciesNames } = {}) {
+export async function apiDbSamplingStats({ endpoint, scopeFilters, targetKeys, speciesNames, scopeKey } = {}) {
   const base = assertEndpoint(endpoint ?? window.DB_SAMPLING_STATS_ENDPOINT, "window.DB_SAMPLING_STATS_ENDPOINT");
 
   // Build query params for scope_filters and species_names
@@ -328,6 +328,9 @@ export async function apiDbSamplingStats({ endpoint, scopeFilters, targetKeys, s
   }
   if (speciesNames && speciesNames.length) {
     params.set("species_names", JSON.stringify(speciesNames));
+  }
+  if (scopeKey) {
+    params.set("scope_key", scopeKey);
   }
 
   const qs = params.toString();
