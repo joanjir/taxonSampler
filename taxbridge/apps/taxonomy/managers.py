@@ -147,7 +147,7 @@ class ExternalTaxonManager(models.Manager):
             chain = []
             cur = root
             for rank, name in path:
-                if rank in ("species", "subspecies"):
+                if rank in ("species", "subspecies", "variety", "form"):
                     continue
                 key = (rank, name)
                 if key not in cur.children:
