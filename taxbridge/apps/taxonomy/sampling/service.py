@@ -104,9 +104,9 @@ class TreeIndex:
             return 0
         
         rank = norm_rank(node.get("rank", ""))
-        # When counting "species", also include "subspecies" nodes
+        # When counting "species", also include infraspecific ranks
         if target_rank == "species":
-            count = 1 if rank in ("species", "subspecies") else 0
+            count = 1 if rank in ("species", "subspecies", "variety", "form") else 0
         else:
             count = 1 if rank == target_rank else 0
         
