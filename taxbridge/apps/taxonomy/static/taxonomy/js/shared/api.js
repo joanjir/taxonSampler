@@ -3,41 +3,56 @@
 import { getCookie } from "./helpers.js";
 
 // ============================================================
-// Local Storage Cache for Tree Data
+// IndexedDB Cache for Tree Data (no size limit like localStorage)
 // ============================================================
 const TREE_CACHE_KEY = "taxonsampler_tree_cache_v2";
 const TREE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const IDB_NAME = "taxonsampler_cache";
+const IDB_STORE = "trees";
+const IDB_VERSION = 1;
+
+function _openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
 
 /**
- * Get cached tree data from localStorage.
- * @returns {{data: object, timestamp: number, tree_version: string|null}|null}
+ * Get cached tree data from IndexedDB.
+ * @returns {Promise<{data: object, timestamp: number, tree_version: string|null}|null>}
  */
-function getTreeCache() {
+async function getTreeCache() {
   try {
-    const raw = localStorage.getItem(TREE_CACHE_KEY);
-    if (!raw) return null;
-    const cached = JSON.parse(raw);
-    if (!cached || !cached.data || !cached.timestamp) return null;
-    return cached;
+    const db = await _openIDB();
+    return await new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).get(TREE_CACHE_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
   } catch {
     return null;
   }
 }
 
 /**
- * Save tree data to localStorage cache.
+ * Save tree data to IndexedDB cache.
  * @param {object} data 
  */
-function setTreeCache(data) {
+async function setTreeCache(data) {
   try {
     const payload = {
       data,
       timestamp: Date.now(),
       tree_version: data.tree_version || null,
     };
-    localStorage.setItem(TREE_CACHE_KEY, JSON.stringify(payload));
+    const db = await _openIDB();
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(payload, TREE_CACHE_KEY);
   } catch (e) {
-    // localStorage might be full or disabled
     console.warn("[api] Could not cache tree data:", e.message);
   }
 }
@@ -55,9 +70,11 @@ function isCacheValid(cached) {
 /**
  * Clear tree cache (call after data imports).
  */
-export function clearTreeCache() {
+export async function clearTreeCache() {
   try {
-    localStorage.removeItem(TREE_CACHE_KEY);
+    const db = await _openIDB();
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(TREE_CACHE_KEY);
   } catch {}
 }
 
@@ -123,13 +140,13 @@ export async function apiGetTree({ endpoint, limit = null, rankCut = null, useCa
   if (limit != null) u.searchParams.set("limit", String(limit));
   if (rankCut !== null) u.searchParams.set("rankCut", String(rankCut));
 
-  // Try localStorage cache first (only for default requests without special params)
+  // Try IndexedDB cache first (only for default requests without special params)
   const isDefaultRequest = limit == null && rankCut == null;
   
   if (useCache && isDefaultRequest) {
-    const cached = getTreeCache();
+    const cached = await getTreeCache();
     if (cached && isCacheValid(cached)) {
-      console.log("[api] Tree loaded from cache (age: " + 
+      console.log("[api] Tree loaded from IndexedDB cache (age: " + 
         Math.round((Date.now() - cached.timestamp) / 1000) + "s)");
       return cached.data;
     }
@@ -141,8 +158,8 @@ export async function apiGetTree({ endpoint, limit = null, rankCut = null, useCa
   
   // Cache the result (only for default requests)
   if (useCache && isDefaultRequest) {
-    setTreeCache(data);
-    console.log("[api] Tree cached to localStorage");
+    await setTreeCache(data);
+    console.log("[api] Tree cached to IndexedDB");
   }
   
   return data;
@@ -159,7 +176,7 @@ export async function apiGetTree({ endpoint, limit = null, rankCut = null, useCa
  * @returns {Promise<object>} - The tree data
  */
 export async function loadTreeWithCache({ endpoint, onCacheHit, onFreshData } = {}) {
-  const cached = getTreeCache();
+  const cached = await getTreeCache();
   
   // If we have valid cache, show it immediately then check for updates
   if (cached && isCacheValid(cached)) {
@@ -167,16 +184,16 @@ export async function loadTreeWithCache({ endpoint, onCacheHit, onFreshData } = 
     
     // Always fetch fresh data in background to check for version changes
     apiGetTree({ endpoint, useCache: false })
-      .then(freshData => {
+      .then(async freshData => {
         const freshVersion = freshData.tree_version || null;
         const cachedVersion = cached.tree_version || null;
         if (freshVersion && cachedVersion && freshVersion !== cachedVersion) {
           console.log(`[api] Tree version changed: ${cachedVersion} -> ${freshVersion}, re-rendering`);
-          setTreeCache(freshData);
+          await setTreeCache(freshData);
           if (onFreshData) onFreshData(freshData);
         } else {
           // Same version, just update cache timestamp
-          setTreeCache(freshData);
+          await setTreeCache(freshData);
           console.log("[api] Background refresh complete - same version");
         }
       })

@@ -126,9 +126,14 @@ def tree_data(request):
     
     expand_keys = [k.strip() for k in expand_keys_str.split(",") if k.strip()]
     
-    # Build tree from database
-    # rank_cut=None → fully expanded; rank_cut="" → collapsed root only
-    tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut=max_rank, with_keys=True)
+    # Use Django cache (Redis) for tree data to avoid rebuilding on every request
+    from django.core.cache import cache as django_cache
+    cache_key = f"tree_data:{limit}:{max_rank or 'none'}"
+    tree = django_cache.get(cache_key)
+    if tree is None:
+        tree = ExternalTaxon.objects.build_tree(limit=limit, rank_cut=max_rank, with_keys=True)
+        if tree:
+            django_cache.set(cache_key, tree, 600)  # 10 min TTL
     
     if not tree:
         return JsonResponse({"error": "Tree not found"}, status=404)

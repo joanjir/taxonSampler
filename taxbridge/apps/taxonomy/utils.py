@@ -312,6 +312,8 @@ def invalidate_all_tree_caches():
             for rank_cut in [None, "phylum", "class", "order", "family", "species"]:
                 key = _get_tree_cache_key(limit, rank_cut)
                 cache.delete(key)
+                # Also invalidate the api/views tree_data cache
+                cache.delete(f"tree_data:{limit}:{rank_cut or 'none'}")
         logger.info("[cache] Redis tree cache invalidated")
     except Exception as e:
         logger.warning(f"[cache] Failed to invalidate Redis cache: {e}")
