@@ -48,12 +48,14 @@ class TreeIndex:
         self._count_cache: Dict[str, Dict[str, int]] = {}  # key -> {rank -> count}
     
     def build(self, root: Dict[str, Any]) -> None:
-        """Builds the index from the tree root."""
+        """Builds the index from the tree root and pre-computes species counts."""
         self._node_by_key.clear()
         self._count_cache.clear()
         
         if root:
             self._walk_and_index(root, [])
+            # Pre-compute species counts for all nodes during build
+            self._precompute_species_counts(root)
     
     def _walk_and_index(self, node: Dict[str, Any], parts: List[Dict[str, str]]) -> None:
         """Walks the tree indexing each node."""
@@ -114,6 +116,21 @@ class TreeIndex:
         for child in children:
             count += self._count_recursive(child, target_rank)
         
+        return count
+
+    def _precompute_species_counts(self, node: Dict[str, Any]) -> int:
+        """Pre-compute species counts bottom-up for all nodes during build."""
+        rank = norm_rank(node.get("rank", ""))
+        if rank in ("species", "subspecies", "variety", "form"):
+            count = 1
+        else:
+            count = 0
+
+        for child in (node.get("children") or []):
+            count += self._precompute_species_counts(child)
+
+        cache_key = f"{id(node)}"
+        self._count_cache[cache_key] = {"species": count}
         return count
 
 

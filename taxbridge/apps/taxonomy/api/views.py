@@ -46,6 +46,7 @@ def _get_cached_tree_and_index() -> Tuple[Dict[str, Any], "TreeIndex"]:
     """
     Returns the cached (tree, TreeIndex) pair.
     Rebuilds only when the cache is stale (older than _TREE_CACHE_TTL seconds).
+    Uses Redis as a fallback to avoid expensive DB queries on cold starts.
     """
     global _tree_cache, _tree_cache_ts, _tree_index_cache
 
@@ -53,9 +54,17 @@ def _get_cached_tree_and_index() -> Tuple[Dict[str, Any], "TreeIndex"]:
     if _tree_cache and _tree_index_cache and (now - _tree_cache_ts) < _TREE_CACHE_TTL:
         return _tree_cache, _tree_index_cache
 
-    tree = ExternalTaxon.objects.build_tree(
-        limit=None, rank_cut="species", with_keys=True,
-    )
+    # Try Redis first (much faster than rebuilding from DB)
+    from django.core.cache import cache as django_cache
+    redis_key = "scope_tree_full"
+    tree = django_cache.get(redis_key)
+    if not tree:
+        tree = ExternalTaxon.objects.build_tree(
+            limit=None, rank_cut="species", with_keys=True,
+        )
+        if tree:
+            django_cache.set(redis_key, tree, 600)  # 10 min
+
     index = TreeIndex()
     index.build(tree)
 

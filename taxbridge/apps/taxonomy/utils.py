@@ -314,6 +314,8 @@ def invalidate_all_tree_caches():
                 cache.delete(key)
                 # Also invalidate the api/views tree_data cache
                 cache.delete(f"tree_data:{limit}:{rank_cut or 'none'}")
+        # Invalidate scope tree Redis cache
+        cache.delete("scope_tree_full")
         logger.info("[cache] Redis tree cache invalidated")
     except Exception as e:
         logger.warning(f"[cache] Failed to invalidate Redis cache: {e}")
