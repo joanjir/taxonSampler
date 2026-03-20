@@ -438,6 +438,12 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     }
     updateCheckboxVisibility();
   }
+
+  /** Toggle checkbox visibility without clearing scope/target selections. */
+  function setSamplingCheckboxesVisible(visible) {
+    samplingMode = visible ? "node" : "";
+    updateCheckboxVisibility();
+  }
   
   function setSamplingSetupLocked(locked) {
     samplingSetupLocked = !!locked;
@@ -1547,6 +1553,7 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     getSamplingTargetKeys,
     toggleSamplingTargetKey,
     setSamplingSetupEnabled,
+    setSamplingCheckboxesVisible,
     setSamplingSetupLocked,
     resetSamplingSetup,
     loadData,

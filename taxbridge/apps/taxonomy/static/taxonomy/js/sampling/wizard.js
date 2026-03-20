@@ -134,6 +134,11 @@ export function initSamplingWizard({ renderer }) {
       el.style.display = show ? "block" : "none";
     });
 
+    // Show tree checkboxes only in step 1
+    if (renderer.setSamplingCheckboxesVisible) {
+      renderer.setSamplingCheckboxesVisible(n === 1);
+    }
+
     showWarn("");
   }
 
