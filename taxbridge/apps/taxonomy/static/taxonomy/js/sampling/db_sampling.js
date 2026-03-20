@@ -310,9 +310,15 @@ export function initDbSampling() {
       const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames, scopeKey });
       statsCache = data;
 
-      // Prefer tree-based count (consistent with Step 1 scope_info)
-      // over DB-based count (which counts distinct organism_name)
-      const totalSpecies = data.tree_species_count ?? data.total_species ?? 0;
+      // Use target-filtered count when targets exist, otherwise scope count.
+      // tree_target_species_count = sum of species under selected targets
+      // tree_species_count = all species under scope
+      // total_species = DB-based count (target-filtered via _apply_scope_filters)
+      const scopeSpecies  = data.tree_species_count ?? data.total_species ?? 0;
+      const hasTargets    = Array.isArray(targetKeys) && targetKeys.length > 0;
+      const totalSpecies  = hasTargets
+        ? (data.tree_target_species_count ?? data.total_species ?? 0)
+        : scopeSpecies;
       
       if (dom.statMatched)  dom.statMatched.textContent  = totalSpecies;
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;

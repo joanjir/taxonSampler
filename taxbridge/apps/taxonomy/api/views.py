@@ -1448,12 +1448,19 @@ def sampling_stats(request):
     try:
         tree, index = _get_cached_tree_and_index()
         if tree:
-            if scope_key:
-                node = index.get_node(scope_key)
-                if node:
-                    stats["tree_species_count"] = index.count_rank_under(node, "species")
-            else:
-                stats["tree_species_count"] = index.count_rank_under(tree, "species")
+            scope_node = index.get_node(scope_key) if scope_key else tree
+            if scope_node:
+                scope_count = index.count_rank_under(scope_node, "species")
+                stats["tree_species_count"] = scope_count
+
+                # When targets are selected, also compute the target-filtered count
+                if target_keys:
+                    target_total = 0
+                    for tk in target_keys:
+                        tnode = index.get_node(tk)
+                        if tnode:
+                            target_total += index.count_rank_under(tnode, "species")
+                    stats["tree_target_species_count"] = target_total
     except Exception:
         pass  # Non-critical; frontend falls back to total_species
 
