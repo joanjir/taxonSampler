@@ -98,6 +98,8 @@ export function createSamplingFiltersController({ renderer }) {
     dom.targetsEmptyHint = document.getElementById("targetsEmptyHint");
     dom.targetsWarn = document.getElementById("targetsWarn");
     dom.targetsWarnText = document.getElementById("targetsWarnText");
+    dom.targetsSummary = document.getElementById("targetsSummary");
+    dom.targetsSummaryText = document.getElementById("targetsSummaryText");
 
     // Old Step 2 DOM refs removed — DB sampling module handles Step 2 now
   }
@@ -324,12 +326,42 @@ export function createSamplingFiltersController({ renderer }) {
         dom.richScopeBadge.textContent = data.scope ? `${data.scope.species_count ?? "?"}` : "";
       }
 
-      // Update Targets stats (hidden, kept for compatibility)
-      if (dom.richTargetsCount) {
-        if (data.targets?.length) {
-          const total = data.targets.reduce((sum, t) => sum + (t.species_count || 0), 0);
-          dom.richTargetsCount.textContent = `${data.targets.length} (${total})`;
-        } else {
+      // Store species counts in wizard state for steps 2/3
+      const wiz = window.__samplingWizard;
+      if (wiz) {
+        wiz.state.scopeSpeciesCount = data.scope?.species_count ?? 0;
+      }
+
+      // Update Targets stats
+      if (data.targets?.length) {
+        const totalTarget = data.targets.reduce((sum, t) => sum + (t.species_count || 0), 0);
+        const scopeTotal = data.scope?.species_count ?? 0;
+        
+        // Store in wizard state
+        if (wiz) {
+          wiz.state.targetSpeciesTotal = totalTarget;
+        }
+
+        // Show visible target summary "56 of 100 spp"
+        if (dom.targetsSummary && dom.targetsSummaryText) {
+          dom.targetsSummaryText.textContent = scopeTotal
+            ? `${totalTarget.toLocaleString()} of ${scopeTotal.toLocaleString()} spp`
+            : `${totalTarget.toLocaleString()} spp`;
+          dom.targetsSummary.classList.remove("d-none");
+        }
+        
+        // Hidden element kept for compatibility
+        if (dom.richTargetsCount) {
+          dom.richTargetsCount.textContent = `${data.targets.length} (${totalTarget})`;
+        }
+      } else {
+        if (wiz) {
+          wiz.state.targetSpeciesTotal = 0;
+        }
+        if (dom.targetsSummary) {
+          dom.targetsSummary.classList.add("d-none");
+        }
+        if (dom.richTargetsCount) {
           dom.richTargetsCount.textContent = "";
         }
       }
@@ -349,12 +381,26 @@ export function createSamplingFiltersController({ renderer }) {
           dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
         }
       }
+
+      // Re-render step 2/3 summary if user already advanced
+      if (wiz && (wiz.state.step === 2 || wiz.state.step === 3)) {
+        wiz.updateStepSummary(wiz.state.step);
+      }
     } catch (err) {
       console.error("[sampling] Error fetching richness:", err);
-      // Show error state
-      if (dom.scopeSpeciesCount) {
-        dom.scopeSpeciesCount.textContent = "error";
+      // Reset loading UI so it doesn't stay stuck on "..."/"Loading…"
+      if (dom.scopeLabel) {
+        dom.scopeLabel.textContent = scopeKey ? "(error loading)" : "Select a node from the tree";
       }
+      if (dom.scopeSpeciesCount) {
+        dom.scopeSpeciesCount.textContent = "";
+        dom.scopeSpeciesCount.classList.add("d-none");
+      }
+      if (dom.richActiveLine) {
+        dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
+      }
+      // Allow retry on next interaction
+      lastRichnessRequest = null;
     }
   }
 

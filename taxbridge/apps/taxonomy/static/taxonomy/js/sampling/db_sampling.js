@@ -44,6 +44,8 @@ function parseScopeKey(scopeKey) {
     if (i < 0) continue;
     const rank = seg.slice(0, i).trim().toLowerCase();
     const name = seg.slice(i + 1).trim();
+    // Skip synthetic tree root "dataset:Root"
+    if (rank === "dataset") continue;
     if (rank && name) filters[rank] = name;
   }
   return filters;
@@ -314,11 +316,12 @@ export function initDbSampling() {
       
       if (dom.statMatched)  dom.statMatched.textContent  = totalSpecies;
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;
-      if (dom.availableCount) dom.availableCount.textContent = totalSpecies;
+      if (dom.availableCount) dom.availableCount.textContent = totalSpecies.toLocaleString();
       
       // Limit max sample size to available species
       if (dom.maxSampleSize) {
         dom.maxSampleSize.max = totalSpecies;
+        dom.maxSampleSize.placeholder = totalSpecies.toLocaleString();
         // If current value exceeds available, reset it
         const currentVal = parseInt(dom.maxSampleSize.value, 10) || 0;
         if (currentVal > totalSpecies && currentVal !== 0) {
@@ -333,6 +336,7 @@ export function initDbSampling() {
       console.error("[db_sampling] Stats error:", err);
       if (dom.statMatched)  dom.statMatched.textContent  = "err";
       if (dom.statKingdoms) dom.statKingdoms.textContent = "err";
+      if (dom.availableCount) dom.availableCount.textContent = "—";
     }
   }
 
@@ -342,12 +346,21 @@ export function initDbSampling() {
     const hasScope   = Object.keys(scopeFilters).length > 0;
     const hasTargets = Array.isArray(targetKeys) && targetKeys.length > 0;
 
+    // Get species counts from wizard state (populated by filters.js)
+    const wiz = window.__samplingWizard;
+    const scopeCount  = wiz?.state?.scopeSpeciesCount || 0;
+    const targetCount = wiz?.state?.targetSpeciesTotal || 0;
+
     let parts = [];
     if (hasScope) {
-      parts.push(esc(scopeLabel(scopeFilters)));
+      parts.push(`<strong>${esc(scopeLabel(scopeFilters))}</strong>`);
+      if (scopeCount) parts.push(`${scopeCount.toLocaleString()} spp`);
     }
     if (hasTargets) {
-      parts.push(`${targetKeys.length} target${targetKeys.length > 1 ? 's' : ''}`);
+      parts.push(`<span class="text-azure">${targetKeys.length} target${targetKeys.length > 1 ? 's' : ''}</span>`);
+      if (targetCount && scopeCount) {
+        parts.push(`${targetCount.toLocaleString()} of ${scopeCount.toLocaleString()} spp`);
+      }
     }
 
     let html;
@@ -356,7 +369,7 @@ export function initDbSampling() {
               <span class="small">${parts.join(' · ')}</span>`;
     } else {
       html = `<i class="fa-solid fa-crosshairs text-muted me-1"></i>
-              <span class="small text-muted">All species (${total ?? 0})</span>`;
+              <span class="small text-muted">All species (${(total ?? 0).toLocaleString()})</span>`;
     }
     dom.scopeInfo.innerHTML = html;
     dom.scopeInfo.classList.remove("d-none");

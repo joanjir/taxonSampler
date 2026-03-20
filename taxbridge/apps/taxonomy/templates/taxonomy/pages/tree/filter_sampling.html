@@ -113,6 +113,11 @@
               <div id="targetsChips" class="d-flex flex-wrap gap-1" style="min-height: 24px;">
                 <span class="text-muted small" id="targetsEmptyHint">Entire scope will be used</span>
               </div>
+              <!-- Visible target species summary: "56 of 100 spp" -->
+              <div id="targetsSummary" class="small text-muted mt-1 d-none">
+                <i class="fa-solid fa-chart-pie me-1 text-azure"></i>
+                <span id="targetsSummaryText"></span>
+              </div>
             </div>
           </div>
 
@@ -224,6 +229,12 @@
               <i class="fa-solid fa-info-circle me-1"></i>
               <strong>Step 3 of 3:</strong> Optional assembly quality filtering. You can apply filters to refine results or continue without filtering.
             </div>
+          </div>
+
+          <!-- Step 1 scope/target summary -->
+          <div id="asmScopeSummary" class="sam-scope-indicator mb-2 d-none">
+            <i class="fa-solid fa-crosshairs text-green me-1"></i>
+            <span class="small text-muted"></span>
           </div>
 
           <!-- Step 2 result indicator -->

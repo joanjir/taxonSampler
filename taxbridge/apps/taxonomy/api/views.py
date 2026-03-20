@@ -31,6 +31,7 @@ from apps.taxonomy.utils import (
 from apps.taxonomy.sampling.service import run_sampling, TreeIndex
 
 import time as _time
+import threading as _threading
 
 # =============================================================================
 # In-memory tree cache (avoids rebuilding on every scope-info request)
@@ -158,6 +159,15 @@ def tree_data(request):
     # Compute tree_version so frontend can detect data changes
     from apps.taxonomy.tree.views import _get_tree_version
     
+    # Pre-warm the scope tree cache in background so scope-info is fast
+    if not _tree_cache:
+        def _warm():
+            try:
+                _get_cached_tree_and_index()
+            except Exception:
+                logger.debug("[tree_cache] background warm-up failed", exc_info=True)
+        _threading.Thread(target=_warm, daemon=True).start()
+
     return JsonResponse({
         "tree": tree,
         "limit": limit,

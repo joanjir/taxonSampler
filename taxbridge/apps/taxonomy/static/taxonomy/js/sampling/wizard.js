@@ -43,8 +43,10 @@ export function initSamplingWizard({ renderer }) {
     step: 1,
     scopeKey: "",
     scopeLabel: "",
+    scopeSpeciesCount: 0,
     targetKeys: [],
     targetLabels: new Map(),
+    targetSpeciesTotal: 0,
     samplingExecuted: false,  // Track if sampling was run in STEP 2
   };
 
@@ -139,7 +141,68 @@ export function initSamplingWizard({ renderer }) {
       renderer.setSamplingCheckboxesVisible(n === 1);
     }
 
+    // Update scope/target summary in steps 2 and 3
+    if (n === 2 || n === 3) {
+      updateStepSummary(n);
+    }
+
     showWarn("");
+  }
+
+  /** Update the scope/target summary indicator in step 2 or 3. */
+  function updateStepSummary(stepNum) {
+    const infoId  = stepNum === 2 ? "dbScopeInfo" : "asmScopeSummary";
+    const infoEl  = document.getElementById(infoId);
+    if (!infoEl) return;
+
+    const hasScope   = !!state.scopeKey;
+    const hasTargets = state.targetKeys.length > 0;
+
+    // Determine effective species count
+    const scopeCount  = state.scopeSpeciesCount || 0;
+    const targetCount = state.targetSpeciesTotal || 0;
+    const effectiveCount = hasTargets ? targetCount : scopeCount;
+    const countsLoaded = scopeCount > 0;
+
+    let parts = [];
+    if (hasScope) {
+      parts.push(`<strong>${escapeHtml(state.scopeLabel || state.scopeKey)}</strong>`);
+      parts.push(countsLoaded
+        ? `<span class="text-muted">${scopeCount.toLocaleString()} spp</span>`
+        : `<span class="text-muted">…</span>`);
+    }
+    if (hasTargets) {
+      parts.push(`<span class="text-azure">${state.targetKeys.length} target${state.targetKeys.length > 1 ? "s" : ""}</span>`);
+      if (countsLoaded) {
+        parts.push(`<span class="text-muted">${targetCount.toLocaleString()} of ${scopeCount.toLocaleString()} spp</span>`);
+      }
+    }
+
+    let html;
+    if (parts.length) {
+      const icon = stepNum === 2
+        ? '<i class="fa-solid fa-crosshairs text-green me-1"></i>'
+        : '<i class="fa-solid fa-dna text-azure me-1"></i>';
+      html = `${icon}<span class="small">${parts.join(' · ')}</span>`;
+    } else {
+      html = `<i class="fa-solid fa-crosshairs text-muted me-1"></i>
+              <span class="small text-muted">All species</span>`;
+    }
+    infoEl.innerHTML = html;
+    infoEl.classList.remove("d-none");
+
+    // Also update the "Available" count and max in step 2,
+    // but only when we actually have data (avoid writing "0" over "—")
+    if (stepNum === 2 && effectiveCount > 0) {
+      const avail = document.getElementById("dbAvailableCount");
+      if (avail) avail.textContent = effectiveCount.toLocaleString();
+
+      const maxInput = document.getElementById("dbMaxSampleSize");
+      if (maxInput) {
+        maxInput.max = effectiveCount;
+        maxInput.placeholder = effectiveCount.toLocaleString();
+      }
+    }
   }
 
   // ------------------------------------------------------------------
@@ -320,7 +383,9 @@ export function initSamplingWizard({ renderer }) {
       setScope("", "");
       state.targetKeys = [];
       state.targetLabels.clear();
-      state.samplingExecuted = false;  // Reset sampling flag
+      state.scopeSpeciesCount = 0;
+      state.targetSpeciesTotal = 0;
+      state.samplingExecuted = false;
       renderTargets();
       showWarn("");
       try { sessionStorage.removeItem("taxbridge_dbsampling"); } catch (_) {}
@@ -378,7 +443,7 @@ export function initSamplingWizard({ renderer }) {
     if (nextBtn) nextBtn.disabled = false;
   }
 
-  const api = { state, reset, setStep, enableWizard, setScope, addTarget, clearTargets, markSamplingExecuted };
+  const api = { state, reset, setStep, enableWizard, setScope, addTarget, clearTargets, markSamplingExecuted, updateStepSummary };
 
   // Expose globally for integration with samplingCtl
   window.__samplingWizard = api;
