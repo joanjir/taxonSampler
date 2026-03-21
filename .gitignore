@@ -96,6 +96,18 @@ taxbridge/data/taxdump/
 ESPECIES_SIN_DUPLICADOS.md
 
 # ===============================
+# Database dumps / backups
+# ===============================
+*.dump
+*.sql
+!taxbridge/apps/taxonomy/migrations/*.py
+
+# ===============================
+# Logs
+# ===============================
+taxbridge/logs/
+
+# ===============================
 # Archive / old files
 # ===============================
 archive/

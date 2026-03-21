@@ -290,10 +290,12 @@ function initAddOrganismSelect2() {
   const $sel = $('#selAddOrgSelect');
   if (!$sel.length) return;
   
-  // Destroy previous instance if exists
+  // Destroy previous instance and unbind stale handlers
   if ($sel.hasClass('select2-hidden-accessible')) {
+    $sel.off('select2:select');
     $sel.select2('destroy');
   }
+  $sel.empty();                     // remove old <option> elements
   
   const unselectedList = getUnselectedSpecies();
   
@@ -341,7 +343,7 @@ function initAddOrganismSelect2() {
     }
   });
   
-  // On selection, add organism and clear the select
+  // On selection, add organism, clear the dropdown value, and update counter
   $sel.on('select2:select', function(e) {
     const orgName = e.params.data.id;
     addOrganismToSelection(orgName);
@@ -415,13 +417,20 @@ function addOrganismToSelection(organismName) {
   // Update UI
   selMgr.setLastSampling(currentResult);
   selMgr.repaintSelection();
+
+  // Update subtitle count
+  const sub = document.getElementById("selSubtitle");
+  if (sub) {
+    const txt = sub.textContent || "";
+    sub.textContent = txt.replace(/\(\d+ species\)/, `(${currentResult.species.length} species)`);
+  }
   
   // Update phylo tree
   if (phyloTree) {
     phyloTree.generate(currentResult);
   }
   
-  // Refresh Select2 dropdown (remove added species from options)
+  // Refresh Select2 dropdown (remove added species from options, clear value)
   initAddOrganismSelect2();
   
   console.log(`[main] Added ${organismName} to selection. Total: ${currentResult.total_selected}`);
@@ -438,6 +447,13 @@ window.removeOrganismFromSelection = function(organismName) {
   // Update UI
   selMgr.setLastSampling(currentResult);
   selMgr.repaintSelection();
+
+  // Update subtitle count
+  const sub = document.getElementById("selSubtitle");
+  if (sub) {
+    const txt = sub.textContent || "";
+    sub.textContent = txt.replace(/\(\d+ species\)/, `(${currentResult.species.length} species)`);
+  }
   
   // Update phylo tree
   if (phyloTree) {
@@ -456,6 +472,13 @@ window.addEventListener("selection:changed", (ev) => {
   if (!result) return;
   
   console.log("[main] selection:changed →", result.total_selected, "species");
+
+  // Update subtitle count
+  const sub = document.getElementById("selSubtitle");
+  if (sub) {
+    const txt = sub.textContent || "";
+    sub.textContent = txt.replace(/\(\d+ species\)/, `(${result.species?.length || 0} species)`);
+  }
   
   // Update phylo tree
   if (phyloTree && result.species?.length) {
@@ -705,21 +728,27 @@ function applyTreeData(response, isFromCache = false) {
   setCrumb(ui.crumb, "ROOT");
   tooltip.hide();
 
-  selMgr.clearSampling();
-  selMgr.setBadgeMode("Manual", false);
+  // Only reset sampling/wizard state if no active sampling or import result
+  // exists.  Background tree refreshes (cache expiry, version change) call
+  // applyTreeData() asynchronously and would otherwise wipe the user's
+  // imported configuration.
+  if (!selMgr.getLastSampling()) {
+    selMgr.clearSampling();
+    selMgr.setBadgeMode("Manual", false);
 
-  const samplingSel = document.getElementById("samplingRoot");
-  if (samplingSel) {
-    samplingSel.value = "";
-    renderer.setSamplingMode?.("");
-  }
+    const samplingSel = document.getElementById("samplingRoot");
+    if (samplingSel) {
+      samplingSel.value = "";
+      renderer.setSamplingMode?.("");
+    }
 
-  samplingCtl.resetDefaults?.();
-  samplingCtl.emitSamplingConfigChanged?.();
+    samplingCtl.resetDefaults?.();
+    samplingCtl.emitSamplingConfigChanged?.();
 
-  // Only reset wizard if user hasn't navigated beyond Step 1
-  if (window.__samplingWizard?.state?.step <= 1) {
-    window.__samplingWizard.reset?.();
+    // Only reset wizard if user hasn't navigated beyond Step 1
+    if (window.__samplingWizard?.state?.step <= 1) {
+      window.__samplingWizard.reset?.();
+    }
   }
 
   selMgr.repaintSelection();

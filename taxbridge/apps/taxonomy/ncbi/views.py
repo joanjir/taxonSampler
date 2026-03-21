@@ -1482,7 +1482,7 @@ def api_ncbi_download_proxy(request):
 
     # ── Stream back to browser ──────────────────────────────────
     def _chunks():
-        for chunk in upstream.iter_content(chunk_size=65_536):
+        for chunk in upstream.iter_content(chunk_size=524_288):
             yield chunk
 
     response = StreamingHttpResponse(_chunks(), content_type="application/zip")
