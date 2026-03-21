@@ -355,13 +355,19 @@ echo "  Species: $total"
 echo "  Output:  ${folder}/"
 echo "================================================"
 
+MAX_PARALLEL=3
 idx=0
 for acc in "\${accessions[@]}"; do
   idx=$((idx+1))
   echo "  [$idx/$total] Downloading $acc ..."
   url="${apiTypes.length ? `https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/$acc/download?${qsTypes}&hydrated=FULLY_HYDRATED` : `https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/$acc/download?hydrated=FULLY_HYDRATED`}"
-  curl -L "$url" -o "${folder}/\${acc}.zip"
+  curl -sL "$url" -o "${folder}/\${acc}.zip" &
+  # Wait if we already have MAX_PARALLEL downloads running
+  if [ $(jobs -r | wc -l) -ge $MAX_PARALLEL ]; then
+    wait -n
+  fi
 done
+wait  # wait for remaining downloads
 
 echo ""
 echo "Extracting downloaded ZIPs..."
