@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.taxonomy.models import ExternalTaxon, Taxon
@@ -1549,7 +1548,6 @@ def organisms_search(request):
         return JsonResponse({"organisms": list(organisms)})
 
 
-@csrf_exempt
 @require_POST
 def sampling_execute(request):
     """
@@ -1713,7 +1711,6 @@ def sampling_configs(request):
 # Newick / Phylo Tree generation from DB Sampling results
 # ═══════════════════════════════════════════════════════════════════════
 
-@csrf_exempt
 @require_POST
 def sampling_newick(request):
     """
@@ -1903,7 +1900,6 @@ def assembly_fields(request):
     return JsonResponse(get_filter_fields())
 
 
-@csrf_exempt
 @require_POST
 def assembly_stats(request):
     """
@@ -1933,7 +1929,6 @@ def assembly_stats(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-@csrf_exempt
 @require_POST
 def assembly_filter(request):
     """

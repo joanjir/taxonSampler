@@ -21,7 +21,6 @@ from django.conf import settings
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.taxonomy.models import (
@@ -174,7 +173,6 @@ def taxon_sync_dashboard(request):
 # API Endpoints
 # ============================================================
 
-@csrf_exempt
 @require_POST
 def api_start_taxon_sync(request):
     """Start a new taxon sync via Celery. Admin only."""
@@ -291,7 +289,6 @@ def api_taxon_sync_status(request, sync_id: int):
     })
 
 
-@csrf_exempt
 @require_POST
 def api_cancel_taxon_sync(request, sync_id: int):
     """Cancel a pending or running sync. Admin only."""
@@ -829,7 +826,6 @@ def _safe_int(val, default: int = 0) -> int:
 # Discovery API Endpoints
 # ============================================================
 
-@csrf_exempt
 @require_POST
 def api_start_discovery(request):
     """Start a manual species discovery scan. Admin only."""
@@ -974,7 +970,6 @@ def api_discovered_species(request):
     })
 
 
-@csrf_exempt
 @require_POST
 def api_import_discovered(request, species_id: int):
     """Import a discovered species into the main database. Admin only."""
@@ -1028,7 +1023,6 @@ def api_import_discovered(request, species_id: int):
     })
 
 
-@csrf_exempt
 @require_POST
 def api_dismiss_discovered(request, species_id: int):
     """Dismiss a discovered species (not interesting). Admin only."""
@@ -1048,7 +1042,6 @@ def api_dismiss_discovered(request, species_id: int):
     return JsonResponse({"success": True, "taxid": sp.taxid})
 
 
-@csrf_exempt
 @require_POST
 def api_bulk_import_discovered(request):
     """Bulk import all pending discovered species: fetch GCF genomes + COL match. Admin only."""
@@ -1415,7 +1408,6 @@ def _safe_int(val, default=None):
 _VALID_TYPES = {"GENOME_FASTA", "PROT_FASTA", "GENOME_GBFF"}
 
 
-@csrf_exempt
 @require_POST
 def api_ncbi_download_proxy(request):
     """
