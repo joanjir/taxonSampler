@@ -53,23 +53,16 @@ export function initSamplingWizard({ renderer }) {
   // Track the last clicked tree node so the wizard can use it as scope.
   // The renderer dispatches "tree:active-changed" on every node click.
   let _lastActiveNode = null;
+  // Guard flag to prevent re-entrant loop when syncing targets wizard↔renderer
+  let _syncingFromRenderer = false;
   window.addEventListener("tree:active-changed", (ev) => {
     const d = ev.detail;
     if (d?.key) {
       _lastActiveNode = { key: d.key, rank: d.rank || "", name: d.name || "" };
-      // Auto-add as target if: 
-      // - User is in STEP 1
-      // - A scope is already selected
-      // - The node is a valid descendant
-      // - It's not the scope itself
-      // - It's not a species/subspecies (those are leaf nodes)
-      if (state.step === 1 && state.scopeKey && d.key !== state.scopeKey) {
-        const rank = (d.rank || "").toLowerCase();
-        if (rank !== "species" && rank !== "subspecies") {
-          // Silently auto-add it
-          addTarget(d.key, `${d.rank || "node"}: ${d.name || d.key}`);
-        }
-      }
+      // NOTE: Do NOT auto-add targets here. The checkbox handler (CASE 3)
+      // fires toggleSamplingTargetKey() right after this event, so auto-adding
+      // here would cause the toggle to REMOVE the target immediately.
+      // Targets are added via checkbox clicks or the "Add target" button.
     }
   });
 
@@ -195,7 +188,14 @@ export function initSamplingWizard({ renderer }) {
     // but only when we actually have data (avoid writing "0" over "—")
     if (stepNum === 2 && effectiveCount > 0) {
       const avail = document.getElementById("dbAvailableCount");
-      if (avail) avail.textContent = effectiveCount.toLocaleString();
+      if (avail) {
+        if (hasTargets && scopeCount > 0 && effectiveCount < scopeCount) {
+          avail.textContent =
+            `${effectiveCount.toLocaleString()} of ${scopeCount.toLocaleString()}`;
+        } else {
+          avail.textContent = effectiveCount.toLocaleString();
+        }
+      }
 
       const maxInput = document.getElementById("dbMaxSampleSize");
       if (maxInput) {
@@ -285,6 +285,9 @@ export function initSamplingWizard({ renderer }) {
       state.targetLabels.set(a.key, `${a.rank || "node"}: ${a.name || a.key}`);
       renderTargets();
       showWarn("");
+      // Sync renderer
+      _syncingFromRenderer = true;
+      try { renderer.addSamplingTargetKey?.(a.key); } finally { _syncingFromRenderer = false; }
     }
   }
 
@@ -298,6 +301,9 @@ export function initSamplingWizard({ renderer }) {
       state.targetKeys.push(targetKey);
       state.targetLabels.set(targetKey, targetLabel || targetKey);
       renderTargets();
+      // Sync renderer so tree checkboxes stay in sync
+      _syncingFromRenderer = true;
+      try { renderer.addSamplingTargetKey?.(targetKey); } finally { _syncingFromRenderer = false; }
     }
   }
 
@@ -306,6 +312,13 @@ export function initSamplingWizard({ renderer }) {
     state.targetKeys = [];
     state.targetLabels.clear();
     renderTargets();
+    // Sync renderer
+    _syncingFromRenderer = true;
+    try {
+      for (const k of renderer.getSamplingTargetKeys?.() || []) {
+        renderer.removeSamplingTargetKey?.(k);
+      }
+    } finally { _syncingFromRenderer = false; }
   }
 
   // ------------------------------------------------------------------
@@ -362,6 +375,13 @@ export function initSamplingWizard({ renderer }) {
     state.targetLabels.clear();
     renderTargets();
     showWarn("");
+    // Clear renderer targets too
+    _syncingFromRenderer = true;
+    try {
+      for (const k of renderer.getSamplingTargetKeys?.() || []) {
+        renderer.removeSamplingTargetKey?.(k);
+      }
+    } finally { _syncingFromRenderer = false; }
   });
 
   targetsChips.addEventListener("click", (e) => {
@@ -371,6 +391,9 @@ export function initSamplingWizard({ renderer }) {
     state.targetKeys = state.targetKeys.filter((x) => x !== k);
     state.targetLabels.delete(k);
     renderTargets();
+    // Sync renderer
+    _syncingFromRenderer = true;
+    try { renderer.removeSamplingTargetKey?.(k); } finally { _syncingFromRenderer = false; }
   });
 
   // ------------------------------------------------------------------
@@ -406,25 +429,43 @@ export function initSamplingWizard({ renderer }) {
   // Listen for tree loaded event
   window.addEventListener("tree:loaded", enableWizard, { once: true });
 
-  // Listen for scope changes from old filters.js code
-  window.addEventListener("sampling:scope-changed", () => {
-    // Get the new scope from renderer if available
-    const newScope = window.__samplingWizard?.state?.scopeKey;
-    // Clear out-of-scope targets
-    if (newScope && state.targetKeys.length) {
-      const kept = [];
-      for (const k of state.targetKeys) {
-        if (isDescendantPath(k, newScope)) {
-          kept.push(k);
-        } else {
-          state.targetLabels.delete(k);
-        }
-      }
-      if (kept.length !== state.targetKeys.length) {
-        state.targetKeys = kept;
-        renderTargets();
+  // Sync wizard targetKeys when renderer fires targets-changed (e.g. checkbox)
+  window.addEventListener("sampling:targets-changed", (ev) => {
+    if (_syncingFromRenderer) return; // prevent re-entry
+    const rendererKeys = ev.detail?.keys || [];
+    // Sync: adopt renderer's keys as truth, keep labels for known keys
+    const newKeys = [];
+    const newKeySet = new Set(rendererKeys);
+    for (const k of rendererKeys) {
+      newKeys.push(k);
+      if (!state.targetLabels.has(k)) {
+        // Extract label from key (e.g. "dataset:Root|kingdom:Fungi" → "kingdom: Fungi")
+        const parts = k.split("|");
+        const last = parts[parts.length - 1] || k;
+        const ci = last.indexOf(":");
+        state.targetLabels.set(k, ci >= 0 ? `${last.slice(0, ci)}: ${last.slice(ci + 1)}` : k);
       }
     }
+    // Clean up labels for keys that were pruned
+    for (const k of state.targetLabels.keys()) {
+      if (!newKeySet.has(k)) state.targetLabels.delete(k);
+    }
+    state.targetKeys = newKeys;
+    renderTargets();
+  });
+
+  // Listen for scope changes from old filters.js code
+  window.addEventListener("sampling:scope-changed", (ev) => {
+    const newKey = ev.detail?.key || "";
+    // Derive label from rightmost segment: "domain:Eukaryota" → "domain: Eukaryota"
+    let label = "";
+    if (newKey) {
+      const parts = newKey.split("|");
+      const last  = parts[parts.length - 1] || "";
+      const ci    = last.indexOf(":");
+      label = ci >= 0 ? `${last.slice(0, ci)}: ${last.slice(ci + 1)}` : newKey;
+    }
+    setScope(newKey, label);
   });
   window.addEventListener("db-sampling:final", (_ev) => {
     state.samplingExecuted = true;

@@ -310,19 +310,32 @@ export function initDbSampling() {
       const data = await apiDbSamplingStats({ scopeFilters, targetKeys, speciesNames, scopeKey });
       statsCache = data;
 
-      // Use target-filtered count when targets exist, otherwise scope count.
-      // tree_target_species_count = sum of species under selected targets
-      // tree_species_count = all species under scope
-      // total_species = DB-based count (target-filtered via _apply_scope_filters)
-      const scopeSpecies  = data.tree_species_count ?? data.total_species ?? 0;
-      const hasTargets    = Array.isArray(targetKeys) && targetKeys.length > 0;
-      const totalSpecies  = hasTargets
-        ? (data.tree_target_species_count ?? data.total_species ?? 0)
+      // Use wizard state for species counts (populated by Step 1's repaintRichnessPanel)
+      // This ensures consistency between Step 1 badge and Step 2 Available.
+      // Fall back to API data if wizard state is not yet populated.
+      const wiz = window.__samplingWizard;
+      const wizScopeCount  = wiz?.state?.scopeSpeciesCount || 0;
+      const wizTargetCount = wiz?.state?.targetSpeciesTotal || 0;
+      const hasTargets     = Array.isArray(targetKeys) && targetKeys.length > 0;
+
+      // Effective "available" species count for sampling
+      const scopeSpecies = wizScopeCount || data.tree_species_count || data.total_species || 0;
+      const totalSpecies = hasTargets
+        ? (wizTargetCount || data.tree_target_species_count || data.total_species || 0)
         : scopeSpecies;
       
       if (dom.statMatched)  dom.statMatched.textContent  = totalSpecies;
       if (dom.statKingdoms) dom.statKingdoms.textContent = (data.kingdoms || []).length;
-      if (dom.availableCount) dom.availableCount.textContent = totalSpecies.toLocaleString();
+
+      // Update "Available" line with context
+      if (dom.availableCount) {
+        if (hasTargets && scopeSpecies > 0 && totalSpecies < scopeSpecies) {
+          dom.availableCount.textContent =
+            `${totalSpecies.toLocaleString()} of ${scopeSpecies.toLocaleString()}`;
+        } else {
+          dom.availableCount.textContent = totalSpecies.toLocaleString();
+        }
+      }
       
       // Limit max sample size to available species
       if (dom.maxSampleSize) {

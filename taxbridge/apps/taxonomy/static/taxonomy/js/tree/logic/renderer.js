@@ -382,13 +382,43 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     return Array.from(samplingTargetKeys);
   }
   
+  /** Remove any existing targets that are ancestors or descendants of `key`. */
+  function _pruneRelatedTargets(key) {
+    const prefix = key + "|";
+    for (const existing of [...samplingTargetKeys]) {
+      // existing is ancestor of key  → remove it (user is narrowing)
+      if (key.startsWith(existing + "|")) { samplingTargetKeys.delete(existing); continue; }
+      // existing is descendant of key → remove it (user is broadening)
+      if (existing.startsWith(prefix))   { samplingTargetKeys.delete(existing); }
+    }
+  }
+
   function toggleSamplingTargetKey(key) {
     if (!key) return;
+    console.log('[renderer] toggleSamplingTargetKey:', key, 'currently has:', [...samplingTargetKeys]);
     if (samplingTargetKeys.has(key)) {
       samplingTargetKeys.delete(key);
+      console.log('[renderer] removed target, remaining:', [...samplingTargetKeys]);
     } else {
+      _pruneRelatedTargets(key);
       samplingTargetKeys.add(key);
+      console.log('[renderer] added target (after pruning), result:', [...samplingTargetKeys]);
     }
+    if (root) update(root);
+    window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: Array.from(samplingTargetKeys) } }));
+  }
+
+  function addSamplingTargetKey(key) {
+    if (!key || samplingTargetKeys.has(key)) return;
+    _pruneRelatedTargets(key);
+    samplingTargetKeys.add(key);
+    if (root) update(root);
+    window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: Array.from(samplingTargetKeys) } }));
+  }
+
+  function removeSamplingTargetKey(key) {
+    if (!key || !samplingTargetKeys.has(key)) return;
+    samplingTargetKeys.delete(key);
     if (root) update(root);
     window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: Array.from(samplingTargetKeys) } }));
   }
@@ -831,18 +861,15 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
             if (!isNodeCladeFull(hit.node)) {
               return;
             }
-            setSamplingRootKey(key, { source: d, center: true, fitOnClear: false });
+            setSamplingScopeKey(key);
             smartFitIfNeeded();
             return;
           }
 
           // CASE 2: Click on current scope => clear scope
           if (key === samplingRootKey) {
-            // Also clear targets
-            samplingTargetKeys.clear();
-            setSamplingRootKey(null, { source: d, center: false, fitOnClear: true });
+            setSamplingScopeKey(null);
             smartFitIfNeeded();
-            window.dispatchEvent(new CustomEvent("sampling:targets-changed", { detail: { keys: [] } }));
             return;
           }
 
@@ -1552,6 +1579,8 @@ export function createTreeRenderer({ mount, tooltip, onSelectionChange, onCrumbC
     setSamplingScopeKey,
     getSamplingTargetKeys,
     toggleSamplingTargetKey,
+    addSamplingTargetKey,
+    removeSamplingTargetKey,
     setSamplingSetupEnabled,
     setSamplingCheckboxesVisible,
     setSamplingSetupLocked,

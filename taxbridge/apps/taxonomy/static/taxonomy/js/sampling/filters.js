@@ -254,6 +254,7 @@ export function createSamplingFiltersController({ renderer }) {
 
   // Cache for richness data to avoid excessive API calls
   let lastRichnessRequest = null;
+  let _lastCoreSignature = null;
   
   const repaintRichnessPanelDebounced = debounce(async () => {
     await repaintRichnessPanel();
@@ -264,49 +265,64 @@ export function createSamplingFiltersController({ renderer }) {
     const targetKeys = currentTargetKeys();
     const activeKey = activeNode?.key || null;
     
-    // Quick update: Show loading state
+    console.log('[filters] repaintRichnessPanel called:', { scopeKey, targetKeys, activeKey, rootModeIsNode: rootModeIsNode() });
+    
+    // Separate "core" signature (scope+targets → drives API call)
+    // from "full" signature (includes activeKey → drives active line)
+    const coreSignature = JSON.stringify({ scopeKey, targetKeys: [...targetKeys].sort() });
+    const fullSignature = JSON.stringify({ scopeKey, targetKeys: [...targetKeys].sort(), activeKey });
+    
+    // If everything is identical, skip entirely
+    if (fullSignature === lastRichnessRequest) {
+      console.log('[filters] skipping — fullSignature unchanged');
+      return;
+    }
+    
+    // If only activeKey changed, update the active line locally (no API call)
+    if (coreSignature === _lastCoreSignature) {
+      console.log('[filters] only activeKey changed — local update');
+      lastRichnessRequest = fullSignature;
+      _updateActiveLineLocal(scopeKey, targetKeys, activeKey);
+      return;
+    }
+    console.log('[filters] new coreSignature — making API call');
+    
+    _lastCoreSignature = coreSignature;
+    lastRichnessRequest = fullSignature;
+    
+    // Show loading state
     if (dom.scopeLabel) {
       dom.scopeLabel.textContent = scopeKey ? "..." : "Select a node from the tree";
     }
     if (dom.scopeSpeciesCount) {
-      dom.scopeSpeciesCount.textContent = scopeKey ? "..." : "";
-      dom.scopeSpeciesCount.classList.add("d-none");
-    }
-    if (dom.richTargetsCount) {
-      dom.richTargetsCount.textContent = targetKeys.length > 0 ? `${targetKeys.length} clades` : "";
+      if (scopeKey) {
+        dom.scopeSpeciesCount.textContent = "...";
+        dom.scopeSpeciesCount.classList.remove("d-none");
+      } else {
+        dom.scopeSpeciesCount.textContent = "";
+        dom.scopeSpeciesCount.classList.add("d-none");
+      }
     }
     if (dom.richActiveLine) {
-      dom.richActiveLine.innerHTML = activeNode?.key
-        ? `<span class="small text-muted">Loading…</span>`
+      dom.richActiveLine.innerHTML = activeKey
+        ? '<span class="small text-muted">Loading…</span>'
         : '<span class="small text-muted">Click a node to see details</span>';
     }
     
-    // Build request signature to detect duplicate requests
-    const requestSig = JSON.stringify({ scopeKey, targetKeys: targetKeys.sort(), activeKey });
-    if (requestSig === lastRichnessRequest) {
-      return; // Skip duplicate request
-    }
-    lastRichnessRequest = requestSig;
-    
     // Fetch richness data from backend
     try {
-      const data = await apiGetScopeInfo({
-        scopeKey,
-        targetKeys,
-        activeKey,
-      });
+      const data = await apiGetScopeInfo({ scopeKey, targetKeys, activeKey });
       
-      // Check if request is still valid (user might have changed scope)
-      const currentSig = JSON.stringify({
+      // Stale check: only compare scope+targets (active can change freely)
+      const nowCore = JSON.stringify({
         scopeKey: rootModeIsNode() ? (currentScopeKey() || null) : null,
-        targetKeys: currentTargetKeys().sort(),
-        activeKey: activeNode?.key || null,
+        targetKeys: [...currentTargetKeys()].sort(),
       });
-      if (currentSig !== requestSig) {
-        return; // Stale response, ignore
+      if (nowCore !== coreSignature) {
+        return; // Scope or targets changed during flight — next call handles it
       }
       
-      // Update Scope stats
+      // --- Update Scope ---
       if (dom.scopeLabel) {
         dom.scopeLabel.textContent = data.scope?.name || "Select a node from the tree";
       }
@@ -320,8 +336,6 @@ export function createSamplingFiltersController({ renderer }) {
           dom.scopeSpeciesCount.classList.add("d-none");
         }
       }
-      
-      // Also update richScopeBadge (hidden, kept for compatibility)
       if (dom.richScopeBadge) {
         dom.richScopeBadge.textContent = data.scope ? `${data.scope.species_count ?? "?"}` : "";
       }
@@ -332,55 +346,30 @@ export function createSamplingFiltersController({ renderer }) {
         wiz.state.scopeSpeciesCount = data.scope?.species_count ?? 0;
       }
 
-      // Update Targets stats
+      // --- Update Targets ---
       if (data.targets?.length) {
         const totalTarget = data.targets.reduce((sum, t) => sum + (t.species_count || 0), 0);
         const scopeTotal = data.scope?.species_count ?? 0;
         
-        // Store in wizard state
-        if (wiz) {
-          wiz.state.targetSpeciesTotal = totalTarget;
-        }
+        if (wiz) wiz.state.targetSpeciesTotal = totalTarget;
 
-        // Show visible target summary "56 of 100 spp"
         if (dom.targetsSummary && dom.targetsSummaryText) {
           dom.targetsSummaryText.textContent = scopeTotal
             ? `${totalTarget.toLocaleString()} of ${scopeTotal.toLocaleString()} spp`
             : `${totalTarget.toLocaleString()} spp`;
           dom.targetsSummary.classList.remove("d-none");
         }
-        
-        // Hidden element kept for compatibility
         if (dom.richTargetsCount) {
           dom.richTargetsCount.textContent = `${data.targets.length} (${totalTarget})`;
         }
       } else {
-        if (wiz) {
-          wiz.state.targetSpeciesTotal = 0;
-        }
-        if (dom.targetsSummary) {
-          dom.targetsSummary.classList.add("d-none");
-        }
-        if (dom.richTargetsCount) {
-          dom.richTargetsCount.textContent = "";
-        }
+        if (wiz) wiz.state.targetSpeciesTotal = 0;
+        if (dom.targetsSummary) dom.targetsSummary.classList.add("d-none");
+        if (dom.richTargetsCount) dom.richTargetsCount.textContent = "";
       }
 
-      // Update Active line — clean, minimal
-      if (dom.richActiveLine) {
-        if (data.active) {
-          const name = data.active.name || "?";
-          const rank = data.active.rank || "";
-          const isTarget = targetKeys.includes(activeKey);
-          const isScope = activeKey === scopeKey;
-          let tag = "";
-          if (isScope) tag = ' <span class="text-green fw-semibold">· scope</span>';
-          else if (isTarget) tag = ' <span class="text-azure fw-semibold">· target</span>';
-          dom.richActiveLine.innerHTML = `<span class="small"><strong>${name}</strong> <span class="text-muted">${rank}</span>${tag}</span>`;
-        } else {
-          dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
-        }
-      }
+      // --- Update Active line ---
+      _updateActiveLineFromData(data.active, scopeKey, targetKeys, activeKey);
 
       // Re-render step 2/3 summary if user already advanced
       if (wiz && (wiz.state.step === 2 || wiz.state.step === 3)) {
@@ -388,7 +377,6 @@ export function createSamplingFiltersController({ renderer }) {
       }
     } catch (err) {
       console.error("[sampling] Error fetching richness:", err);
-      // Reset loading UI so it doesn't stay stuck on "..."/"Loading…"
       if (dom.scopeLabel) {
         dom.scopeLabel.textContent = scopeKey ? "(error loading)" : "Select a node from the tree";
       }
@@ -399,9 +387,37 @@ export function createSamplingFiltersController({ renderer }) {
       if (dom.richActiveLine) {
         dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
       }
-      // Allow retry on next interaction
       lastRichnessRequest = null;
+      _lastCoreSignature = null;
     }
+  }
+  
+  function _updateActiveLineFromData(activeData, scopeKey, targetKeys, activeKey) {
+    if (!dom.richActiveLine) return;
+    if (activeData) {
+      const name = activeData.name || "?";
+      const rank = activeData.rank || "";
+      const isTarget = targetKeys.includes(activeKey);
+      const isScope = activeKey === scopeKey;
+      let tag = "";
+      if (isScope) tag = ' <span class="text-green fw-semibold">· scope</span>';
+      else if (isTarget) tag = ' <span class="text-azure fw-semibold">· target</span>';
+      dom.richActiveLine.innerHTML = `<span class="small"><strong>${name}</strong> <span class="text-muted">${rank}</span>${tag}</span>`;
+    } else {
+      dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
+    }
+  }
+  
+  function _updateActiveLineLocal(scopeKey, targetKeys, activeKey) {
+    if (!dom.richActiveLine || !activeNode) return;
+    const name = activeNode.name || "?";
+    const rank = activeNode.rank || "";
+    const isTarget = targetKeys.includes(activeKey);
+    const isScope = activeKey === scopeKey;
+    let tag = "";
+    if (isScope) tag = ' <span class="text-green fw-semibold">· scope</span>';
+    else if (isTarget) tag = ' <span class="text-azure fw-semibold">· target</span>';
+    dom.richActiveLine.innerHTML = `<span class="small"><strong>${name}</strong> <span class="text-muted">${rank}</span>${tag}</span>`;
   }
 
   function readSamplingConfig() {
