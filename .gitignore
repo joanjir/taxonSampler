@@ -111,3 +111,12 @@ taxbridge/logs/
 # Archive / old files
 # ===============================
 archive/
+
+# ===============================
+# Fly.io deployment (not for GitHub)
+# ===============================
+fly.toml
+Dockerfile
+entrypoint.sh
+config\settings\flyio.py
+requirements_pythonanywhere.txt

@@ -1472,7 +1472,110 @@ def api_ncbi_download_proxy(request):
         logger.warning("NCBI download proxy error: %s", exc)
         return JsonResponse({"error": f"NCBI API error: {exc}"}, status=502)
 
-    # ── Stream back to browser ──────────────────────────────────
+    # If client requests a single-folder repackage, rezip only matching files
+    single_folder = bool(data.get("single_folder", True))
+
+    # map NCBI types to simple keys and file extensions
+    TYPE_TO_KEY = {
+        "GENOME_GBFF": "gbff",
+        "PROT_FASTA": "proteomes",
+        "GENOME_FASTA": "genomes",
+    }
+    EXTENSIONS = {
+        "gbff": (".gbff", ".gbff.gz"),
+        "proteomes": (".faa", ".faa.gz", ".protein.faa"),
+        "genomes": (".fna", ".fna.gz", ".fasta", ".fa", ".fa.gz"),
+    }
+
+    if single_folder:
+        import tempfile
+        import zipfile
+        import os
+        # save upstream zip to temp file to avoid loading into memory
+        upstream_tmp = None
+        out_tmp = None
+        try:
+            upstream_tmp = tempfile.NamedTemporaryFile(delete=False)
+            for chunk in upstream.iter_content(chunk_size=524_288):
+                upstream_tmp.write(chunk)
+            upstream_tmp.flush()
+            upstream_tmp.close()
+
+            # Prepare output zip
+            out_tmp = tempfile.NamedTemporaryFile(delete=False)
+            out_tmp.close()
+
+            with zipfile.ZipFile(upstream_tmp.name, 'r') as zin, zipfile.ZipFile(out_tmp.name, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                # determine which keys client asked for
+                wanted_keys = [TYPE_TO_KEY.get(t) for t in clean_types]
+                wanted_keys = [k for k in wanted_keys if k]
+                if not wanted_keys:
+                    # fallback: stream original
+                    raise RuntimeError("No wanted keys for repackage")
+
+                # create a single top folder name based on requested types
+                if len(wanted_keys) == 1:
+                    top_folder = wanted_keys[0]
+                else:
+                    top_folder = "ncbi_data"
+
+                for zi in zin.infolist():
+                    name = zi.filename
+                    # skip directories
+                    if name.endswith('/'):
+                        continue
+                    lname = name.lower()
+                    # if any extension matches the wanted keys, include
+                    include = False
+                    for k in wanted_keys:
+                        for ext in EXTENSIONS.get(k, ()): 
+                            if lname.endswith(ext):
+                                include = True
+                                break
+                        if include:
+                            break
+                    if include:
+                        # normalize filename to put under top_folder/
+                        base = os.path.basename(name)
+                        arcname = os.path.join(top_folder, base)
+                        try:
+                            with zin.open(zi) as src:
+                                data_bytes = src.read()
+                                zout.writestr(arcname, data_bytes)
+                        except Exception:
+                            # skip problematic entries
+                            logger.debug("Skipping zip entry %s due to read error", name, exc_info=True)
+
+            # stream out_tmp back to client
+            def _stream_file(path):
+                with open(path, 'rb') as fh:
+                    while True:
+                        chunk = fh.read(524_288)
+                        if not chunk:
+                            break
+                        yield chunk
+
+            response = StreamingHttpResponse(_stream_file(out_tmp.name), content_type="application/zip")
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            fs = os.path.getsize(out_tmp.name)
+            response["Content-Length"] = str(fs)
+            return response
+        except Exception as exc:
+            logger.debug("Repackage to single folder failed, streaming original zip: %s", exc, exc_info=True)
+            # fallthrough to streaming original
+        finally:
+            try:
+                if upstream_tmp is not None:
+                    os.unlink(upstream_tmp.name)
+            except Exception:
+                pass
+            try:
+                if out_tmp is not None and os.path.exists(out_tmp.name):
+                    os.unlink(out_tmp.name)
+            except Exception:
+                pass
+
+    # ── Stream back to browser (original upstream zip) ─────────────────
     def _chunks():
         for chunk in upstream.iter_content(chunk_size=524_288):
             yield chunk

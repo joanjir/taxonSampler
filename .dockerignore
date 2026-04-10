@@ -2,7 +2,7 @@ fly.toml
 .git/
 *.sqlite3
 .venv/
-__pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 .env
@@ -13,3 +13,14 @@ node_modules/
 taxbridge/staticfiles/
 taxbridge/logs/
 scripts/
+# Heavy static assets (videos ~156 MB) — served via CDN or external storage
+taxbridge/apps/taxonomy/static/taxonomy/videos/
+# Tests not needed in production
+taxbridge/apps/taxonomy/tests/
+# IDE / OS
+.vscode/
+.github/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store

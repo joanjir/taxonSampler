@@ -3,12 +3,14 @@ import json
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db.models import Count, F, Q
 
 from apps.taxonomy.models import NCBIGenome, Taxon, ExternalTaxon, TaxonCrosswalk
 from apps.taxonomy.utils import sampling_to_tree_artifacts
 
 
+@ensure_csrf_cookie
 def home(request):
     """Main dashboard with statistics and genome listing."""
     

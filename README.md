@@ -207,4 +207,4 @@ For production deployments prefer running Celery under a process manager (system
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+This software is the property of the **Universidad de Talca** and is distributed under the terms of the MIT License. See [LICENSE](LICENSE) for details.

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Tuple, Set
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_exempt
 
@@ -357,6 +358,7 @@ def tree_search(request):
     )
 
 
+@ensure_csrf_cookie
 def tree_page(request):
     return render(request, "taxonomy/pages/tree/index.html", {
         "show_tree_controls": True,

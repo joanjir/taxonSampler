@@ -14,15 +14,18 @@ DATABASES["default"]["OPTIONS"] = {
     "options": "-c search_path=public",
 }
 
-# In-process cache (no Redis dependency)
+# Redis runs in the same container (started by entrypoint.sh)
+REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
         "KEY_PREFIX": "taxonsampler",
         "TIMEOUT": 600,
     }
 }
 
-# Celery disabled on Fly.io (no workers running)
-CELERY_TASK_ALWAYS_EAGER = True
-CELERY_TASK_EAGER_PROPAGATES = True
+# Celery — real async processing with local Redis
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL

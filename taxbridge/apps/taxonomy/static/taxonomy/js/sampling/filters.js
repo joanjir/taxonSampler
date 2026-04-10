@@ -255,6 +255,8 @@ export function createSamplingFiltersController({ renderer }) {
   // Cache for richness data to avoid excessive API calls
   let lastRichnessRequest = null;
   let _lastCoreSignature = null;
+  // retry counts for richness fetches keyed by coreSignature
+  const _richnessRetryCounts = {};
   
   const repaintRichnessPanelDebounced = debounce(async () => {
     await repaintRichnessPanel();
@@ -312,6 +314,16 @@ export function createSamplingFiltersController({ renderer }) {
     // Fetch richness data from backend
     try {
       const data = await apiGetScopeInfo({ scopeKey, targetKeys, activeKey });
+      console.log('[filters] scopeInfo response:', data);
+      // Debug: ensure expected fields and DOM nodes exist
+      console.log('[filters] debug dom nodes:', {
+        scopeLabel: !!dom.scopeLabel,
+        scopeSpeciesCount: !!dom.scopeSpeciesCount,
+        richScopeBadge: !!dom.richScopeBadge,
+        targetsSummary: !!dom.targetsSummary,
+        targetsSummaryText: !!dom.targetsSummaryText,
+        richTargetsCount: !!dom.richTargetsCount,
+      });
       
       // Stale check: only compare scope+targets (active can change freely)
       const nowCore = JSON.stringify({
@@ -353,6 +365,9 @@ export function createSamplingFiltersController({ renderer }) {
         
         if (wiz) wiz.state.targetSpeciesTotal = totalTarget;
 
+        // Reset retry counter for this signature on success
+        _richnessRetryCounts[coreSignature] = 0;
+
         if (dom.targetsSummary && dom.targetsSummaryText) {
           dom.targetsSummaryText.textContent = scopeTotal
             ? `${totalTarget.toLocaleString()} of ${scopeTotal.toLocaleString()} spp`
@@ -387,8 +402,31 @@ export function createSamplingFiltersController({ renderer }) {
       if (dom.richActiveLine) {
         dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
       }
+      // Retry logic for transient network errors
       lastRichnessRequest = null;
       _lastCoreSignature = null;
+      const maxRetries = 3;
+      const prev = _richnessRetryCounts[coreSignature] || 0;
+      if (prev < maxRetries) {
+        _richnessRetryCounts[coreSignature] = prev + 1;
+        const delay = 500 * Math.pow(2, prev); // exponential backoff: 500, 1000, 2000ms
+        if (dom.scopeLabel) dom.scopeLabel.textContent = `(retrying ${prev + 1}/${maxRetries}...)`;
+        setTimeout(() => {
+          // Only retry if core signature hasn't changed
+          const nowCore = JSON.stringify({
+            scopeKey: rootModeIsNode() ? (currentScopeKey() || null) : null,
+            targetKeys: [...currentTargetKeys()].sort(),
+          });
+          if (nowCore === coreSignature) {
+            try { repaintRichnessPanelDebounced(); } catch (e) { console.warn('Retry repaint failed', e); }
+          }
+        }, delay);
+      } else {
+        // Final failure: present visible error
+        if (dom.scopeLabel) dom.scopeLabel.textContent = "(error loading)";
+        if (dom.richActiveLine) dom.richActiveLine.innerHTML = '<span class="small text-danger">Failed to load counts</span>';
+        _richnessRetryCounts[coreSignature] = 0;
+      }
     }
   }
   
@@ -714,10 +752,28 @@ export function createSamplingFiltersController({ renderer }) {
       setWarn(null); // Clear any warning when scope is set from tree
     });
 
+    // Ensure initial richness repaint happens after the tree is fully loaded.
+    // Retry a few times to cover cache -> fresh re-render race conditions.
+    window.addEventListener("tree:loaded", () => {
+      console.log('[sampling_filters] tree:loaded -> schedule repaint attempts');
+      // Clear last request signatures so scheduled repaint attempts are not skipped
+      lastRichnessRequest = null;
+      _lastCoreSignature = null;
+      const delays = [0, 200, 500]; // ms
+      for (let i = 0; i < delays.length; i++) {
+        setTimeout(() => {
+          console.log(`[sampling_filters] repaint attempt ${i + 1}/${delays.length}`);
+          try { repaintRichnessPanelDebounced(); } catch (e) { console.warn('repaint attempt failed', e); }
+        }, delays[i]);
+      }
+    });
+
     window.addEventListener("sampling:targets-changed", () => {
       if (locked) return;
       renderTargetsChips();
       emitSamplingConfigChanged();
+      // Repaint when targets change (also ensure after tree load)
+      repaintRichnessPanelDebounced();
       repaintRichnessPanelDebounced();
     });
 
