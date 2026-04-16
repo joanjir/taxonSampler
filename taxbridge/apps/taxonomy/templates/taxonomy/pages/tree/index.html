@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="{% static 'taxonomy/css/tree.css' %}" />
   <link rel="stylesheet" href="{% static 'taxonomy/vendor/select2/css/select2.min.css' %}" />
   <link rel="stylesheet" href="{% static 'taxonomy/vendor/select2/themes/select2-bootstrap-5-theme.min.css' %}" />
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" />
+  <link rel="stylesheet" href="{% static 'taxonomy/vendor/datatables/css/dataTables.bootstrap5.min.css' %}" />
 {% endblock %}
 
 {% block content %}
@@ -329,9 +329,9 @@
 {% block extra_js %}
   <script src="{% static 'taxonomy/vendor/jquery/jquery-3.7.1.min.js' %}"></script>
   <script src="{% static 'taxonomy/vendor/select2/js/select2.min.js' %}"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@5/dist/d3.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+  <script src="{% static 'taxonomy/vendor/d3/d3.v5.min.js' %}"></script>
+  <script src="{% static 'taxonomy/vendor/datatables/js/jquery.dataTables.min.js' %}"></script>
+  <script src="{% static 'taxonomy/vendor/datatables/js/dataTables.bootstrap5.min.js' %}"></script>
   <script>
     // Server-side variables (Django URLs)
     window.TREE_ENDPOINT = "{% url 'taxonomy_api:tree-data' %}";

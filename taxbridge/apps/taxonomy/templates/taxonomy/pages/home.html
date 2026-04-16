@@ -180,7 +180,7 @@
 
 {% block extra_js %}
 {% load static %}
-<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
+<script src="{% static 'taxonomy/vendor/apexcharts/apexcharts.3.44.0.min.js' %}"></script>
 <script>
   // Server-side data passed to JavaScript
   window.HOME_DATA = {
