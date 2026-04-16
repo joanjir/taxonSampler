@@ -3,7 +3,12 @@
   <div class="container-xl">
     <!-- Brand -->
     <a class="navbar-brand navbar-brand-autodark d-flex align-items-center" href="{% url 'taxonomy:home' %}">
-      <img src="{% static 'taxonomy/img/taxonlogo.png' %}" alt="TaxonSampler" height="40" />
+      <img
+        src="{% static 'taxonomy/img/taxonlogo.png' %}"
+        alt="TaxonSampler"
+        class="navbar-brand-image"
+        style="height: 40px; max-height: 40px; width: auto; max-width: 240px; object-fit: contain;"
+      />
     </a>
     <!-- Mobile toggler -->
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
