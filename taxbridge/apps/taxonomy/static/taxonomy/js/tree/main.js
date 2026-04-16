@@ -296,6 +296,7 @@ function initAddOrganismSelect2() {
     $sel.select2('destroy');
   }
   $sel.empty();                     // remove old <option> elements
+  $sel.append('<option></option>');  // empty option for placeholder
   
   const unselectedList = getUnselectedSpecies();
   
@@ -347,6 +348,7 @@ function initAddOrganismSelect2() {
   $sel.on('select2:select', function(e) {
     const orgName = e.params.data.id;
     addOrganismToSelection(orgName);
+    $sel.val(null).trigger('change');
   });
   
   // Update counter badge
@@ -707,11 +709,23 @@ let _treeRendered = false;
 
 /**
  * Apply tree data to the UI (shared by cache and fresh loads).
+ * @param {boolean} isFromCache  - true when serving from IndexedDB cache
+ * @param {boolean} isBackground - true when this is a silent background
+ *   refresh (data arrived *after* the user already saw the tree)
  */
-function applyTreeData(response, isFromCache = false) {
+function applyTreeData(response, isFromCache = false, isBackground = false) {
   const data = response.tree || response;
 
-  // Deliver data
+  // ── Background refresh: update internal data without resetting UI ──
+  if (isBackground) {
+    // The IndexedDB cache was already updated by api.js.
+    // Do NOT re-render, reset filters, or fire tree:loaded — the user
+    // may be in the middle of a sampling workflow.
+    console.log("[tree] Background data update applied (cache only, no UI reset)");
+    return;
+  }
+
+  // Deliver data (full init)
   samplingCtl.setData(data);
   renderer.render(data);
 
@@ -720,34 +734,38 @@ function applyTreeData(response, isFromCache = false) {
   const speciesEl = document.getElementById("speciesCount");
   if (speciesEl) speciesEl.textContent = String(speciesCount);
 
-  // Reset UI state
-  searchCtl.clearSearch({ focus: false });
-  if (ui.tt) ui.tt.style.zIndex = 20;
-  if (ui.fsBtn) ui.fsBtn.style.zIndex = 30;
+  // ── Skip UI/wizard reset on background refreshes ──
+  // When the tree was already rendered (from cache or first load) and new
+  // data arrives silently in the background, we must NOT wipe the user's
+  // wizard selections, filters, or sampling results.
+  if (!isBackground) {
+    // Reset UI state
+    searchCtl.clearSearch({ focus: false });
+    if (ui.tt) ui.tt.style.zIndex = 20;
+    if (ui.fsBtn) ui.fsBtn.style.zIndex = 30;
 
-  setCrumb(ui.crumb, "ROOT");
-  tooltip.hide();
+    setCrumb(ui.crumb, "ROOT");
+    tooltip.hide();
 
-  // Only reset sampling/wizard state if no active sampling or import result
-  // exists.  Background tree refreshes (cache expiry, version change) call
-  // applyTreeData() asynchronously and would otherwise wipe the user's
-  // imported configuration.
-  if (!selMgr.getLastSampling()) {
-    selMgr.clearSampling();
-    selMgr.setBadgeMode("Manual", false);
+    // Only reset sampling/wizard state if no active sampling or import result
+    // exists.
+    if (!selMgr.getLastSampling()) {
+      selMgr.clearSampling();
+      selMgr.setBadgeMode("Manual", false);
 
-    const samplingSel = document.getElementById("samplingRoot");
-    if (samplingSel) {
-      samplingSel.value = "";
-      renderer.setSamplingMode?.("");
-    }
+      const samplingSel = document.getElementById("samplingRoot");
+      if (samplingSel) {
+        samplingSel.value = "";
+        renderer.setSamplingMode?.("");
+      }
 
-    samplingCtl.resetDefaults?.();
-    samplingCtl.emitSamplingConfigChanged?.();
+      samplingCtl.resetDefaults?.();
+      samplingCtl.emitSamplingConfigChanged?.();
 
-    // Only reset wizard if user hasn't navigated beyond Step 1
-    if (window.__samplingWizard?.state?.step <= 1) {
-      window.__samplingWizard.reset?.();
+      // Only reset wizard if user hasn't navigated beyond Step 1
+      if (window.__samplingWizard?.state?.step <= 1) {
+        window.__samplingWizard.reset?.();
+      }
     }
   }
 
@@ -784,8 +802,9 @@ async function load() {
       },
       onFreshData: (freshData) => {
         // Fresh data arrived with a different version - re-render!
+        // Mark as background so we don't wipe the user's wizard/sampling state.
         console.log("[tree] Data changed on server, re-rendering tree");
-        applyTreeData(freshData, false);
+        applyTreeData(freshData, false, true);
       },
     });
 

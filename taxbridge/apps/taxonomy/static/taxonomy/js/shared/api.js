@@ -293,15 +293,75 @@ export async function apiRunSampling({ endpoint, config } = {}) {
  * @param {string|null} [params.activeKey] - Key of currently active node
  * @returns {Promise<{scope: Object|null, targets: Object[], active: Object|null, children: Object[]}>}
  */
-export async function apiGetScopeInfo({ endpoint, scopeKey, targetKeys, activeKey } = {}) {
+export async function apiGetScopeInfo({
+  endpoint,
+  scopeKey,
+  targetKeys,
+  activeKey,
+  useCache = true,
+  includeMeta = false,
+} = {}) {
+
   const base = assertEndpoint(endpoint ?? window.SCOPE_INFO_ENDPOINT, "window.SCOPE_INFO_ENDPOINT");
   const u = new URL(base, window.location.origin);
-  
+
   if (scopeKey) u.searchParams.set("scope_key", scopeKey);
   if (targetKeys?.length) u.searchParams.set("target_keys", targetKeys.join(","));
   if (activeKey) u.searchParams.set("active_key", activeKey);
-  
-  return fetchJson(u.toString());
+
+  const key = makeScopeInfoCacheKey({ scopeKey, targetKeys });
+  const cached = useCache ? getScopeInfoCacheEntry(key) : null;
+  if (cached) {
+    return includeMeta ? { data: cached, fromCache: true } : cached;
+  }
+
+  if (useCache && scopeInfoInflight.has(key)) {
+    const inflight = await scopeInfoInflight.get(key);
+    return includeMeta ? { data: inflight, fromCache: false } : inflight;
+  }
+
+  const p = fetchJson(u.toString())
+    .then((data) => {
+      setScopeInfoCacheEntry(key, data);
+      return data;
+    })
+    .finally(() => {
+      scopeInfoInflight.delete(key);
+    });
+
+  if (useCache) scopeInfoInflight.set(key, p);
+  const data = await p;
+  return includeMeta ? { data, fromCache: false } : data;
+}
+
+const SCOPE_INFO_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const scopeInfoCache = new Map();
+const scopeInfoInflight = new Map();
+
+function makeScopeInfoCacheKey({ scopeKey, targetKeys } = {}) {
+  return JSON.stringify({
+    scopeKey: scopeKey || null,
+    targetKeys: Array.isArray(targetKeys) ? [...targetKeys].sort() : [],
+  });
+}
+
+function getScopeInfoCacheEntry(key) {
+  const entry = scopeInfoCache.get(key);
+  if (!entry) return null;
+  if ((Date.now() - entry.timestamp) > SCOPE_INFO_CACHE_TTL) {
+    scopeInfoCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setScopeInfoCacheEntry(key, data) {
+  scopeInfoCache.set(key, { data, timestamp: Date.now() });
+}
+
+export function hasScopeInfoCache({ scopeKey, targetKeys } = {}) {
+  const key = makeScopeInfoCacheKey({ scopeKey, targetKeys });
+  return !!getScopeInfoCacheEntry(key);
 }
 
 

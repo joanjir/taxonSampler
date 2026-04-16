@@ -9,7 +9,7 @@
 //
 // Backend service: apps/taxonomy/sampling/service.py
 
-import { apiRunSampling, apiGetScopeInfo } from "../shared/api.js";
+import { apiRunSampling, apiGetScopeInfo, hasScopeInfoCache } from "../shared/api.js";
 import { normRank } from "../tree/logic/tree_keying.js";
 
 function parseKeyParts(key) {
@@ -41,6 +41,7 @@ function debounce(fn, ms = 120) {
  */
 export function createSamplingFiltersController({ renderer }) {
   let fullTreeData = null;
+  let _blockingOverlayDepth = 0;
 
   let step = 1;
   let locked = false;
@@ -102,6 +103,47 @@ export function createSamplingFiltersController({ renderer }) {
     dom.targetsSummaryText = document.getElementById("targetsSummaryText");
 
     // Old Step 2 DOM refs removed — DB sampling module handles Step 2 now
+  }
+
+  function ensureBlockingOverlay() {
+    let el = document.getElementById("scopeInfoGlobalOverlay");
+    if (el) return el;
+
+    el = document.createElement("div");
+    el.id = "scopeInfoGlobalOverlay";
+    el.className = "scope-info-overlay d-none";
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-busy", "true");
+    el.innerHTML = `
+      <div class="scope-info-overlay-card" role="status" aria-label="Loading taxonomy">
+        <div class="scope-info-overlay-spinner-wrap">
+          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+          <i class="fa-solid fa-database scope-info-overlay-icon" aria-hidden="true"></i>
+        </div>
+        <div class="scope-info-overlay-title">Loading taxonomy...</div>
+      </div>
+      <div class="scope-info-overlay-backdrop" aria-hidden="true"></div>
+    `;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function setBlockingOverlay(enabled) {
+    const el = ensureBlockingOverlay();
+    if (!el) return;
+
+    if (enabled) _blockingOverlayDepth += 1;
+    else _blockingOverlayDepth = Math.max(0, _blockingOverlayDepth - 1);
+
+    const show = _blockingOverlayDepth > 0;
+    el.classList.toggle("d-none", !show);
+    if (show) {
+      el.classList.add("is-visible");
+      document.body.classList.add("scope-info-blocked");
+    } else {
+      el.classList.remove("is-visible");
+      document.body.classList.remove("scope-info-blocked");
+    }
   }
 
   function setWarn(msg) {
@@ -291,29 +333,38 @@ export function createSamplingFiltersController({ renderer }) {
     
     _lastCoreSignature = coreSignature;
     lastRichnessRequest = fullSignature;
+
+    const cacheMiss = !hasScopeInfoCache({ scopeKey, targetKeys });
+    const shouldBlockUI = cacheMiss && !!(scopeKey || activeKey || targetKeys.length);
     
-    // Show loading state
-    if (dom.scopeLabel) {
-      dom.scopeLabel.textContent = scopeKey ? "..." : "Select a node from the tree";
-    }
-    if (dom.scopeSpeciesCount) {
-      if (scopeKey) {
-        dom.scopeSpeciesCount.textContent = "...";
-        dom.scopeSpeciesCount.classList.remove("d-none");
-      } else {
-        dom.scopeSpeciesCount.textContent = "";
-        dom.scopeSpeciesCount.classList.add("d-none");
+    // Show loading state ONLY when cache is missing (avoid UI flicker on cache hit)
+    if (cacheMiss) {
+      if (dom.scopeLabel) {
+        dom.scopeLabel.textContent = scopeKey ? "..." : "Select a node from the tree";
+      }
+      if (dom.scopeSpeciesCount) {
+        if (scopeKey) {
+          dom.scopeSpeciesCount.textContent = "...";
+          dom.scopeSpeciesCount.classList.remove("d-none");
+        } else {
+          dom.scopeSpeciesCount.textContent = "";
+          dom.scopeSpeciesCount.classList.add("d-none");
+        }
+      }
+      if (dom.richActiveLine) {
+        dom.richActiveLine.innerHTML = activeKey
+          ? '<span class="small text-muted">Loading…</span>'
+          : '<span class="small text-muted">Click a node to see details</span>';
       }
     }
-    if (dom.richActiveLine) {
-      dom.richActiveLine.innerHTML = activeKey
-        ? '<span class="small text-muted">Loading…</span>'
-        : '<span class="small text-muted">Click a node to see details</span>';
-    }
-    
+
+    if (shouldBlockUI) setBlockingOverlay(true);
+
     // Fetch richness data from backend
     try {
-      const data = await apiGetScopeInfo({ scopeKey, targetKeys, activeKey });
+      const scopeInfoResp = await apiGetScopeInfo({ scopeKey, targetKeys, activeKey, includeMeta: true });
+      const data = scopeInfoResp?.data || null;
+      const fromCache = scopeInfoResp?.fromCache === true;
       console.log('[filters] scopeInfo response:', data);
       // Debug: ensure expected fields and DOM nodes exist
       console.log('[filters] debug dom nodes:', {
@@ -384,7 +435,11 @@ export function createSamplingFiltersController({ renderer }) {
       }
 
       // --- Update Active line ---
-      _updateActiveLineFromData(data.active, scopeKey, targetKeys, activeKey);
+      if (fromCache) {
+        _updateActiveLineLocal(scopeKey, targetKeys, activeKey);
+      } else {
+        _updateActiveLineFromData(data.active, scopeKey, targetKeys, activeKey);
+      }
 
       // Re-render step 2/3 summary if user already advanced
       if (wiz && (wiz.state.step === 2 || wiz.state.step === 3)) {
@@ -427,6 +482,8 @@ export function createSamplingFiltersController({ renderer }) {
         if (dom.richActiveLine) dom.richActiveLine.innerHTML = '<span class="small text-danger">Failed to load counts</span>';
         _richnessRetryCounts[coreSignature] = 0;
       }
+    } finally {
+      if (shouldBlockUI) setBlockingOverlay(false);
     }
   }
   
