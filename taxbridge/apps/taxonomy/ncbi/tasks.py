@@ -33,10 +33,25 @@ from apps.taxonomy.ncbi.service import (
 
 logger = logging.getLogger(__name__)
 
+@shared_task(name="apps.taxonomy.ncbi.tasks.refresh_home_dashboard_cache")
+def refresh_home_dashboard_cache() -> dict:
+    from apps.taxonomy.dashboard.dashboard import get_home_context
+    get_home_context(force_refresh=True)
+    logger.info("Home dashboard cache refreshed successfully")
+    return {"status": "ok"}
+
+@shared_task(name="apps.taxonomy.ncbi.tasks.invalidate_home_dashboard_cache")
+
+def invalidate_home_dashboard_cache() -> dict:
+    from apps.taxonomy.dashboard.dashboard import invalidate_home_context_cache
+
+    invalidate_home_context_cache()
+    logger.info("Home dashboard cache invalidated")
+    return {"status": "ok"}
 
 @shared_task(
     bind=True,
-    name="apps.taxonomy.tasks.sync_ncbi_genomes",
+    name="apps.taxonomy.ncbi.tasks.sync_ncbi_genomes",
     max_retries=3,
     default_retry_delay=60 * 5,  # 5 minutes between retries
     autoretry_for=(Exception,),
@@ -211,7 +226,7 @@ def sync_ncbi_genomes(
 
 
 @shared_task(
-    name="apps.taxonomy.tasks.sync_single_taxon",
+    name="apps.taxonomy.ncbi.tasks.sync_single_taxon",
     bind=True,
     max_retries=3,
 )
@@ -270,7 +285,7 @@ def cleanup_old_sync_runs(days: int = 30) -> dict:
     return {"deleted": deleted_count}
 
 
-@shared_task(name="apps.taxonomy.tasks.get_sync_status")
+@shared_task(name="apps.taxonomy.ncbi.tasks.get_sync_status")
 def get_sync_status(sync_run_id: int) -> dict:
     """
     Get the current status of a sync run.
@@ -621,7 +636,7 @@ def _create_col_crosswalk_task(taxon, result, sync_run, col_dataset: str):
 
 @shared_task(
     bind=True,
-    name="apps.taxonomy.tasks.discover_new_species",
+    name="apps.taxonomy.ncbi.tasks.discover_new_species",
     max_retries=2,
     default_retry_delay=60 * 5,
     autoretry_for=(Exception,),

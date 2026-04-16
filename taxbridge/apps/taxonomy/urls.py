@@ -13,12 +13,12 @@ app_name = "taxonomy"
 
 urlpatterns = [
     # Main pages
-    path("", home, name="home"),
+    path("home/", home, name="home"),
     path("tree/", tree_page, name="tree"),
-    
+
     # Taxon Sync Dashboard (NCBI + COL)
     path("taxon-sync/", taxon_sync_dashboard, name="taxon-sync-dashboard"),
-    
+
     # Export endpoints (POST)
     path("sampling/export/<str:fmt>/", export_sampling, name="sampling-export"),
 

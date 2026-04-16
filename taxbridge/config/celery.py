@@ -1,64 +1,45 @@
-﻿# config/celery.py
-"""
-Celery configuration for TaxaBridge.
-To start the worker:
-    celery -A config worker -l info
-
-To start the scheduler (beat):
-    celery -A config beat -l info
-
-Or both in one:
-    celery -A config worker -B -l info
-"""
-from __future__ import absolute_import
+﻿from __future__ import absolute_import
 
 import os
 
 from celery import Celery
 from celery.schedules import crontab
 
-# Set default settings module
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 
 app = Celery("taxbridge")
-
-# Use string to avoid serialization issues
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-# Autodiscover tasks in all installed apps (including sub-modules)
-app.autodiscover_tasks(["apps.taxonomy.ncbi"])
+# autodiscovery estándar
+app.autodiscover_tasks()
 
-# ======================
-# Scheduled tasks
-# ======================
 app.conf.beat_schedule = {
-    # Sync NCBI genomes daily at 3:00 AM
     "sync-ncbi-genomes-daily": {
-        "task": "apps.taxonomy.tasks.sync_ncbi_genomes",
+        "task": "apps.taxonomy.ncbi.tasks.sync_ncbi_genomes",
         "schedule": crontab(hour=3, minute=0),
         "options": {"queue": "ncbi_sync"},
     },
-    # Clean up old sync runs (weekly)
     "cleanup-old-syncs-weekly": {
-        "task": "apps.taxonomy.tasks.cleanup_old_sync_runs",
-        "schedule": crontab(hour=4, minute=0, day_of_week=0),  # Sundays 4 AM
+        "task": "apps.taxonomy.ncbi.tasks.cleanup_old_sync_runs",
+        "schedule": crontab(hour=4, minute=0, day_of_week=0),
     },
-    # Discover new species in NCBI (every Monday at 5:00 AM)
     "discover-new-species-weekly": {
-        "task": "apps.taxonomy.tasks.discover_new_species",
-        "schedule": crontab(hour=5, minute=0, day_of_week=1),  # Mondays 5 AM
+        "task": "apps.taxonomy.ncbi.tasks.discover_new_species",
+        "schedule": crontab(hour=5, minute=0, day_of_week=1),
         "options": {"queue": "ncbi_sync"},
+    },
+    "refresh-home-dashboard-cache-every-15-min": {
+        "task": "apps.taxonomy.ncbi.tasks.refresh_home_dashboard_cache",
+        "schedule": crontab(minute="*/15"),
+        "options": {"queue": "default"},
     },
 }
 
 app.conf.task_routes = {
-    "apps.taxonomy.tasks.sync_ncbi_genomes": {"queue": "ncbi_sync"},
-    "apps.taxonomy.tasks.sync_single_taxon": {"queue": "ncbi_sync"},
-    "apps.taxonomy.tasks.discover_new_species": {"queue": "ncbi_sync"},
+    "apps.taxonomy.ncbi.tasks.sync_ncbi_genomes": {"queue": "ncbi_sync"},
+    "apps.taxonomy.ncbi.tasks.sync_single_taxon": {"queue": "ncbi_sync"},
+    "apps.taxonomy.ncbi.tasks.sync_taxon_with_col": {"queue": "ncbi_sync"},
+    "apps.taxonomy.ncbi.tasks.discover_new_species": {"queue": "ncbi_sync"},
+    "apps.taxonomy.ncbi.tasks.refresh_home_dashboard_cache": {"queue": "default"},
+    "apps.taxonomy.ncbi.tasks.invalidate_home_dashboard_cache": {"queue": "default"},
 }
-
-
-@app.task(bind=True, ignore_result=True)
-def debug_task(self):
-    """Test task to verify that Celery is working."""
-    print(f"Request: {self.request!r}")
