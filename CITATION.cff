@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "TaxonSampler"
+abstract: "A web platform for taxonomic sampling and genome data integration."
+authors:
+  - family-names: "Izquerdo"
+    given-names: "Joan"
+    affiliation: "Universidad de Talca"
+  - family-names: "Riadi"
+    given-names: "Gonzalo"
+    affiliation: "Universidad de Talca"
+
+version: "1.0.0"
+date-released: "2026-09-11"
+license: "MIT"
+url: "https://github.com/joanjir/taxonSampler"
+repository-code: "https://github.com/joanjir/taxonSampler"
+
+preferred-citation:
+  type: software
+  authors:
+    - family-names: "Izquerdo"
+      given-names: "Joan"
+      affiliation: "Universidad de Talca"
+    - family-names: "Riadi"
+      given-names: "Gonzalo"
+      affiliation: "Universidad de Talca"
+  title: "TaxonSampler: A web platform for taxonomic sampling and genome data integration"
+  version: "1.0.0"
+  date-released: "2026-09-11"
+  url: "https://github.com/joanjir/taxonSampler"
