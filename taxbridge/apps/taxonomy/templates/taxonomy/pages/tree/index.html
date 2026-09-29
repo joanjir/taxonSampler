@@ -99,21 +99,40 @@
                 <p class="mt-2 text-muted">Generating taxonomic hierarchy with ETE3...</p>
               </div>
               <div id="phyloTreeWrap" class="d-none">
-                <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
                   <div class="small fw-semibold">
                     <i class="fa-solid fa-project-diagram me-1 text-success"></i>
                     Taxonomic hierarchy
                     <span id="phyloSpeciesCount" class="badge bg-success-lt text-success ms-1"></span>
                   </div>
-                  <div class="btn-group btn-group-sm">
-                    <button id="phyloDownloadSvg" class="btn btn-outline-secondary" type="button" title="Download SVG">
-                      <i class="fa-solid fa-image me-1"></i>SVG
-                    </button>
-                    <button id="phyloDownloadNewick" class="btn btn-outline-secondary" type="button" title="Download Newick">
-                      <i class="fa-solid fa-file-code me-1"></i>Newick
-                    </button>
+                  <div class="d-flex flex-wrap align-items-center gap-2" role="group" aria-label="Newick display and downloads">
+                    <div class="d-flex align-items-center gap-2">
+                      <label for="phyloLayout" class="form-label small mb-0">Layout</label>
+                      <select id="phyloLayout" class="form-select form-select-sm w-auto">
+                        <option value="rectangular" selected>Rectangular</option>
+                        <option value="circular">Circular</option>
+                      </select>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Tree zoom controls">
+                      <button id="phyloZoomOut" class="btn btn-outline-secondary" type="button" title="Zoom out" aria-label="Zoom out">
+                        <i class="fa-solid fa-minus" aria-hidden="true"></i>
+                      </button>
+                      <button id="phyloZoomIn" class="btn btn-outline-secondary" type="button" title="Zoom in" aria-label="Zoom in">
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                      </button>
+                      <button id="phyloZoomReset" class="btn btn-outline-secondary" type="button" title="Fit tree to view" aria-label="Fit tree to view">Fit</button>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Download tree">
+                      <button id="phyloDownloadSvg" class="btn btn-outline-secondary" type="button" title="Download SVG">
+                        <i class="fa-solid fa-image me-1"></i>SVG
+                      </button>
+                      <button id="phyloDownloadNewick" class="btn btn-outline-secondary" type="button" title="Download Newick">
+                        <i class="fa-solid fa-file-code me-1"></i>Newick
+                      </button>
+                    </div>
                   </div>
                 </div>
+                <p class="small text-muted mb-2">Scroll to zoom · Drag to pan</p>
                 <div id="phyloSvgContainer" style="overflow: auto; max-height: 600px; border: 1px solid #dee2e6; border-radius: .375rem; background: #fff;"></div>
               </div>
             </div>
@@ -346,5 +365,5 @@
     window.ASSEMBLY_FILTER_ENDPOINT = "{% url 'taxonomy_api:assembly-filter' %}";
     window.TAXON_DETAIL_ENDPOINT = "{% url 'taxonomy_api:taxon-detail' %}";
   </script>
-  <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}?v=20260310a"></script>
+  <script type="module" src="{% static 'taxonomy/js/tree/main.js' %}?v=20260929-newick-zoom"></script>
 {% endblock %}

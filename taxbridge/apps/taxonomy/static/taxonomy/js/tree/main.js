@@ -47,7 +47,7 @@ import { initRankNav } from "../navigation/rank-nav.js";
 import { initAdvancedSearch } from "../navigation/advanced-search.js";
 import { initExportHandlers } from "../sampling/exports.js";
 import { initDbSampling } from "../sampling/db_sampling.js";
-import { initPhyloTree } from "../sampling/phylo_tree.js";
+import { initPhyloTree } from "../sampling/phylo_tree.js?v=20260929-newick-zoom";
 import { initAssemblyFilter } from "../sampling/assembly_filter.js";
 import { initTaxonDetail } from "./taxon_detail.js";
 
