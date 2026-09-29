@@ -14,7 +14,8 @@
     <!-- Tabler (Bootstrap-based) -->
     <link rel="stylesheet" href="{% static 'taxonomy/vendor/tabler/css/tabler.min.css' %}" />
     <link rel="stylesheet" href="{% static 'taxonomy/vendor/tabler/icons/tabler-icons.min.css' %}" />
-
+    <link rel="stylesheet" href="{% static 'taxonomy/vendor/sweetalert2/sweetalert2.min.css' %}" />
+    
     {% block extra_css %}
 
     {% endblock %}
@@ -29,6 +30,7 @@
     <script src="{% static 'taxonomy/vendor/tabler/js/tabler.min.js' %}"></script>
     <!-- SweetAlert2 -->
     <script src="{% static 'taxonomy/vendor/sweetalert2/sweetalert2.min.js' %}"></script>
+   
     <script>
       // Tabler bundles Bootstrap but exposes it as tabler.bootstrap, not window.bootstrap
       if (typeof bootstrap === 'undefined' && window.tabler && window.tabler.bootstrap) {

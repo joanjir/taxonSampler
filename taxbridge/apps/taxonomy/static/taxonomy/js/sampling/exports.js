@@ -47,7 +47,12 @@ export function initExportHandlers({ getExportPayload, getLastSampling }) {
 
   /** Guard: block export when there are no species */
   function requireSpecies(last) {
+    console.log("requireSpecies ejecutada", last);
+
     if (!last) {
+      alert("antes de swal");
+      console.log("debería abrir Swal");
+
       Swal.fire({ icon: 'info', title: 'Nothing to export', text: 'Run sampling first to generate results.', confirmButtonColor: '#198754' });
       return false;
     }

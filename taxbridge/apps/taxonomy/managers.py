@@ -113,7 +113,9 @@ class ExternalTaxonManager(models.Manager):
                 rank__in=["species", "subspecies", "variety", "form"],
                 ncbi_genomes__col_match_status="matched",
             )
-            .only("id", "external_id", "name", "rank", "status", "classification_path")
+            # _source_label reads system for every species; deferring it here
+            # would issue one extra database query per row while building.
+            .only("id", "external_id", "name", "rank", "system", "status", "classification_path")
             .distinct()
             .order_by("id")
         )

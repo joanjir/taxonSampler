@@ -329,13 +329,17 @@ export function createSamplingFiltersController({ renderer }) {
       _updateActiveLineLocal(scopeKey, targetKeys, activeKey);
       return;
     }
-    console.log('[filters] new coreSignature — making API call');
-    
     _lastCoreSignature = coreSignature;
     lastRichnessRequest = fullSignature;
 
-    const cacheMiss = !hasScopeInfoCache({ scopeKey, targetKeys });
-    const shouldBlockUI = cacheMiss && !!(scopeKey || activeKey || targetKeys.length);
+    // Without a scope or targets there are no counts to fetch. The active
+    // node's name and rank already arrived with tree:active-changed.
+    const needsScopeInfo = !!(scopeKey || targetKeys.length);
+    const cacheMiss = needsScopeInfo && !hasScopeInfoCache({ scopeKey, targetKeys });
+    const isCurrentSelection = () => coreSignature === JSON.stringify({
+      scopeKey: rootModeIsNode() ? (currentScopeKey() || null) : null,
+      targetKeys: [...currentTargetKeys()].sort(),
+    });
     
     // Show loading state ONLY when cache is missing (avoid UI flicker on cache hit)
     if (cacheMiss) {
@@ -358,11 +362,21 @@ export function createSamplingFiltersController({ renderer }) {
       }
     }
 
-    if (shouldBlockUI) setBlockingOverlay(true);
+    // Fast responses only need the inline loading state. Cancel this timer
+    // on completion, and never block for a selection that has been replaced.
+    let overlayShown = false;
+    const overlayTimer = cacheMiss ? setTimeout(() => {
+      if (isCurrentSelection()) {
+        overlayShown = true;
+        setBlockingOverlay(true);
+      }
+    }, 300) : null;
 
     // Fetch richness data from backend
     try {
-      const scopeInfoResp = await apiGetScopeInfo({ scopeKey, targetKeys, activeKey, includeMeta: true });
+      const scopeInfoResp = needsScopeInfo
+        ? await apiGetScopeInfo({ scopeKey, targetKeys, activeKey, includeMeta: true })
+        : { data: { scope: null, targets: [] }, fromCache: true };
       const data = scopeInfoResp?.data || null;
       const fromCache = scopeInfoResp?.fromCache === true;
       console.log('[filters] scopeInfo response:', data);
@@ -377,13 +391,10 @@ export function createSamplingFiltersController({ renderer }) {
       });
       
       // Stale check: only compare scope+targets (active can change freely)
-      const nowCore = JSON.stringify({
-        scopeKey: rootModeIsNode() ? (currentScopeKey() || null) : null,
-        targetKeys: [...currentTargetKeys()].sort(),
-      });
-      if (nowCore !== coreSignature) {
+      if (!isCurrentSelection()) {
         return; // Scope or targets changed during flight — next call handles it
       }
+      _richnessRetryCounts[coreSignature] = 0;
       
       // --- Update Scope ---
       if (dom.scopeLabel) {
@@ -416,9 +427,6 @@ export function createSamplingFiltersController({ renderer }) {
         
         if (wiz) wiz.state.targetSpeciesTotal = totalTarget;
 
-        // Reset retry counter for this signature on success
-        _richnessRetryCounts[coreSignature] = 0;
-
         if (dom.targetsSummary && dom.targetsSummaryText) {
           dom.targetsSummaryText.textContent = scopeTotal
             ? `${totalTarget.toLocaleString()} of ${scopeTotal.toLocaleString()} spp`
@@ -431,12 +439,14 @@ export function createSamplingFiltersController({ renderer }) {
       } else {
         if (wiz) wiz.state.targetSpeciesTotal = 0;
         if (dom.targetsSummary) dom.targetsSummary.classList.add("d-none");
+        if (dom.targetsSummaryText) dom.targetsSummaryText.textContent = "";
         if (dom.richTargetsCount) dom.richTargetsCount.textContent = "";
       }
 
       // --- Update Active line ---
-      if (fromCache) {
-        _updateActiveLineLocal(scopeKey, targetKeys, activeKey);
+      const currentActiveKey = activeNode?.key || null;
+      if (fromCache || currentActiveKey !== activeKey) {
+        _updateActiveLineLocal(scopeKey, targetKeys, currentActiveKey);
       } else {
         _updateActiveLineFromData(data.active, scopeKey, targetKeys, activeKey);
       }
@@ -446,6 +456,7 @@ export function createSamplingFiltersController({ renderer }) {
         wiz.updateStepSummary(wiz.state.step);
       }
     } catch (err) {
+      if (!isCurrentSelection()) return;
       console.error("[sampling] Error fetching richness:", err);
       if (dom.scopeLabel) {
         dom.scopeLabel.textContent = scopeKey ? "(error loading)" : "Select a node from the tree";
@@ -483,7 +494,8 @@ export function createSamplingFiltersController({ renderer }) {
         _richnessRetryCounts[coreSignature] = 0;
       }
     } finally {
-      if (shouldBlockUI) setBlockingOverlay(false);
+      if (overlayTimer !== null) clearTimeout(overlayTimer);
+      if (overlayShown) setBlockingOverlay(false);
     }
   }
   
@@ -504,7 +516,11 @@ export function createSamplingFiltersController({ renderer }) {
   }
   
   function _updateActiveLineLocal(scopeKey, targetKeys, activeKey) {
-    if (!dom.richActiveLine || !activeNode) return;
+    if (!dom.richActiveLine) return;
+    if (!activeNode) {
+      dom.richActiveLine.innerHTML = '<span class="small text-muted">Click a node to see details</span>';
+      return;
+    }
     const name = activeNode.name || "?";
     const rank = activeNode.rank || "";
     const isTarget = targetKeys.includes(activeKey);

@@ -631,7 +631,66 @@ def _create_col_crosswalk_task(taxon, result, sync_run, col_dataset: str):
 
 
 # ============================================================
-# Weekly Species Discovery Task
+# Daily Species Discovery Catch-up Guard
+# ============================================================
+
+@shared_task(
+    bind=True,
+    name="apps.taxonomy.ncbi.tasks.discover_new_species_if_due",
+)
+def discover_new_species_if_due(
+    self,
+    kingdoms: list[str] | None = None,
+) -> dict:
+    """
+    Catch-up guard for the daily discovery.
+
+    Runs frequently (hourly via beat) and checks when the last discovery
+    finished. If no discovery has completed today, it triggers a new one.
+    This guarantees the daily midnight run happens even if the server was
+    unavailable at that time: the next time the worker is up it catches up.
+
+    Args:
+        kingdoms: Kingdoms to scan (default: eukaryota, bacteria, archaea)
+
+    Returns:
+        Dict describing whether a discovery was triggered or skipped.
+    """
+    from apps.taxonomy.models import DiscoveryRun
+
+    if kingdoms is None:
+        kingdoms = ["eukaryota", "bacteria", "archaea"]
+
+    # Skip if a discovery is already running or pending.
+    if DiscoveryRun.objects.filter(status__in=["pending", "running"]).exists():
+        logger.info("discover_new_species_if_due: a discovery is already active, skipping")
+        return {"status": "skipped", "reason": "already_active"}
+
+    today = timezone.localdate()
+    last_completed = (
+        DiscoveryRun.objects.filter(status="completed")
+        .order_by("-finished_at")
+        .first()
+    )
+
+    # If the last completed discovery finished today, we are up to date.
+    if last_completed and last_completed.finished_at and \
+            timezone.localtime(last_completed.finished_at).date() >= today:
+        logger.info("discover_new_species_if_due: already ran today, skipping")
+        return {
+            "status": "skipped",
+            "reason": "already_ran_today",
+            "last_finished_at": last_completed.finished_at.isoformat(),
+        }
+
+    # Otherwise we are due (missed midnight or never ran): trigger a run now.
+    logger.info("discover_new_species_if_due: discovery is due, triggering catch-up run")
+    discover_new_species.delay(kingdoms=kingdoms, trigger="scheduled")
+    return {"status": "triggered", "kingdoms": kingdoms}
+
+
+# ============================================================
+# Daily Species Discovery Task
 # ============================================================
 
 @shared_task(
@@ -650,7 +709,7 @@ def discover_new_species(
     trigger: str = "scheduled",
 ) -> dict:
     """
-    Weekly task: scan NCBI for new species with high-quality genomes
+    Daily task: scan NCBI for new species with high-quality genomes
     that are NOT yet in our database.
 
     For each kingdom, queries the NCBI Datasets API with reference_only
@@ -667,7 +726,7 @@ def discover_new_species(
     from apps.taxonomy.models import DiscoveredSpecies, DiscoveryRun, Taxon
 
     if kingdoms is None:
-        kingdoms = ["metazoa", "fungi", "viridiplantae"]
+        kingdoms = ["eukaryota", "bacteria", "archaea"]
 
     # Create discovery run
     run = DiscoveryRun.objects.create(

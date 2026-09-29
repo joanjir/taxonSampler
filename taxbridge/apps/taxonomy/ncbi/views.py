@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import timedelta
 from typing import Dict, Iterator, Optional
 
 import requests
@@ -156,6 +157,33 @@ def taxon_sync_dashboard(request):
         is_imported=False, is_dismissed=False
     ).count()
 
+    # Last / next NCBI discovery (scheduled daily at midnight)
+    from apps.taxonomy.models import DiscoveryRun
+
+    last_discovery = (
+        DiscoveryRun.objects.filter(status="completed")
+        .order_by("-finished_at")
+        .first()
+    )
+    last_discovery_at = last_discovery.finished_at if last_discovery else None
+
+    now = timezone.localtime()
+    ran_today = bool(
+        last_discovery_at
+        and timezone.localtime(last_discovery_at).date() >= now.date()
+    )
+    if ran_today:
+        # Already ran today -> next run is tomorrow at midnight
+        next_day = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        next_discovery_at = next_day
+        next_discovery_due = False
+    else:
+        # Missed midnight or never ran -> due on the next hourly catch-up
+        next_discovery_at = None
+        next_discovery_due = True
+
     context = {
         "recent_syncs": recent_syncs,
         "running_sync": running_sync,
@@ -164,6 +192,9 @@ def taxon_sync_dashboard(request):
         "kingdoms": KINGDOMS,
         "kingdom_stats": kingdom_stats,
         "pending_discoveries": pending_discoveries,
+        "last_discovery_at": last_discovery_at,
+        "next_discovery_at": next_discovery_at,
+        "next_discovery_due": next_discovery_due,
     }
 
     return render(request, "taxonomy/pages/taxon-sync/dashboard.html", context)

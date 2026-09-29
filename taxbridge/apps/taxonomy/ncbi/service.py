@@ -39,6 +39,7 @@ COL_DATASET = "3LR"
 
 # Kingdom taxids
 KINGDOMS: Dict[str, int] = {
+    "eukaryota": 2759,
     "metazoa": 33208,
     "animalia": 33208,  # Alias
     "fungi": 4751,
@@ -51,6 +52,7 @@ KINGDOMS: Dict[str, int] = {
 
 # Quality criteria per kingdom
 QUALITY_CRITERIA: Dict[str, Dict[str, float]] = {
+    "eukaryota": {"min_coverage": 20, "min_scaffold_n50_kb": 100, "min_protein_coding": 500},
     "metazoa": {"min_coverage": 30, "min_scaffold_n50_kb": 1000, "min_protein_coding": 1000},
     "fungi": {"min_coverage": 30, "min_scaffold_n50_kb": 500, "min_protein_coding": 500},
     "viridiplantae": {"min_coverage": 20, "min_scaffold_n50_kb": 500, "min_protein_coding": 1000},

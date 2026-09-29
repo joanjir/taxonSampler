@@ -23,9 +23,15 @@ app.conf.beat_schedule = {
         "task": "apps.taxonomy.ncbi.tasks.cleanup_old_sync_runs",
         "schedule": crontab(hour=4, minute=0, day_of_week=0),
     },
-    "discover-new-species-weekly": {
+    "discover-new-species-daily": {
         "task": "apps.taxonomy.ncbi.tasks.discover_new_species",
-        "schedule": crontab(hour=5, minute=0, day_of_week=1),
+        "schedule": crontab(hour=0, minute=0),
+        "kwargs": {"kingdoms": ["eukaryota", "bacteria", "archaea"]},
+        "options": {"queue": "ncbi_sync"},
+    },
+    "discover-new-species-catchup-hourly": {
+        "task": "apps.taxonomy.ncbi.tasks.discover_new_species_if_due",
+        "schedule": crontab(minute=0),
         "options": {"queue": "ncbi_sync"},
     },
     "refresh-home-dashboard-cache-every-15-min": {
@@ -40,6 +46,7 @@ app.conf.task_routes = {
     "apps.taxonomy.ncbi.tasks.sync_single_taxon": {"queue": "ncbi_sync"},
     "apps.taxonomy.ncbi.tasks.sync_taxon_with_col": {"queue": "ncbi_sync"},
     "apps.taxonomy.ncbi.tasks.discover_new_species": {"queue": "ncbi_sync"},
+    "apps.taxonomy.ncbi.tasks.discover_new_species_if_due": {"queue": "ncbi_sync"},
     "apps.taxonomy.ncbi.tasks.refresh_home_dashboard_cache": {"queue": "default"},
     "apps.taxonomy.ncbi.tasks.invalidate_home_dashboard_cache": {"queue": "default"},
 }
